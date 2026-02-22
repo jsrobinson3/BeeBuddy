@@ -1,7 +1,7 @@
 """Email verification integration tests.
 
 Requires the API to be running (e.g. via docker compose up).
-Assumes smtp_suppress=True so no real emails are sent.
+Assumes email_suppress=True so no real emails are sent.
 """
 
 import uuid

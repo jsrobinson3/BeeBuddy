@@ -1,11 +1,9 @@
-"""Email sending service using aiosmtplib and Jinja2 templates."""
+"""Email sending service using SendGrid API and Jinja2 templates."""
 
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
-import aiosmtplib
+import httpx
 from jinja2 import Environment, FileSystemLoader
 
 from app.config import get_settings
@@ -13,6 +11,7 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "email"
+SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
 _jinja_env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
@@ -20,39 +19,75 @@ _jinja_env = Environment(
 )
 
 
+def _build_payload(to: str, subject: str, html_body: str) -> dict:
+    """Build SendGrid v3 Mail Send API payload."""
+    settings = get_settings()
+    return {
+        "personalizations": [{"to": [{"email": to}]}],
+        "from": {"email": settings.email_from_address, "name": settings.email_from_name},
+        "subject": subject,
+        "content": [{"type": "text/html", "value": html_body}],
+    }
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SMTP or log it when suppressed."""
+    """Send an email via SendGrid API or log it when suppressed."""
     settings = get_settings()
 
-    if settings.smtp_suppress:
+    if settings.email_suppress:
         logger.info(
-            "Email suppressed (smtp_suppress=True)\n"
+            "Email suppressed (email_suppress=True)\n"
             "  To: %s\n  Subject: %s\n  Body:\n%s",
-            to,
-            subject,
-            html_body,
+            to, subject, html_body,
         )
         return
 
-    if not settings.smtp_user or not settings.smtp_password:
-        logger.warning("SMTP credentials not configured; skipping email to %s", to)
+    if not settings.sendgrid_api_key:
+        logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
         return
 
-    message = MIMEMultipart("alternative")
-    message["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
-    message["To"] = to
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
+    payload = _build_payload(to, subject, html_body)
 
     try:
-        await aiosmtplib.send(
-            message,
-            hostname=settings.smtp_host,
-            port=settings.smtp_port,
-            username=settings.smtp_user,
-            password=settings.smtp_password,
-            start_tls=settings.smtp_starttls,
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                SENDGRID_API_URL,
+                json=payload,
+                headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+        logger.info("Email sent to %s: %s", to, subject)
+    except Exception:
+        logger.exception("Failed to send email to %s: %s", to, subject)
+
+
+def send_email_sync(to: str, subject: str, html_body: str) -> None:
+    """Synchronous email send for use in Celery workers."""
+    settings = get_settings()
+
+    if settings.email_suppress:
+        logger.info(
+            "Email suppressed (email_suppress=True)\n"
+            "  To: %s\n  Subject: %s\n  Body:\n%s",
+            to, subject, html_body,
         )
+        return
+
+    if not settings.sendgrid_api_key:
+        logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
+        return
+
+    payload = _build_payload(to, subject, html_body)
+
+    try:
+        resp = httpx.post(
+            SENDGRID_API_URL,
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+            timeout=10.0,
+        )
+        resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
@@ -100,40 +135,3 @@ async def send_account_deletion_email(to: str, cancel_token: str) -> None:
         {"cancel_url": cancel_url, "app_name": settings.app_name},
     )
     await _send_email(to, f"Your {settings.app_name} account is scheduled for deletion", html)
-
-
-def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
-    import smtplib
-
-    settings = get_settings()
-
-    if settings.smtp_suppress:
-        logger.info(
-            "Email suppressed (smtp_suppress=True)\n"
-            "  To: %s\n  Subject: %s\n  Body:\n%s",
-            to,
-            subject,
-            html_body,
-        )
-        return
-
-    if not settings.smtp_user or not settings.smtp_password:
-        logger.warning("SMTP credentials not configured; skipping email to %s", to)
-        return
-
-    message = MIMEMultipart("alternative")
-    message["From"] = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
-    message["To"] = to
-    message["Subject"] = subject
-    message.attach(MIMEText(html_body, "html"))
-
-    try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-            if settings.smtp_starttls:
-                server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(message)
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)

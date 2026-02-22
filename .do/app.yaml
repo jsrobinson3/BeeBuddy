@@ -12,8 +12,7 @@ services:
     http_port: 8000
     instance_count: 1
     instance_size_slug: professional-xs
-    run_command: |
-      uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    run_command: sh -c "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
     health_check:
       http_path: /health
       initial_delay_seconds: 10
@@ -55,9 +54,12 @@ services:
       - key: ANTHROPIC_API_KEY
         scope: RUN_TIME
         type: SECRET
-      - key: SMTP_SUPPRESS
+      - key: SENDGRID_API_KEY
         scope: RUN_TIME
-        value: "true"
+        type: SECRET
+      - key: EMAIL_FROM_ADDRESS
+        scope: RUN_TIME
+        value: no-reply@beebuddyai.com
 
 workers:
   - name: celery-worker
@@ -98,3 +100,9 @@ workers:
       - key: ANTHROPIC_API_KEY
         scope: RUN_TIME
         type: SECRET
+      - key: SENDGRID_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: EMAIL_FROM_ADDRESS
+        scope: RUN_TIME
+        value: no-reply@beebuddyai.com

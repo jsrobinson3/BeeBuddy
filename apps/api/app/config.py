@@ -80,15 +80,11 @@ class Settings(BaseSettings):
     microsoft_client_id: str | None = None
     microsoft_client_secret: str | None = None
 
-    # SMTP (Email)
-    smtp_host: str = "smtp.office365.com"
-    smtp_port: int = 587
-    smtp_user: str | None = None
-    smtp_password: str | None = None
-    smtp_from_email: str = "noreply@beebuddy.app"
-    smtp_from_name: str = "BeeBuddy"
-    smtp_starttls: bool = True
-    smtp_suppress: bool = False  # True in dev — logs email instead of sending
+    # Email
+    email_from_address: str = "noreply@beebuddy.app"
+    email_from_name: str = "BeeBuddy"
+    email_suppress: bool = False  # True in dev — logs email instead of sending
+    sendgrid_api_key: str | None = None
 
     # Frontend URL (for email links)
     frontend_url: str = "http://localhost:8081"
