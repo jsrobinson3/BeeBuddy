@@ -1,6 +1,41 @@
 name: beebuddy
 region: nyc
 
+envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+  - key: REDIS_URL
+    scope: RUN_TIME
+    type: SECRET
+  - key: SECRET_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: AWS_ACCESS_KEY_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: AWS_SECRET_ACCESS_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: S3_BUCKET
+    scope: RUN_TIME
+    value: beebuddy-photos
+  - key: S3_ENDPOINT_URL
+    scope: RUN_TIME
+    value: https://nyc3.digitaloceanspaces.com
+  - key: LLM_PROVIDER
+    scope: RUN_TIME
+    value: anthropic
+  - key: ANTHROPIC_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: SENDGRID_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: EMAIL_FROM_ADDRESS
+    scope: RUN_TIME
+    value: no-reply@beebuddyai.com
+
 services:
   - name: api
     github:
@@ -18,27 +53,6 @@ services:
       initial_delay_seconds: 10
       period_seconds: 30
     envs:
-      - key: DATABASE_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: REDIS_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: SECRET_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: AWS_ACCESS_KEY_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: AWS_SECRET_ACCESS_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: S3_BUCKET
-        scope: RUN_TIME
-        value: beebuddy-photos
-      - key: S3_ENDPOINT_URL
-        scope: RUN_TIME
-        value: https://nyc3.digitaloceanspaces.com
       - key: DEBUG
         scope: RUN_TIME
         value: "false"
@@ -48,18 +62,6 @@ services:
       - key: CORS_ORIGINS
         scope: RUN_TIME
         value: '["https://beebuddy.app"]'
-      - key: LLM_PROVIDER
-        scope: RUN_TIME
-        value: anthropic
-      - key: ANTHROPIC_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: SENDGRID_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: EMAIL_FROM_ADDRESS
-        scope: RUN_TIME
-        value: no-reply@beebuddyai.com
 
 workers:
   - name: celery-worker
@@ -72,37 +74,3 @@ workers:
     instance_count: 1
     instance_size_slug: professional-xs
     run_command: uv run celery -A app.tasks worker --loglevel=info --concurrency=2
-    envs:
-      - key: DATABASE_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: REDIS_URL
-        scope: RUN_TIME
-        type: SECRET
-      - key: SECRET_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: AWS_ACCESS_KEY_ID
-        scope: RUN_TIME
-        type: SECRET
-      - key: AWS_SECRET_ACCESS_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: S3_BUCKET
-        scope: RUN_TIME
-        value: beebuddy-photos
-      - key: S3_ENDPOINT_URL
-        scope: RUN_TIME
-        value: https://nyc3.digitaloceanspaces.com
-      - key: LLM_PROVIDER
-        scope: RUN_TIME
-        value: anthropic
-      - key: ANTHROPIC_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: SENDGRID_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: EMAIL_FROM_ADDRESS
-        scope: RUN_TIME
-        value: no-reply@beebuddyai.com

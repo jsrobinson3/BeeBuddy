@@ -35,10 +35,19 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, v: str) -> str:
-        """Ensure async driver prefix for managed DB providers."""
+        """Ensure async driver prefix and strip sslmode for asyncpg."""
         if v.startswith("postgresql://"):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # asyncpg doesn't accept sslmode — we handle SSL via connect_args
+        v = v.replace("?sslmode=require", "").replace("&sslmode=require", "")
         return v
+
+    @property
+    def database_requires_ssl(self) -> bool:
+        """True when the raw DATABASE_URL requested SSL."""
+        import os
+        raw = os.environ.get("DATABASE_URL", "")
+        return "sslmode=require" in raw
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

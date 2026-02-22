@@ -1,5 +1,6 @@
 """Database session management."""
 
+import ssl
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -7,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.config import get_settings
 
 settings = get_settings()
+
+_connect_args: dict = {}
+if settings.database_requires_ssl:
+    _connect_args["ssl"] = ssl.create_default_context()
 
 engine = create_async_engine(
     settings.database_url,
@@ -16,6 +21,7 @@ engine = create_async_engine(
     max_overflow=10,
     pool_timeout=30,
     pool_recycle=3600,
+    connect_args=_connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(
