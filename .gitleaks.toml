@@ -1,0 +1,20 @@
+# BeeBuddy gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "BeeBuddy Secret Detection"
+
+[extend]
+# Use the default gitleaks ruleset as the base
+useDefault = true
+
+[allowlist]
+# Paths that are always allowed (no secret scanning)
+paths = [
+  '''\.lock$''',
+  '''package-lock\.json$''',
+  '''uv\.lock$''',
+  '''\.env\.example$''',
+  '''node_modules/''',
+  '''\.venv/''',
+  '''\.git/''',
+]

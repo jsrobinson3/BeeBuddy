@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Verify your email - {{ app_name }}{% endblock %}
+
+{% block content %}
+<p>Welcome to {{ app_name }}!</p>
+<p>Please verify your email address by clicking the button below:</p>
+<p style="text-align: center; margin: 28px 0;">
+  <a href="{{ verify_url }}" class="btn">Verify Email</a>
+</p>
+<p>If the button doesn't work, copy and paste this link into your browser:</p>
+<p style="word-break: break-all; font-size: 13px; color: #666666;">{{ verify_url }}</p>
+<p>If you didn't create an account, you can safely ignore this email.</p>
+{% endblock %}

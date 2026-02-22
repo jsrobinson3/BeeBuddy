@@ -1,0 +1,180 @@
+services:
+  # =============================================================================
+  # Infrastructure
+  # =============================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: beebuddy-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: beebuddy
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: beebuddy-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: beebuddy-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # AI / LLM
+  # =============================================================================
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: beebuddy-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # GPU support (requires nvidia-container-toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Pull default model on first start
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: beebuddy-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Checking for default model..."
+        if ! ollama list | grep -q "llama3.2:3b"; then
+          echo "Pulling llama3.2:3b (this may take a few minutes on first run)..."
+          ollama pull llama3.2:3b
+        else
+          echo "Model llama3.2:3b already available"
+        fi
+        echo "Ollama ready!"
+    restart: "no"
+
+  # =============================================================================
+  # Application
+  # =============================================================================
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: beebuddy-api
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/beebuddy
+      - REDIS_URL=redis://redis:6379/0
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_BUCKET=beebuddy-photos
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
+      - SECRET_KEY=local-dev-secret-do-not-use-in-production
+      - COOKIE_SECURE=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ../../apps/api:/app
+      - api_venv:/app/.venv
+    command: >
+      sh -c "uv sync --frozen --no-dev && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  celery:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: beebuddy-celery
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/beebuddy
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
+      - SECRET_KEY=local-dev-secret-do-not-use-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../../apps/api:/app
+      - api_venv:/app/.venv
+    command: >
+      sh -c "uv sync --frozen --no-dev && uv run celery -A app.tasks worker --loglevel=info"
+    profiles:
+      - workers
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  ollama_data:
+  api_venv:

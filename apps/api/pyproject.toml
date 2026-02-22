@@ -1,0 +1,51 @@
+[project]
+name = "beebuddy-api"
+version = "0.1.0"
+description = "BeeBuddy API - AI-powered beekeeping management platform"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = [
+    "aiosmtplib>=3.0.0",
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "authlib>=1.6.8",
+    "bcrypt>=4.0.0",
+    "boto3>=1.42.54",
+    "celery>=5.6.2",
+    "email-validator>=2.3.0",
+    "fastapi>=0.129.2",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.0",
+    "pydantic-settings>=2.13.1",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.22",
+    "redis>=7.2.0",
+    "slowapi>=0.1.9",
+    "sqlalchemy[asyncio]>=2.0.46",
+    "uvicorn[standard]>=0.41.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.3.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["app/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/versions/*" = ["E501", "I001", "UP"]
+"**/models/*" = ["F821"]  # forward refs in SQLAlchemy relationships
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
