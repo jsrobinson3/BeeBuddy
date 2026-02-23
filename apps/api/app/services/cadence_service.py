@@ -44,12 +44,16 @@ def _compute_next_due(
     cadence_key: str,
     from_date: date | None = None,
     hemisphere: Hemisphere = "north",
+    *,
+    custom_interval_days: int | None = None,
+    custom_season_month: int | None = None,
+    custom_season_day: int | None = None,
 ) -> date | None:
     """Compute the next due date for a cadence template.
 
-    For recurring cadences: from_date + interval_days.
-    For seasonal cadences: the next occurrence of season_month/season_day,
-    offset by 6 months for the southern hemisphere.
+    For recurring cadences: from_date + interval_days (or custom override).
+    For seasonal cadences: the next occurrence of season_month/season_day
+    (or custom overrides), offset by 6 months for the southern hemisphere.
     """
     tpl = get_template(cadence_key)
     if tpl is None:
@@ -57,15 +61,20 @@ def _compute_next_due(
 
     today = from_date or date.today()
 
-    if tpl.category == CadenceCategory.RECURRING and tpl.interval_days:
-        return today + timedelta(days=tpl.interval_days)
+    if tpl.category == CadenceCategory.RECURRING:
+        interval = custom_interval_days or tpl.interval_days
+        if interval:
+            return today + timedelta(days=interval)
 
-    if tpl.category == CadenceCategory.SEASONAL and tpl.season_month:
-        adjusted_month = _offset_month(tpl.season_month, hemisphere)
-        candidate = date(today.year, adjusted_month, tpl.season_day)
-        if candidate <= today:
-            candidate = date(today.year + 1, adjusted_month, tpl.season_day)
-        return candidate
+    if tpl.category == CadenceCategory.SEASONAL:
+        month = custom_season_month or tpl.season_month
+        day = custom_season_day or tpl.season_day
+        if month:
+            adjusted_month = _offset_month(month, hemisphere)
+            candidate = date(today.year, adjusted_month, day)
+            if candidate <= today:
+                candidate = date(today.year + 1, adjusted_month, day)
+            return candidate
 
     return None
 
@@ -200,22 +209,30 @@ async def generate_due_tasks(
             logger.warning("Unknown cadence key %s for user %s", cadence.cadence_key, user_id)
             continue
 
+        interval = cadence.custom_interval_days or tpl.interval_days
         task = Task(
             user_id=user_id,
             title=tpl.title,
             description=tpl.description,
             due_date=cadence.next_due_date,
             recurring=tpl.category == CadenceCategory.RECURRING,
-            recurrence_rule=f"every {tpl.interval_days} days" if tpl.interval_days else None,
+            recurrence_rule=f"every {interval} days" if interval else None,
             source=TaskSource.SYSTEM,
             priority=TaskPriority(tpl.priority),
         )
         db.add(task)
         tasks_created.append(task)
 
-        # Advance the cadence
+        # Advance the cadence using custom overrides when present
         cadence.last_generated_at = datetime.now(UTC)
-        cadence.next_due_date = _compute_next_due(cadence.cadence_key, today, hemisphere)
+        cadence.next_due_date = _compute_next_due(
+            cadence.cadence_key,
+            today,
+            hemisphere,
+            custom_interval_days=cadence.custom_interval_days,
+            custom_season_month=cadence.custom_season_month,
+            custom_season_day=cadence.custom_season_day,
+        )
 
     if tasks_created:
         await db.commit()

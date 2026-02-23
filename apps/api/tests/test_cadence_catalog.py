@@ -270,3 +270,90 @@ class TestSouthernHemisphereScheduling:
         assert north != south
         assert north == date(2026, 3, 15)
         assert south == date(2026, 9, 15)
+
+
+class TestCustomCadenceOverrides:
+    """Test user-customizable interval and season overrides."""
+
+    def test_custom_interval_overrides_catalog(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # regular_inspection default is 14 days; override to 10
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "regular_inspection", from_date=start, custom_interval_days=10,
+        )
+        assert result == date(2026, 1, 11)
+
+    def test_custom_interval_none_falls_back_to_catalog(self):
+        from app.services.cadence_service import _compute_next_due
+
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "regular_inspection", from_date=start, custom_interval_days=None,
+        )
+        # Falls back to catalog default of 14 days
+        assert result == date(2026, 1, 15)
+
+    def test_custom_season_month_overrides_catalog(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # spring_assessment default is month=3, day=15
+        # Override to month=4 (April assessment instead of March)
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "spring_assessment", from_date=start, custom_season_month=4,
+        )
+        assert result == date(2026, 4, 15)
+
+    def test_custom_season_day_overrides_catalog(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # spring_assessment default is month=3, day=15
+        # Override just the day to 1
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "spring_assessment", from_date=start, custom_season_day=1,
+        )
+        assert result == date(2026, 3, 1)
+
+    def test_custom_season_month_and_day(self):
+        from app.services.cadence_service import _compute_next_due
+
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "spring_assessment", from_date=start,
+            custom_season_month=4, custom_season_day=20,
+        )
+        assert result == date(2026, 4, 20)
+
+    def test_custom_season_with_southern_hemisphere(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # Custom month=4 for southern hemisphere -> offset to month=10
+        start = date(2026, 1, 1)
+        result = _compute_next_due(
+            "spring_assessment", from_date=start,
+            hemisphere="south", custom_season_month=4,
+        )
+        assert result == date(2026, 10, 15)
+
+    def test_custom_interval_very_short(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # Beekeeper with many hives may inspect every 7 days
+        start = date(2026, 6, 1)
+        result = _compute_next_due(
+            "regular_inspection", from_date=start, custom_interval_days=7,
+        )
+        assert result == date(2026, 6, 8)
+
+    def test_custom_interval_very_long(self):
+        from app.services.cadence_service import _compute_next_due
+
+        # Hobby beekeeper with one hive may inspect monthly
+        start = date(2026, 6, 1)
+        result = _compute_next_due(
+            "regular_inspection", from_date=start, custom_interval_days=30,
+        )
+        assert result == date(2026, 7, 1)

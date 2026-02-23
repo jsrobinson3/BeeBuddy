@@ -330,3 +330,95 @@ class TestHemisphereIntegration:
         resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         assert resp.status_code == 201
         assert len(resp.json()) > 0
+
+
+class TestCustomCadenceScheduling:
+    """PATCH /cadences/{id} — custom interval and season overrides."""
+
+    async def _get_cadence_by_key(self, client, headers, key: str) -> dict:
+        cadences = (await client.get(f"{PREFIX}/cadences", headers=headers)).json()
+        return next(c for c in cadences if c["cadence_key"] == key)
+
+    async def test_custom_interval_days_persisted(self, client: AsyncClient):
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+
+        resp = await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"custom_interval_days": 10},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["custom_interval_days"] == 10
+
+    async def test_custom_interval_recalculates_next_due(self, client: AsyncClient):
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        original_due = cadence["next_due_date"]
+
+        resp = await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"custom_interval_days": 7},
+        )
+        assert resp.status_code == 200
+        new_due = resp.json()["next_due_date"]
+        # next_due_date should have been recalculated
+        assert new_due is not None
+        assert new_due != original_due
+
+    async def test_custom_season_month_persisted(self, client: AsyncClient):
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadence = await self._get_cadence_by_key(client, headers, "spring_assessment")
+
+        resp = await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"custom_season_month": 4, "custom_season_day": 1},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["custom_season_month"] == 4
+        assert body["custom_season_day"] == 1
+
+    async def test_reset_custom_to_null_reverts_to_catalog(self, client: AsyncClient):
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+
+        # Set custom, then clear it
+        await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"custom_interval_days": 7},
+        )
+        resp = await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"custom_interval_days": None},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["custom_interval_days"] is None
+
+    async def test_custom_fields_in_response(self, client: AsyncClient):
+        """CadenceResponse includes the custom override fields."""
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadences = (await client.get(f"{PREFIX}/cadences", headers=headers)).json()
+        # All cadences should have the new fields (defaulting to null)
+        for c in cadences:
+            assert "custom_interval_days" in c
+            assert "custom_season_month" in c
+            assert "custom_season_day" in c
+
+    async def test_toggle_active_does_not_recalculate_due_date(self, client: AsyncClient):
+        """Toggling is_active alone should not change next_due_date."""
+        headers, _ = await register(client)
+        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        original_due = cadence["next_due_date"]
+
+        resp = await client.patch(
+            f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
+            json={"is_active": False},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["next_due_date"] == original_due

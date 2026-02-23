@@ -3,7 +3,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +30,17 @@ class TaskCadence(Base):
     )
     next_due_date: Mapped[date | None] = mapped_column(
         Date, nullable=True
+    )
+
+    # User overrides — when set, these take precedence over catalog defaults
+    custom_interval_days: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    custom_season_month: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    custom_season_day: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
     # Relationships

@@ -31,10 +31,21 @@ class CadenceResponse(BaseModel):
     is_active: bool
     last_generated_at: datetime | None = None
     next_due_date: date | None = None
+    custom_interval_days: int | None = None
+    custom_season_month: int | None = None
+    custom_season_day: int | None = None
     created_at: datetime
 
 
 class CadenceUpdate(BaseModel):
-    """Request model for toggling or updating a cadence."""
+    """Request model for toggling or updating a cadence.
+
+    Users can override scheduling by setting custom_interval_days (for recurring)
+    or custom_season_month/custom_season_day (for seasonal).
+    Set to null to revert to catalog defaults.
+    """
 
     is_active: bool | None = None
+    custom_interval_days: int | None = None
+    custom_season_month: int | None = None
+    custom_season_day: int | None = None

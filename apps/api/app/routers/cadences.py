@@ -111,11 +111,34 @@ async def update_cadence(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update a cadence (e.g. toggle active/inactive)."""
+    """Update a cadence (e.g. toggle active/inactive, customize schedule).
+
+    When custom scheduling fields change, next_due_date is recalculated.
+    """
     cadence = await cadence_service.get_cadence(db, cadence_id, user_id=current_user.id)
     if not cadence:
         raise HTTPException(status_code=404, detail="Cadence not found")
-    return await cadence_service.update_cadence(db, cadence, data.model_dump(exclude_unset=True))
+
+    changes = data.model_dump(exclude_unset=True)
+    scheduling_keys = {"custom_interval_days", "custom_season_month", "custom_season_day"}
+    schedule_changed = bool(changes.keys() & scheduling_keys)
+
+    cadence = await cadence_service.update_cadence(db, cadence, changes)
+
+    # Recalculate next_due_date when scheduling overrides changed
+    if schedule_changed:
+        hemisphere = await _resolve_hemisphere(db, current_user)
+        cadence.next_due_date = cadence_service._compute_next_due(
+            cadence.cadence_key,
+            hemisphere=hemisphere,
+            custom_interval_days=cadence.custom_interval_days,
+            custom_season_month=cadence.custom_season_month,
+            custom_season_day=cadence.custom_season_day,
+        )
+        await db.commit()
+        await db.refresh(cadence)
+
+    return cadence
 
 
 @router.post("/generate", response_model=list[TaskResponse])
