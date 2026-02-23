@@ -1,13 +1,27 @@
 name: beebuddy
 region: nyc
 
+databases:
+  - name: beebuddy-pg
+    cluster_name: beebuddy-pg
+    engine: PG
+    version: "16"
+    production: true
+    db_name: defaultdb
+    db_user: doadmin
+  - name: beebuddy-valkey
+    cluster_name: beebuddy-valkey
+    engine: VALKEY
+    version: "8"
+    production: true
+
 envs:
   - key: DATABASE_URL
     scope: RUN_TIME
-    type: SECRET
+    value: ${beebuddy-pg.DATABASE_URL}
   - key: REDIS_URL
     scope: RUN_TIME
-    type: SECRET
+    value: ${beebuddy-valkey.DATABASE_URL}
   - key: SECRET_KEY
     scope: RUN_TIME
     type: SECRET
@@ -23,6 +37,9 @@ envs:
   - key: S3_ENDPOINT_URL
     scope: RUN_TIME
     value: https://atl1.digitaloceanspaces.com
+  - key: S3_REGION
+    scope: RUN_TIME
+    value: atl1
   - key: LLM_PROVIDER
     scope: RUN_TIME
     value: anthropic

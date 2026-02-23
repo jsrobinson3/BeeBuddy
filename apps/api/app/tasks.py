@@ -1,6 +1,7 @@
 """Celery task definitions."""
 
 import logging
+import ssl
 
 from celery import Celery
 
@@ -11,6 +12,11 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
+
+if settings.redis_url.startswith("rediss://"):
+    celery_app.conf.broker_use_ssl = {
+        "ssl_cert_reqs": ssl.CERT_NONE,
+    }
 
 
 @celery_app.task
