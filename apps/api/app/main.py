@@ -44,7 +44,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
+# CSRF middleware (added first so it becomes the inner layer)
+app.add_middleware(CSRFMiddleware)
+
+# CORS middleware (added second so it becomes the outermost layer — ensures all
+# responses, including CSRF 403s, carry the correct Access-Control-* headers)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -52,9 +56,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# CSRF middleware (must be after CORS so preflight OPTIONS pass through)
-app.add_middleware(CSRFMiddleware)
 
 # Rate-limit exceeded handler (slowapi)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
