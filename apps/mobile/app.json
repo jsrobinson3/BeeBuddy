@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#fdbc48"
+        "backgroundColor": "#3f4a30"
       },
       "package": "com.beebuddy.app",
       "edgeToEdgeEnabled": true
@@ -36,6 +36,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "856e7359-1e8c-4592-b24e-28ce0a2de05b"
+      }
     }
   }
 }
