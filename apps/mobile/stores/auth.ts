@@ -184,14 +184,18 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
   },
 
   logout: async () => {
-    if (isWeb) {
-      await authFetch("/api/v1/auth/logout", { method: "POST" });
-    } else {
-      await clearTokens();
+    try {
+      if (isWeb) {
+        await authFetch("/api/v1/auth/logout", { method: "POST" });
+      } else {
+        await clearTokens();
+      }
+    } catch {
+      // Network error or server down — still clear client state below
+    } finally {
+      api.setToken(undefined);
+      set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
     }
-
-    api.setToken(undefined);
-    set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
   },
 
   refresh: async () => {

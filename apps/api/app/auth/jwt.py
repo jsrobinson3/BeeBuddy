@@ -1,5 +1,6 @@
 """JWT token creation and decoding."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from jose import jwt
@@ -21,13 +22,18 @@ def create_access_token(data: dict) -> str:
 
 
 def create_refresh_token(data: dict) -> str:
-    """Create a long-lived refresh token."""
+    """Create a long-lived refresh token with a unique jti for revocation."""
     settings = get_settings()
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(
         days=settings.refresh_token_expire_days,
     )
-    to_encode.update({"exp": expire, "iat": datetime.now(UTC), "type": "refresh"})
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.now(UTC),
+        "type": "refresh",
+        "jti": uuid.uuid4().hex,
+    })
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 

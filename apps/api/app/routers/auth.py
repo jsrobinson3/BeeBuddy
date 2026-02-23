@@ -1,6 +1,7 @@
 """Auth endpoints — register, login, refresh, logout, verify, reset, OAuth stub."""
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookies import clear_auth_cookies, set_auth_cookies
 from app.auth.jwt import decode_token
+from app.auth.token_blocklist import block_token
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
@@ -101,8 +103,23 @@ async def refresh(
 
 
 @router.post("/logout", status_code=204)
-async def logout(response: Response):
-    """Clear auth cookies (web clients)."""
+async def logout(
+    response: Response,
+    refresh_token: str | None = Cookie(default=None),
+):
+    """Clear auth cookies and invalidate the refresh token server-side."""
+    # Blocklist the refresh token so it can't be reused after logout
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token)
+            jti = payload.get("jti")
+            if jti:
+                exp = payload.get("exp", 0)
+                remaining = int(exp - datetime.now(UTC).timestamp())
+                await block_token(jti, remaining)
+        except JWTError:
+            pass  # Token already expired or invalid — nothing to blocklist
+
     clear_auth_cookies(response)
     return None
 

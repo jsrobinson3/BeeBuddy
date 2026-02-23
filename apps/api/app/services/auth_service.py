@@ -59,14 +59,22 @@ def issue_tokens(user_id: UUID) -> tuple[str, str]:
 async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str]:
     """Decode a refresh token, verify the user exists, return new token pair.
 
-    Raises JWTError if the token is invalid or not a refresh token.
+    Raises JWTError if the token is invalid, not a refresh token, or blocklisted.
     """
+    from app.auth.token_blocklist import is_blocked
+
     try:
         payload = decode_token(refresh_token)
     except JWTError:
         raise
     if payload.get("type") != "refresh":
         raise JWTError("Token is not a refresh token")
+
+    # Reject tokens that were invalidated on logout
+    jti = payload.get("jti")
+    if jti and await is_blocked(jti):
+        raise JWTError("Token has been revoked")
+
     user_id = payload.get("sub")
     if user_id is None:
         raise JWTError("Token missing subject")

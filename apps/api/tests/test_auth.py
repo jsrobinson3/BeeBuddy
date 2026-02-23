@@ -378,3 +378,95 @@ class TestCSRF:
             cookies={"access_token": access_token},
         )
         assert resp.status_code == 200
+
+    async def test_auth_endpoints_exempt_from_csrf(self, client: AsyncClient):
+        """Login/register/refresh/logout should work even with a stale
+        access_token cookie and no CSRF header (the re-login-after-logout bug)."""
+        email = unique_email()
+        await register(client, email)
+
+        # Login to get cookies
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        access_token = resp.cookies.get("access_token")
+
+        # Simulate stale cookie: POST /auth/login with cookie but NO CSRF header
+        resp = await client.post(
+            f"{PREFIX}/auth/login",
+            cookies={"access_token": access_token},
+            json={"email": email, "password": "secret123"},
+        )
+        assert resp.status_code == 200, (
+            "Login with stale cookie and no CSRF header should succeed"
+        )
+
+
+# -- Logout token invalidation -----------------------------------------------
+
+
+class TestLogoutInvalidation:
+    async def test_refresh_token_rejected_after_logout(self, client: AsyncClient):
+        """After logout, the old refresh token should be rejected."""
+        email = unique_email()
+        await register(client, email)
+
+        # Login to get tokens
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        refresh = body["refresh_token"]
+        access_cookie = resp.cookies.get("access_token")
+        refresh_cookie = resp.cookies.get("refresh_token")
+
+        # Logout (sends refresh_token cookie for server-side invalidation)
+        resp = await client.post(
+            f"{PREFIX}/auth/logout",
+            cookies={
+                "access_token": access_cookie,
+                "refresh_token": refresh_cookie,
+            },
+        )
+        assert resp.status_code == 204
+
+        # Try to use the old refresh token — should be rejected
+        resp = await client.post(
+            f"{PREFIX}/auth/refresh",
+            json={"refresh_token": refresh},
+        )
+        assert resp.status_code == 401
+
+    async def test_login_works_after_logout(self, client: AsyncClient):
+        """Full cycle: login → logout → login again with a different account."""
+        email_a = unique_email()
+        email_b = unique_email()
+        await register(client, email_a)
+        await register(client, email_b)
+
+        # Login as User A
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email_a,
+            "password": "secret123",
+        })
+        assert resp.status_code == 200
+        cookies_a = {
+            "access_token": resp.cookies.get("access_token"),
+            "refresh_token": resp.cookies.get("refresh_token"),
+        }
+
+        # Logout User A
+        resp = await client.post(f"{PREFIX}/auth/logout", cookies=cookies_a)
+        assert resp.status_code == 204
+
+        # Login as User B — should succeed even if stale cookies linger
+        resp = await client.post(
+            f"{PREFIX}/auth/login",
+            cookies={"access_token": cookies_a["access_token"]},
+            json={"email": email_b, "password": "secret123"},
+        )
+        assert resp.status_code == 200
+        assert "access_token" in resp.json()
