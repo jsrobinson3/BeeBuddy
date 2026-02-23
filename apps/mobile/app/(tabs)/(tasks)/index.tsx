@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { Pressable, FlatList, Text, View } from "react-native";
 
 import { EmptyState } from "../../../components/EmptyState";
@@ -57,6 +58,25 @@ const createStyles = (c: ThemeColors) => ({
     fontFamily: typography.families.body,
     color: c.textSecondary,
   },
+  cadencesButton: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    backgroundColor: c.bgElevated,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    shadowColor: c.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cadencesButtonText: {
+    fontSize: 14,
+    fontFamily: typography.families.bodySemiBold,
+    color: c.honey,
+  },
 });
 
 function formatDueDate(dateStr?: string | null): string {
@@ -104,6 +124,19 @@ function TaskCard({
   );
 }
 
+function CadencesLink() {
+  const styles = useStyles(createStyles);
+  const router = useRouter();
+  return (
+    <Pressable
+      style={styles.cadencesButton}
+      onPress={() => router.push("/(tasks)/cadences" as any)}
+    >
+      <Text style={styles.cadencesButtonText}>Manage Task Cadences</Text>
+    </Pressable>
+  );
+}
+
 export default function TasksScreen() {
   const { data: tasks, isLoading, error, refetch } = useTasks();
   const updateTask = useUpdateTask();
@@ -138,6 +171,7 @@ export default function TasksScreen() {
         data={tasks ?? []}
         keyExtractor={(item: Task) => item.id}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={<CadencesLink />}
         renderItem={({ item }: { item: Task }) => (
           <TaskCard task={item} onToggleComplete={() => handleToggle(item)} />
         )}
