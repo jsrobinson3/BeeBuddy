@@ -1,6 +1,7 @@
 """Celery task definitions."""
 
 import logging
+import socket
 import ssl
 
 from celery import Celery
@@ -12,11 +13,26 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
+celery_app.conf.broker_connection_retry_on_startup = True
 
 if settings.redis_url.startswith("rediss://"):
     celery_app.conf.broker_use_ssl = {
         "ssl_cert_reqs": ssl.CERT_NONE,
     }
+
+# Keep connections alive to prevent managed Valkey/Redis services (e.g.
+# DigitalOcean) from closing idle connections.  TCP keepalive probes start
+# after 30 s of idle time, well within the typical 5-minute server timeout.
+celery_app.conf.broker_transport_options = {
+    "socket_keepalive": True,
+    "socket_keepalive_options": {
+        socket.TCP_KEEPIDLE: 30,
+        socket.TCP_KEEPINTVL: 10,
+        socket.TCP_KEEPCNT: 6,
+    },
+    "socket_connect_timeout": 30,
+    "retry_on_timeout": True,
+}
 
 
 @celery_app.task
