@@ -1,6 +1,5 @@
 """Health check endpoints."""
 
-import ssl
 from importlib.metadata import PackageNotFoundError, version
 
 import redis.asyncio as aioredis
@@ -46,10 +45,7 @@ async def _check_redis() -> str:
         settings = get_settings()
         kwargs = {}
         if settings.redis_url.startswith("rediss://"):
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
-            kwargs["ssl"] = ssl_ctx
+            kwargs["ssl_cert_reqs"] = "none"
         async with aioredis.from_url(settings.redis_url, **kwargs) as client:
             await client.ping()
         return "ok"
