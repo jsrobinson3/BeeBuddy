@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     aws_secret_access_key: str | None = None
     s3_bucket: str = "beebuddy-photos"
     s3_endpoint_url: str | None = None  # MinIO in dev, S3/Spaces/B2 in prod
+    s3_region: str = "atl1"  # DO Spaces region
 
     # Auth (JWT)
     secret_key: str  # Required — must be set via env var or .env file

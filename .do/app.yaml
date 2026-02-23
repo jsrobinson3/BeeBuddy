@@ -22,7 +22,7 @@ envs:
     value: beebuddy-photos
   - key: S3_ENDPOINT_URL
     scope: RUN_TIME
-    value: https://nyc3.digitaloceanspaces.com
+    value: https://atl1.digitaloceanspaces.com
   - key: LLM_PROVIDER
     scope: RUN_TIME
     value: anthropic

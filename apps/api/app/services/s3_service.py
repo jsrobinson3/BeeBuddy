@@ -1,6 +1,7 @@
 """S3-compatible storage service (MinIO in dev, S3/Spaces/B2 in prod)."""
 
 import asyncio
+import logging
 import uuid
 from collections.abc import AsyncIterator
 
@@ -8,6 +9,8 @@ import boto3
 from botocore.config import Config
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _client = None
 
@@ -20,6 +23,7 @@ def _get_client():
         _client = boto3.client(
             "s3",
             endpoint_url=settings.s3_endpoint_url,
+            region_name=settings.s3_region,
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             config=Config(signature_version="s3v4"),
@@ -28,18 +32,20 @@ def _get_client():
 
 
 async def ensure_bucket_exists() -> None:
-    """Create the photos bucket if it does not already exist."""
-    client = _get_client()
+    """Check the photos bucket exists. Logs a warning on failure instead of crashing."""
     settings = get_settings()
-    await asyncio.to_thread(_ensure_bucket_sync, client, settings.s3_bucket)
-
-
-def _ensure_bucket_sync(client, bucket: str) -> None:
-    """Synchronous helper for ensure_bucket_exists."""
+    if not settings.aws_access_key_id:
+        logger.warning("S3 credentials not configured; skipping bucket check")
+        return
     try:
-        client.head_bucket(Bucket=bucket)
-    except client.exceptions.ClientError:
-        client.create_bucket(Bucket=bucket)
+        client = _get_client()
+        await asyncio.to_thread(client.head_bucket, Bucket=settings.s3_bucket)
+        logger.info("S3 bucket '%s' verified", settings.s3_bucket)
+    except Exception:
+        logger.warning(
+            "S3 bucket '%s' not accessible — photo uploads will fail until resolved",
+            settings.s3_bucket,
+        )
 
 
 def generate_key(user_id: str, inspection_id: str, file_ext: str) -> str:
