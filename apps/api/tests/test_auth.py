@@ -308,6 +308,62 @@ class TestCookieAuth:
         assert "refresh_token" in cookie_header_str
         assert "max-age=0" in cookie_header_str or 'expires=' in cookie_header_str
 
+    async def test_token_rejected_after_logout(self, client: AsyncClient):
+        email = unique_email()
+        await register(client, email)
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        access_token = resp.cookies.get("access_token")
+        refresh_token = resp.cookies.get("refresh_token")
+
+        # Logout — tokens are blocklisted server-side
+        resp = await client.post(
+            f"{PREFIX}/auth/logout",
+            cookies={"access_token": access_token},
+        )
+        assert resp.status_code == 204
+
+        # Old access token should be rejected
+        resp = await client.get(
+            f"{PREFIX}/apiaries",
+            headers=auth(access_token),
+        )
+        assert resp.status_code == 401
+
+        # Old refresh token should also be rejected
+        resp = await client.post(
+            f"{PREFIX}/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        assert resp.status_code == 401
+
+    async def test_login_works_after_logout(self, client: AsyncClient):
+        """Regression: a stale access_token cookie must not block re-login."""
+        email = unique_email()
+        await register(client, email)
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        access_token = resp.cookies.get("access_token")
+
+        # Logout
+        await client.post(
+            f"{PREFIX}/auth/logout",
+            cookies={"access_token": access_token},
+        )
+
+        # Login again — even if the browser still sends the old cookie
+        resp = await client.post(
+            f"{PREFIX}/auth/login",
+            cookies={"access_token": access_token},
+            json={"email": email, "password": "secret123"},
+        )
+        assert resp.status_code == 200
+        assert "access_token" in resp.json()
+
 
 # -- CSRF middleware ----------------------------------------------------------
 

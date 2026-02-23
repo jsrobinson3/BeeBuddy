@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.blocklist import is_token_blocklisted
 from app.auth.jwt import decode_token
 from app.db.session import get_db
 from app.models.user import User
@@ -40,6 +41,9 @@ async def get_current_user(
         user_id_str: str | None = payload.get("sub")
         token_type: str | None = payload.get("type")
         if user_id_str is None or token_type != "access":
+            raise credentials_exception
+        # Reject tokens issued before the user's last logout
+        if await is_token_blocklisted(user_id_str, payload.get("iat")):
             raise credentials_exception
         user_id = UUID(user_id_str)
     except (JWTError, ValueError):

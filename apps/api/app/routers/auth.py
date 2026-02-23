@@ -9,6 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.blocklist import blocklist_user_tokens
 from app.auth.cookies import clear_auth_cookies, set_auth_cookies
 from app.auth.jwt import decode_token
 from app.db.session import get_db
@@ -101,8 +102,18 @@ async def refresh(
 
 
 @router.post("/logout", status_code=204)
-async def logout(response: Response):
-    """Clear auth cookies (web clients)."""
+async def logout(request: Request, response: Response):
+    """Clear auth cookies and invalidate tokens server-side."""
+    # Try to extract user_id so we can revoke all outstanding tokens.
+    access_token = request.cookies.get("access_token")
+    if access_token:
+        try:
+            payload = decode_token(access_token)
+            user_id = payload.get("sub")
+            if user_id:
+                await blocklist_user_tokens(user_id)
+        except JWTError:
+            pass  # Token already expired — just clear cookies
     clear_auth_cookies(response)
     return None
 

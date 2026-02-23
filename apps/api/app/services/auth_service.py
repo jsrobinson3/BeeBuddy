@@ -7,6 +7,7 @@ from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.blocklist import is_token_blocklisted
 from app.auth.jwt import ALGORITHM, create_access_token, create_refresh_token, decode_token
 from app.auth.password import hash_password, verify_password
 from app.config import get_settings
@@ -70,6 +71,9 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str
     user_id = payload.get("sub")
     if user_id is None:
         raise JWTError("Token missing subject")
+    # Reject refresh tokens issued before the user's last logout
+    if await is_token_blocklisted(user_id, payload.get("iat")):
+        raise JWTError("Token has been revoked")
     user = await get_user_by_id(db, UUID(user_id))
     if user is None:
         raise JWTError("User not found")

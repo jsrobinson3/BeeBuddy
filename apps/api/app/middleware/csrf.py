@@ -17,6 +17,12 @@ def _requires_csrf(request: Request) -> bool:
     """True when the request is a mutating cookie-auth request missing the CSRF header."""
     if request.method not in MUTATING_METHODS:
         return False
+    # Auth endpoints are credential- or token-gated; CSRF adds no meaningful
+    # protection.  More importantly, blocking them when a stale access_token
+    # cookie is present creates a deadlock — the user can neither log out
+    # (cookie never cleared) nor log in again (stale cookie triggers CSRF).
+    if "/auth/" in request.url.path:
+        return False
     # Bearer tokens prove intent (explicitly added by code, not auto-sent by
     # browsers), so CSRF is unnecessary.  This also prevents false positives on
     # React Native where cookies may ride along with Bearer requests.
