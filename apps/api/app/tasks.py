@@ -49,3 +49,50 @@ def hard_delete_user(user_id_str: str):
     cancelled during the grace period). Filled in during Phase 4.
     """
     logger.info("hard_delete_user called for user %s (skeleton — not yet implemented)", user_id_str)
+
+
+@celery_app.task
+def generate_cadence_tasks_for_all_users():
+    """Daily Celery beat task: generate due cadence tasks for every active user.
+
+    Intended to be scheduled via Celery Beat (e.g. every day at 06:00 UTC).
+    Runs synchronously inside the Celery worker using a one-shot async loop.
+    """
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.db.session import AsyncSessionLocal
+    from app.models.user import User
+    from app.services import cadence_service
+
+    async def _run():
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
+
+        for uid in user_ids:
+            async with AsyncSessionLocal() as db:
+                try:
+                    tasks_created = await cadence_service.generate_due_tasks(db, user_id=uid)
+                    if tasks_created:
+                        logger.info(
+                            "Generated %d cadence tasks for user %s",
+                            len(tasks_created),
+                            uid,
+                        )
+                except Exception:
+                    logger.exception("Failed to generate cadence tasks for user %s", uid)
+
+    asyncio.run(_run())
+
+
+# Celery Beat schedule — run cadence generation daily at 06:00 UTC
+celery_app.conf.beat_schedule = {
+    "generate-cadence-tasks-daily": {
+        "task": "app.tasks.generate_cadence_tasks_for_all_users",
+        "schedule": 60 * 60 * 24,  # every 24 hours
+    },
+}

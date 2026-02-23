@@ -45,6 +45,11 @@ export type {
   Task,
   CreateTaskInput,
   UpdateTaskInput,
+  CadenceCategory,
+  CadenceSeason,
+  CadenceTemplate,
+  Cadence,
+  UpdateCadenceInput,
 } from "./api.types";
 
 import type {
@@ -80,6 +85,9 @@ import type {
   Task,
   CreateTaskInput,
   UpdateTaskInput,
+  CadenceTemplate,
+  Cadence,
+  UpdateCadenceInput,
 } from "./api.types";
 import { Platform } from "react-native";
 
@@ -461,6 +469,31 @@ class ApiClient {
 
   async deleteTask(id: string) {
     return this.request<void>(`/tasks/${id}`, { method: "DELETE" });
+  }
+
+  // ── Cadences ───────────────────────────────────────────────────────────────
+
+  async getCadenceCatalog() {
+    return this.request<CadenceTemplate[]>("/cadences/catalog");
+  }
+
+  async getCadences() {
+    return this.request<Cadence[]>("/cadences");
+  }
+
+  async initializeCadences() {
+    return this.request<Cadence[]>("/cadences/initialize", { method: "POST" });
+  }
+
+  async updateCadence(id: string, data: UpdateCadenceInput) {
+    return this.request<Cadence>(`/cadences/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateCadenceTasks() {
+    return this.request<Task[]>("/cadences/generate", { method: "POST" });
   }
 
   // ── Photos ──────────────────────────────────────────────────────────────────

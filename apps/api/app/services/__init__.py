@@ -3,6 +3,7 @@
 from app.services import (
     apiary_service,
     auth_service,
+    cadence_service,
     email_service,
     event_service,
     harvest_service,
@@ -19,6 +20,7 @@ from app.services import (
 __all__ = [
     "apiary_service",
     "auth_service",
+    "cadence_service",
     "email_service",
     "event_service",
     "harvest_service",

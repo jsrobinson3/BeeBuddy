@@ -12,6 +12,7 @@ class TaskSource(StrEnum):
 
     MANUAL = "manual"
     AI_RECOMMENDED = "ai_recommended"
+    SYSTEM = "system"
 
 
 class TaskPriority(StrEnum):

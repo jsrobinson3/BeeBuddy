@@ -15,6 +15,7 @@ from app.models.base import Base
 class TaskSource(enum.StrEnum):
     MANUAL = "manual"
     AI_RECOMMENDED = "ai_recommended"
+    SYSTEM = "system"
 
 
 class TaskPriority(enum.StrEnum):
