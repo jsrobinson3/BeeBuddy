@@ -10,6 +10,7 @@ import {
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
+import { NoteScanner } from "../../../../components/noteScanner";
 import { SegmentedControl } from "../../../../components/SegmentedControl";
 import { useCreateInspection } from "../../../../hooks/useInspections";
 import { useUnits } from "../../../../hooks/useUnits";
@@ -166,6 +167,7 @@ function FormContent({
         onChange={(v) => set("inspectedAt", v)}
         placeholder="Today"
       />
+      <NoteScanner set={set} />
       <SegmentedControl
         options={TEMPLATE_OPTIONS}
         selected={s.template}
