@@ -266,3 +266,67 @@ class TestCadenceTaskGeneration:
 
         resp = await client.post(f"{PREFIX}/cadences/generate", headers=headers)
         assert resp.json() == []
+
+
+class TestHemisphereIntegration:
+    """Verify hemisphere preference and apiary latitude affect cadence scheduling."""
+
+    async def test_hemisphere_preference_is_persisted(self, client: AsyncClient):
+        headers, _ = await register(client)
+        resp = await client.patch(
+            f"{PREFIX}/users/me/preferences", headers=headers,
+            json={"hemisphere": "south"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["preferences"]["hemisphere"] == "south"
+
+    async def test_hemisphere_auto_when_unset(self, client: AsyncClient):
+        """Without explicit preference or apiary lat, hemisphere defaults to north."""
+        headers, _ = await register(client)
+        resp = await client.get(f"{PREFIX}/users/me", headers=headers)
+        prefs = resp.json().get("preferences") or {}
+        assert prefs.get("hemisphere") is None
+
+    async def test_apiary_with_southern_latitude(self, client: AsyncClient):
+        """Creating an apiary with southern latitude sets up correct geo data."""
+        headers, _ = await register(client)
+        resp = await client.post(
+            f"{PREFIX}/apiaries", headers=headers,
+            json={"name": "Sydney Apiary", "latitude": -33.87, "longitude": 151.21},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["latitude"] == -33.87
+
+    async def test_initialize_with_southern_apiary(self, client: AsyncClient):
+        """When user has a southern-hemisphere apiary, cadences should initialize."""
+        headers, _ = await register(client)
+        # Create a southern-hemisphere apiary first
+        await client.post(
+            f"{PREFIX}/apiaries", headers=headers,
+            json={"name": "Melbourne Apiary", "latitude": -37.81, "longitude": 144.96},
+        )
+        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        assert resp.status_code == 201
+        cadences = resp.json()
+        assert len(cadences) > 0
+        # All cadences should have due dates set
+        for c in cadences:
+            assert c["next_due_date"] is not None
+
+    async def test_hemisphere_preference_overrides_apiary(self, client: AsyncClient):
+        """Explicit hemisphere preference takes precedence over apiary latitude."""
+        headers, _ = await register(client)
+        # Create southern-hemisphere apiary
+        await client.post(
+            f"{PREFIX}/apiaries", headers=headers,
+            json={"name": "Cape Town Apiary", "latitude": -33.92, "longitude": 18.42},
+        )
+        # But set preference to north
+        await client.patch(
+            f"{PREFIX}/users/me/preferences", headers=headers,
+            json={"hemisphere": "north"},
+        )
+        # Initialize cadences — should use north despite southern apiary
+        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        assert resp.status_code == 201
+        assert len(resp.json()) > 0

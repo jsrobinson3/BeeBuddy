@@ -15,15 +15,41 @@ from app.models.task_cadence import TaskCadence
 
 logger = logging.getLogger(__name__)
 
+# ── Hemisphere helpers ─────────────────────────────────────────────────────────
+
+Hemisphere = str  # "north" | "south"
+
+
+def detect_hemisphere(latitude: float | None) -> Hemisphere:
+    """Derive hemisphere from latitude.  Defaults to north when unknown."""
+    if latitude is not None and latitude < 0:
+        return "south"
+    return "north"
+
+
+def _offset_month(month: int, hemisphere: Hemisphere) -> int:
+    """Shift a season month by 6 for the southern hemisphere.
+
+    Maps Jan(1)->Jul(7), Mar(3)->Sep(9), Sep(9)->Mar(3), etc.
+    """
+    if hemisphere == "south":
+        return ((month - 1 + 6) % 12) + 1
+    return month
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _compute_next_due(cadence_key: str, from_date: date | None = None) -> date | None:
+def _compute_next_due(
+    cadence_key: str,
+    from_date: date | None = None,
+    hemisphere: Hemisphere = "north",
+) -> date | None:
     """Compute the next due date for a cadence template.
 
     For recurring cadences: from_date + interval_days.
-    For seasonal cadences: the next occurrence of season_month/season_day.
+    For seasonal cadences: the next occurrence of season_month/season_day,
+    offset by 6 months for the southern hemisphere.
     """
     tpl = get_template(cadence_key)
     if tpl is None:
@@ -35,9 +61,10 @@ def _compute_next_due(cadence_key: str, from_date: date | None = None) -> date |
         return today + timedelta(days=tpl.interval_days)
 
     if tpl.category == CadenceCategory.SEASONAL and tpl.season_month:
-        candidate = date(today.year, tpl.season_month, tpl.season_day)
+        adjusted_month = _offset_month(tpl.season_month, hemisphere)
+        candidate = date(today.year, adjusted_month, tpl.season_day)
         if candidate <= today:
-            candidate = date(today.year + 1, tpl.season_month, tpl.season_day)
+            candidate = date(today.year + 1, adjusted_month, tpl.season_day)
         return candidate
 
     return None
@@ -81,11 +108,16 @@ async def get_cadence(
 # ── Initialize cadences for a new user ────────────────────────────────────────
 
 
-async def initialize_cadences(db: AsyncSession, user_id: UUID) -> list[TaskCadence]:
+async def initialize_cadences(
+    db: AsyncSession,
+    user_id: UUID,
+    hemisphere: Hemisphere = "north",
+) -> list[TaskCadence]:
     """Seed all catalog cadences for a newly registered user.
 
     Each cadence starts as active with its first due date computed from today.
     Skips cadences that already exist for the user (idempotent).
+    Seasonal cadences are offset by 6 months for southern-hemisphere users.
     """
     existing = await get_cadences(db, user_id)
     existing_keys = {c.cadence_key for c in existing}
@@ -101,7 +133,7 @@ async def initialize_cadences(db: AsyncSession, user_id: UUID) -> list[TaskCaden
             user_id=user_id,
             cadence_key=tpl.key,
             is_active=True,
-            next_due_date=_compute_next_due(tpl.key, today),
+            next_due_date=_compute_next_due(tpl.key, today, hemisphere),
         )
         db.add(cadence)
         created.append(cadence)
@@ -143,6 +175,7 @@ async def generate_due_tasks(
     db: AsyncSession,
     user_id: UUID,
     as_of: date | None = None,
+    hemisphere: Hemisphere = "north",
 ) -> list[Task]:
     """Generate Task records for all cadences that are due on or before `as_of`.
 
@@ -182,7 +215,7 @@ async def generate_due_tasks(
 
         # Advance the cadence
         cadence.last_generated_at = datetime.now(UTC)
-        cadence.next_due_date = _compute_next_due(cadence.cadence_key, today)
+        cadence.next_due_date = _compute_next_due(cadence.cadence_key, today, hemisphere)
 
     if tasks_created:
         await db.commit()

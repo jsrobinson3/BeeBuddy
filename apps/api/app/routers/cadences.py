@@ -6,22 +6,58 @@ Users can:
 - Initialize all cadences (idempotent — safe to call multiple times).
 - Toggle individual cadences on/off.
 - Trigger task generation for cadences that are due.
+
+Hemisphere awareness:
+  Seasonal cadences are offset by 6 months for southern-hemisphere users.
+  The hemisphere is resolved from: user preference > first apiary latitude > "north".
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.cadence_catalog import CADENCE_CATALOG
 from app.db.session import get_db
+from app.models.apiary import Apiary
 from app.models.user import User
 from app.schemas.cadence import CadenceResponse, CadenceTemplateResponse, CadenceUpdate
 from app.schemas.task import TaskResponse
 from app.services import cadence_service
+from app.services.cadence_service import Hemisphere, detect_hemisphere
 
 router = APIRouter(prefix="/cadences")
+
+
+async def _resolve_hemisphere(
+    db: AsyncSession, user: User,
+) -> Hemisphere:
+    """Determine the user's hemisphere.
+
+    Priority:
+    1. Explicit preference (preferences.hemisphere = "north" | "south")
+    2. Latitude of their first apiary that has coordinates
+    3. Default: "north"
+    """
+    prefs = user.preferences or {}
+    explicit = prefs.get("hemisphere")
+    if explicit in ("north", "south"):
+        return explicit
+
+    # Fall back to first apiary with a latitude
+    result = await db.execute(
+        select(Apiary.latitude)
+        .where(
+            Apiary.user_id == user.id,
+            Apiary.deleted_at.is_(None),
+            Apiary.latitude.isnot(None),
+        )
+        .limit(1)
+    )
+    lat = result.scalar_one_or_none()
+    return detect_hemisphere(lat)
 
 
 @router.get("/catalog", response_model=list[CadenceTemplateResponse])
@@ -60,8 +96,12 @@ async def initialize_cadences(
     """Seed all catalog cadences for the current user.
 
     Idempotent — existing cadences are not duplicated.
+    Seasonal cadences are adjusted for the user's hemisphere.
     """
-    return await cadence_service.initialize_cadences(db, user_id=current_user.id)
+    hemisphere = await _resolve_hemisphere(db, current_user)
+    return await cadence_service.initialize_cadences(
+        db, user_id=current_user.id, hemisphere=hemisphere,
+    )
 
 
 @router.patch("/{cadence_id}", response_model=CadenceResponse)
@@ -88,4 +128,7 @@ async def generate_tasks(
     This is also called automatically by the daily Celery beat job,
     but users can trigger it manually.
     """
-    return await cadence_service.generate_due_tasks(db, user_id=current_user.id)
+    hemisphere = await _resolve_hemisphere(db, current_user)
+    return await cadence_service.generate_due_tasks(
+        db, user_id=current_user.id, hemisphere=hemisphere,
+    )

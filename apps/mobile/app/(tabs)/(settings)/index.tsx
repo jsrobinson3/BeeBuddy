@@ -14,6 +14,7 @@ import { useStyles, typography, type ThemeColors } from "../../../theme";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const UNIT_OPTIONS = ["Metric", "Imperial"];
+const HEMISPHERE_OPTIONS = ["Auto", "North", "South"];
 const THEME_OPTIONS = ["System", "Light", "Dark"];
 
 function capitalize(s: string) {
@@ -168,6 +169,13 @@ function deriveUnits(prefs: Record<string, unknown> | null | undefined): string 
   return (prefs?.units as string) === "imperial" ? "Imperial" : "Metric";
 }
 
+function deriveHemisphere(prefs: Record<string, unknown> | null | undefined): string {
+  const val = prefs?.hemisphere as string | undefined;
+  if (val === "north") return "North";
+  if (val === "south") return "South";
+  return "Auto";
+}
+
 function AppearanceSection() {
   const layout = useStyles(createLayoutStyles);
   const styles = useStyles(createAppearanceStyles);
@@ -205,6 +213,7 @@ function AccountSection() {
 
   const [experience, setExperience] = useState(() => deriveExperience(user?.experience_level));
   const [units, setUnits] = useState(() => deriveUnits(user?.preferences));
+  const [hemisphere, setHemisphere] = useState(() => deriveHemisphere(user?.preferences));
 
   useEffect(() => {
     setExperience(deriveExperience(user?.experience_level));
@@ -212,6 +221,7 @@ function AccountSection() {
 
   useEffect(() => {
     setUnits(deriveUnits(user?.preferences));
+    setHemisphere(deriveHemisphere(user?.preferences));
   }, [user?.preferences]);
 
   function handleExperienceChange(val: string) {
@@ -222,6 +232,13 @@ function AccountSection() {
   function handleUnitsChange(val: string) {
     setUnits(val);
     updatePreferences.mutate({ units: val.toLowerCase() });
+  }
+
+  function handleHemisphereChange(val: string) {
+    setHemisphere(val);
+    // "Auto" means remove explicit preference — backend will infer from apiary latitude
+    const value = val === "North" ? "north" : val === "South" ? "south" : null;
+    updatePreferences.mutate({ hemisphere: value });
   }
 
   const profileSubtitle =
@@ -246,6 +263,12 @@ function AccountSection() {
         options={UNIT_OPTIONS}
         selected={units}
         onChange={handleUnitsChange}
+      />
+      <SettingsControl
+        label="Hemisphere"
+        options={HEMISPHERE_OPTIONS}
+        selected={hemisphere}
+        onChange={handleHemisphereChange}
       />
     </View>
   );

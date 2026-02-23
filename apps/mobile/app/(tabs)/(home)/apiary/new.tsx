@@ -30,6 +30,8 @@ export default function CreateApiaryScreen() {
 
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
   const [nameError, setNameError] = useState<string | undefined>();
 
@@ -40,10 +42,15 @@ export default function CreateApiaryScreen() {
     }
     setNameError(undefined);
 
+    const lat = latitude.trim() ? parseFloat(latitude.trim()) : undefined;
+    const lng = longitude.trim() ? parseFloat(longitude.trim()) : undefined;
+
     try {
       await createApiary.mutateAsync({
         name: name.trim(),
         city: city.trim() || undefined,
+        latitude: lat !== undefined && !isNaN(lat) ? lat : undefined,
+        longitude: lng !== undefined && !isNaN(lng) ? lng : undefined,
         notes: notes.trim() || undefined,
       });
       router.back();
@@ -75,6 +82,22 @@ export default function CreateApiaryScreen() {
           value={city}
           onChangeText={setCity}
           placeholder="e.g. Portland"
+        />
+
+        <FormInput
+          label="Latitude"
+          value={latitude}
+          onChangeText={setLatitude}
+          placeholder="e.g. -33.8688 (optional)"
+          keyboardType="numeric"
+        />
+
+        <FormInput
+          label="Longitude"
+          value={longitude}
+          onChangeText={setLongitude}
+          placeholder="e.g. 151.2093 (optional)"
+          keyboardType="numeric"
         />
 
         <FormInput
