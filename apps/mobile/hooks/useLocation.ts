@@ -7,14 +7,25 @@ interface LocationResult {
   longitude: number;
 }
 
-/**
- * Hook for requesting device location permission and fetching current coordinates.
- *
- * Returns a `getLocation` function that handles permission prompts and returns
- * lat/lng, plus a `loading` flag for UI feedback.
- */
+export type LocationPrecision = "exact" | "approximate" | "general";
+
+/** Decimal places per precision level. */
+const PRECISION_DECIMALS: Record<LocationPrecision, number> = {
+  exact: 4,       // ~11 m
+  approximate: 2, // ~1.1 km
+  general: 1,     // ~11 km
+};
+
+/** Round a coordinate to the number of decimals dictated by precision. */
+export function roundToPrecision(value: number, precision: LocationPrecision): number {
+  const d = PRECISION_DECIMALS[precision];
+  const factor = Math.pow(10, d);
+  return Math.round(value * factor) / factor;
+}
+
 export function useLocation() {
   const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
 
   const getLocation = useCallback(async (): Promise<LocationResult | null> => {
     setLoading(true);
@@ -39,8 +50,8 @@ export function useLocation() {
       });
 
       return {
-        latitude: Math.round(position.coords.latitude * 10000) / 10000,
-        longitude: Math.round(position.coords.longitude * 10000) / 10000,
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
       };
     } catch {
       Alert.alert("Location Error", "Could not determine your location. Please enter coordinates manually.");
@@ -50,5 +61,26 @@ export function useLocation() {
     }
   }, []);
 
-  return { getLocation, loading };
+  const geocodeAddress = useCallback(async (address: string): Promise<LocationResult | null> => {
+    if (!address.trim()) return null;
+    setGeocoding(true);
+    try {
+      const results = await Location.geocodeAsync(address.trim());
+      if (results.length === 0) {
+        Alert.alert("Not Found", "Could not find coordinates for that address. Try a more specific address or city name.");
+        return null;
+      }
+      return {
+        latitude: results[0].latitude,
+        longitude: results[0].longitude,
+      };
+    } catch {
+      Alert.alert("Geocoding Error", "Could not look up that address. Please enter coordinates manually.");
+      return null;
+    } finally {
+      setGeocoding(false);
+    }
+  }, []);
+
+  return { getLocation, geocodeAddress, loading, geocoding };
 }
