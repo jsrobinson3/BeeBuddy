@@ -1,19 +1,24 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   Text,
+  View,
 } from "react-native";
 
 import { FormInput } from "../../../../components/FormInput";
 import { useCreateApiary } from "../../../../hooks/useApiaries";
+import { useLocation } from "../../../../hooks/useLocation";
 import {
   useStyles,
+  useTheme,
   type ThemeColors,
+  typography,
   formContainerStyles,
   formSubmitStyles,
 } from "../../../../theme";
@@ -21,12 +26,38 @@ import {
 const createStyles = (c: ThemeColors) => ({
   ...formContainerStyles(c),
   ...formSubmitStyles(c),
+  locationRow: {
+    flexDirection: "row" as const,
+    gap: 8,
+    marginBottom: 16,
+  },
+  locationField: {
+    flex: 1,
+  },
+  locationButton: {
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: c.selectedBg,
+    borderWidth: 1,
+    borderColor: c.honey,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    marginBottom: 16,
+  },
+  locationButtonText: {
+    fontSize: 14,
+    fontFamily: typography.families.bodySemiBold,
+    color: c.honey,
+  },
 });
 
 export default function CreateApiaryScreen() {
   const router = useRouter();
   const createApiary = useCreateApiary();
+  const { getLocation, loading: locating } = useLocation();
   const styles = useStyles(createStyles);
+  const { colors } = useTheme();
 
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
@@ -34,6 +65,14 @@ export default function CreateApiaryScreen() {
   const [longitude, setLongitude] = useState("");
   const [notes, setNotes] = useState("");
   const [nameError, setNameError] = useState<string | undefined>();
+
+  async function handleUseMyLocation() {
+    const coords = await getLocation();
+    if (coords) {
+      setLatitude(String(coords.latitude));
+      setLongitude(String(coords.longitude));
+    }
+  }
 
   async function handleSubmit() {
     if (!name.trim()) {
@@ -84,21 +123,38 @@ export default function CreateApiaryScreen() {
           placeholder="e.g. Portland"
         />
 
-        <FormInput
-          label="Latitude"
-          value={latitude}
-          onChangeText={setLatitude}
-          placeholder="e.g. -33.8688 (optional)"
-          keyboardType="numeric"
-        />
+        <Pressable
+          style={styles.locationButton}
+          onPress={handleUseMyLocation}
+          disabled={locating}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color={colors.honey} />
+          ) : (
+            <Text style={styles.locationButtonText}>Use My Location</Text>
+          )}
+        </Pressable>
 
-        <FormInput
-          label="Longitude"
-          value={longitude}
-          onChangeText={setLongitude}
-          placeholder="e.g. 151.2093 (optional)"
-          keyboardType="numeric"
-        />
+        <View style={styles.locationRow}>
+          <View style={styles.locationField}>
+            <FormInput
+              label="Latitude"
+              value={latitude}
+              onChangeText={setLatitude}
+              placeholder="e.g. -33.8688"
+              keyboardType="numeric"
+            />
+          </View>
+          <View style={styles.locationField}>
+            <FormInput
+              label="Longitude"
+              value={longitude}
+              onChangeText={setLongitude}
+              placeholder="e.g. 151.2093"
+              keyboardType="numeric"
+            />
+          </View>
+        </View>
 
         <FormInput
           label="Notes"
