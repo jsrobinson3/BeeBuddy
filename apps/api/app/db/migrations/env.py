@@ -9,7 +9,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.models import Base  # noqa: E402
+from app.models import Base
 
 config = context.config
 
@@ -54,7 +54,10 @@ async def run_async_migrations() -> None:
     """Run migrations in 'online' mode using async engine."""
     connect_args: dict = {}
     if _needs_ssl:
-        connect_args["ssl"] = ssl.create_default_context()
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_args["ssl"] = ssl_ctx
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

@@ -11,7 +11,10 @@ settings = get_settings()
 
 _connect_args: dict = {}
 if settings.database_requires_ssl:
-    _connect_args["ssl"] = ssl.create_default_context()
+    _ssl_ctx = ssl.create_default_context()
+    _ssl_ctx.check_hostname = False
+    _ssl_ctx.verify_mode = ssl.CERT_NONE
+    _connect_args["ssl"] = _ssl_ctx
 
 engine = create_async_engine(
     settings.database_url,
