@@ -9,6 +9,8 @@ from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
+from app.schemas.photo import PhotoResponse
+from app.services import s3_service
 
 
 async def get_photos_for_inspection(
@@ -68,3 +70,16 @@ async def delete_photo(db: AsyncSession, photo: InspectionPhoto) -> None:
     """Hard-delete a photo record."""
     await db.delete(photo)
     await db.commit()
+
+
+def attach_presigned_url(response: PhotoResponse) -> PhotoResponse:
+    """Attach a presigned S3 URL to a photo response."""
+    response.url = s3_service.generate_presigned_url(response.s3_key)
+    return response
+
+
+def attach_presigned_urls(responses: list[PhotoResponse]) -> list[PhotoResponse]:
+    """Attach presigned S3 URLs to a list of photo responses."""
+    for r in responses:
+        r.url = s3_service.generate_presigned_url(r.s3_key)
+    return responses

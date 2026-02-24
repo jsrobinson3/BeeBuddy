@@ -12,6 +12,7 @@ from app.middleware.csrf import CSRFMiddleware
 from app.routers import (
     apiaries,
     auth,
+    cadences,
     events,
     harvests,
     health,
@@ -73,3 +74,4 @@ app.include_router(treatments.router, prefix=settings.api_v1_prefix, tags=["trea
 app.include_router(harvests.router, prefix=settings.api_v1_prefix, tags=["harvests"])
 app.include_router(events.router, prefix=settings.api_v1_prefix, tags=["events"])
 app.include_router(tasks.router, prefix=settings.api_v1_prefix, tags=["tasks"])
+app.include_router(cadences.router, prefix=settings.api_v1_prefix, tags=["cadences"])

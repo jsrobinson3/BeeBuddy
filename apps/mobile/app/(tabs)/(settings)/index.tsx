@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SegmentedControl } from "../../../components/SegmentedControl";
 import {
@@ -14,6 +14,7 @@ import { useStyles, typography, type ThemeColors } from "../../../theme";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const UNIT_OPTIONS = ["Metric", "Imperial"];
+const HEMISPHERE_OPTIONS = ["Auto", "North", "South"];
 const THEME_OPTIONS = ["System", "Light", "Dark"];
 
 function capitalize(s: string) {
@@ -168,6 +169,13 @@ function deriveUnits(prefs: Record<string, unknown> | null | undefined): string 
   return (prefs?.units as string) === "imperial" ? "Imperial" : "Metric";
 }
 
+function deriveHemisphere(prefs: Record<string, unknown> | null | undefined): string {
+  const val = prefs?.hemisphere as string | undefined;
+  if (val === "north") return "North";
+  if (val === "south") return "South";
+  return "Auto";
+}
+
 function AppearanceSection() {
   const layout = useStyles(createLayoutStyles);
   const styles = useStyles(createAppearanceStyles);
@@ -205,6 +213,7 @@ function AccountSection() {
 
   const [experience, setExperience] = useState(() => deriveExperience(user?.experience_level));
   const [units, setUnits] = useState(() => deriveUnits(user?.preferences));
+  const [hemisphere, setHemisphere] = useState(() => deriveHemisphere(user?.preferences));
 
   useEffect(() => {
     setExperience(deriveExperience(user?.experience_level));
@@ -212,6 +221,7 @@ function AccountSection() {
 
   useEffect(() => {
     setUnits(deriveUnits(user?.preferences));
+    setHemisphere(deriveHemisphere(user?.preferences));
   }, [user?.preferences]);
 
   function handleExperienceChange(val: string) {
@@ -222,6 +232,13 @@ function AccountSection() {
   function handleUnitsChange(val: string) {
     setUnits(val);
     updatePreferences.mutate({ units: val.toLowerCase() });
+  }
+
+  function handleHemisphereChange(val: string) {
+    setHemisphere(val);
+    // "Auto" means remove explicit preference — backend will infer from apiary latitude
+    const value = val === "North" ? "north" : val === "South" ? "south" : null;
+    updatePreferences.mutate({ hemisphere: value });
   }
 
   const profileSubtitle =
@@ -247,6 +264,12 @@ function AccountSection() {
         selected={units}
         onChange={handleUnitsChange}
       />
+      <SettingsControl
+        label="Hemisphere"
+        options={HEMISPHERE_OPTIONS}
+        selected={hemisphere}
+        onChange={handleHemisphereChange}
+      />
     </View>
   );
 }
@@ -254,6 +277,7 @@ function AccountSection() {
 export default function SettingsScreen() {
   const { logout } = useAuthStore();
   const layout = useStyles(createLayoutStyles);
+  const router = useRouter();
 
   const logoutPressStyle = ({ pressed }: { pressed: boolean }) => [
     layout.logoutButton,
@@ -280,8 +304,23 @@ export default function SettingsScreen() {
       <View style={layout.section}>
         <Text style={layout.sectionTitle}>About</Text>
         <SettingsItem title="Version" subtitle="0.1.0" />
-        <SettingsItem title="Open Source Licenses" />
-        <SettingsItem title="Privacy Policy" />
+        <SettingsItem
+          title="Open Source Licenses"
+          onPress={() => router.push("/licenses" as any)}
+        />
+        <SettingsItem
+          title="Privacy Policy"
+          onPress={() => Linking.openURL("https://beebuddyai.com/legal/privacy/")}
+        />
+      </View>
+
+      <View style={layout.section}>
+        <Text style={layout.sectionTitle}>Danger Zone</Text>
+        <SettingsItem
+          title="Delete Account"
+          subtitle="Permanently delete your account"
+          onPress={() => router.push("/settings/delete-account" as any)}
+        />
       </View>
 
       <Pressable style={logoutPressStyle} onPress={logout}>

@@ -26,10 +26,11 @@ async def health_check():
 
 @router.get("/health/ready")
 async def readiness_check(db: AsyncSession = Depends(get_db)):
-    """Readiness check that verifies DB and Redis connectivity."""
+    """Readiness check that verifies DB, Redis, and worker connectivity."""
     postgres_status = await _check_postgres(db)
     redis_status = await _check_redis()
-    return {"postgres": postgres_status, "redis": redis_status}
+    worker_status = await _check_worker()
+    return {"postgres": postgres_status, "redis": redis_status, "worker": worker_status}
 
 
 async def _check_postgres(db: AsyncSession) -> str:
@@ -49,6 +50,19 @@ async def _check_redis() -> str:
         async with aioredis.from_url(settings.redis_url, **kwargs) as client:
             await client.ping()
         return "ok"
+    except Exception:
+        return "error"
+
+
+async def _check_worker() -> str:
+    try:
+        settings = get_settings()
+        kwargs = {}
+        if settings.redis_url.startswith("rediss://"):
+            kwargs["ssl_cert_reqs"] = "none"
+        async with aioredis.from_url(settings.redis_url, **kwargs) as client:
+            val = await client.get("worker:heartbeat")
+        return "ok" if val else "no_heartbeat"
     except Exception:
         return "error"
 

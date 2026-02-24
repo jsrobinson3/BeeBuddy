@@ -4,4 +4,10 @@ export { palette } from "./colors";
 export { spacing, radii, typography, shadows } from "./tokens";
 export type { ThemeColors } from "./themes";
 export { lightTheme, darkTheme } from "./themes";
-export { pickerStyles, formSubmitStyles, formContainerStyles, errorStyles } from "./sharedStyles";
+export {
+  pickerStyles,
+  formSubmitStyles,
+  formDeleteStyles,
+  formContainerStyles,
+  errorStyles,
+} from "./sharedStyles";

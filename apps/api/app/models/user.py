@@ -16,6 +16,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.apiary import Apiary
     from app.models.task import Task
+    from app.models.task_cadence import TaskCadence
 
 
 class ExperienceLevel(enum.StrEnum):
@@ -51,4 +52,7 @@ class User(Base):
     )
     tasks: Mapped[list[Task]] = relationship(
         "Task", back_populates="user", cascade="all, delete-orphan"
+    )
+    cadences: Mapped[list[TaskCadence]] = relationship(
+        "TaskCadence", back_populates="user", cascade="all, delete-orphan"
     )

@@ -1,6 +1,7 @@
 """Pydantic schemas for request/response models."""
 
 from .apiary import ApiaryCreate, ApiaryResponse, ApiaryUpdate
+from .cadence import CadenceResponse, CadenceTemplateResponse, CadenceUpdate
 from .common import BaseResponse, ErrorResponse, PaginationParams
 from .event import EventCreate, EventResponse, EventType, EventUpdate
 from .harvest import HarvestCreate, HarvestResponse, HarvestUpdate
@@ -83,4 +84,8 @@ __all__ = [
     "TaskResponse",
     "TaskSource",
     "TaskUpdate",
+    # Cadence
+    "CadenceResponse",
+    "CadenceTemplateResponse",
+    "CadenceUpdate",
 ]

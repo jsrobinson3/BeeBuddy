@@ -8,6 +8,7 @@ export type {
   RegisterInput,
   RefreshInput,
   User,
+  UserPreferences,
   UserUpdate,
   Apiary,
   CreateApiaryInput,
@@ -45,6 +46,14 @@ export type {
   Task,
   CreateTaskInput,
   UpdateTaskInput,
+  CadenceCategory,
+  CadenceScope,
+  CadenceSeason,
+  CadenceTemplate,
+  Cadence,
+  UpdateCadenceInput,
+  DeleteAccountInput,
+  DeleteAccountResponse,
 } from "./api.types";
 
 import type {
@@ -80,12 +89,18 @@ import type {
   Task,
   CreateTaskInput,
   UpdateTaskInput,
+  CadenceTemplate,
+  Cadence,
+  UpdateCadenceInput,
+  DeleteAccountInput,
+  DeleteAccountResponse,
 } from "./api.types";
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+
+import { API_BASE_URL } from "./config";
 
 const isWeb = Platform.OS === "web";
-
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 interface ApiConfig {
   baseUrl: string;
@@ -217,6 +232,13 @@ class ApiClient {
   async updatePreferences(data: Record<string, unknown>) {
     return this.request<User>("/users/me/preferences", {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMe(data: DeleteAccountInput) {
+    return this.request<DeleteAccountResponse>("/users/me", {
+      method: "DELETE",
       body: JSON.stringify(data),
     });
   }
@@ -463,31 +485,73 @@ class ApiClient {
     return this.request<void>(`/tasks/${id}`, { method: "DELETE" });
   }
 
+  // ── Cadences ───────────────────────────────────────────────────────────────
+
+  async getCadenceCatalog() {
+    return this.request<CadenceTemplate[]>("/cadences/catalog");
+  }
+
+  async getCadences(hiveId?: string) {
+    const params = hiveId ? `?hive_id=${hiveId}` : "";
+    return this.request<Cadence[]>(`/cadences${params}`);
+  }
+
+  async initializeCadences() {
+    return this.request<Cadence[]>("/cadences/initialize", { method: "POST" });
+  }
+
+  async updateCadence(id: string, data: UpdateCadenceInput) {
+    return this.request<Cadence>(`/cadences/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateCadenceTasks() {
+    return this.request<Task[]>("/cadences/generate", { method: "POST" });
+  }
+
   // ── Photos ──────────────────────────────────────────────────────────────────
 
   async uploadPhoto(inspectionId: string, fileUri: string, caption?: string) {
     const url = `${this.config.baseUrl}/api/v1/inspections/${inspectionId}/photos`;
-    const formData = new FormData();
 
+    // On native, use expo-file-system's uploadAsync which uses platform-native
+    // upload APIs, bypassing React Native's networking layer entirely.
+    if (!isWeb) {
+      const ext = (fileUri.split("/").pop()?.split(".").pop() ?? "jpg").toLowerCase();
+      const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+      const headers: Record<string, string> = {};
+      if (this.config.token) headers["Authorization"] = `Bearer ${this.config.token}`;
+
+      const result = await FileSystem.uploadAsync(url, fileUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType,
+        headers,
+        parameters: caption ? { caption } : undefined,
+      });
+
+      if (result.status < 200 || result.status >= 300) {
+        const error = JSON.parse(result.body).detail ?? `Upload failed: ${result.status}`;
+        throw new Error(error);
+      }
+      return JSON.parse(result.body) as InspectionPhoto;
+    }
+
+    const formData = new FormData();
     const filename = fileUri.split("/").pop() || "photo.jpg";
     const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
     const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-
     formData.append("file", { uri: fileUri, name: filename, type: mimeType } as any);
     if (caption) formData.append("caption", caption);
-
-    const headers: Record<string, string> = {};
-    if (isWeb) {
-      headers["X-Requested-With"] = "BeeBuddy";
-    } else if (this.config.token) {
-      headers["Authorization"] = `Bearer ${this.config.token}`;
-    }
 
     const response = await fetch(url, {
       method: "POST",
       body: formData,
-      headers,
-      ...(isWeb && { credentials: "include" as RequestCredentials }),
+      headers: { "X-Requested-With": "BeeBuddy" },
+      credentials: "include" as RequestCredentials,
     });
 
     if (!response.ok) {
@@ -512,11 +576,21 @@ class ApiClient {
 export const api = new ApiClient({ baseUrl: API_BASE_URL });
 
 /**
- * Authenticated URL for loading a photo in <Image>.
- * Pass the access token as a query param since React Native's Image
- * component cannot send custom Authorization headers.
+ * Build an expo-image source for a photo.
+ * Uses the presigned S3 URL when available; falls back to the streaming
+ * endpoint with an Authorization header.
+ * Always includes `cacheKey` (stable S3 key) so presigned URL query-param
+ * changes don't bust the disk cache.
  */
-export function getPhotoFileUrl(photoId: string, token?: string): string {
-  const base = `${API_BASE_URL}/api/v1/photos/${photoId}/file`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+export function getPhotoSource(
+  photo: { id: string; s3_key: string; url: string | null },
+  token?: string,
+): { uri: string; cacheKey: string; headers?: Record<string, string> } {
+  if (photo.url) {
+    return { uri: photo.url, cacheKey: photo.s3_key };
+  }
+  const uri = `${API_BASE_URL}/api/v1/photos/${photo.id}/file`;
+  return token
+    ? { uri, cacheKey: photo.s3_key, headers: { Authorization: `Bearer ${token}` } }
+    : { uri, cacheKey: photo.s3_key };
 }

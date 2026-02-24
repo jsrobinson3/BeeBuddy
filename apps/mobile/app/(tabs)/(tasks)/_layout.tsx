@@ -15,6 +15,7 @@ export default function TasksLayout() {
       }}
     >
       <Stack.Screen name="index" options={{ title: "Tasks" }} />
+      <Stack.Screen name="cadences" options={{ title: "Task Cadences" }} />
     </Stack>
   );
 }

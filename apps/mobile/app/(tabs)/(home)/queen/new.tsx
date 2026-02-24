@@ -21,6 +21,7 @@ import {
   formSubmitStyles,
   pickerStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 type QueenOrigin = "purchased" | "raised" | "swarm";
 type QueenStatus = "present" | "missing" | "superseded" | "failed";
@@ -89,8 +90,8 @@ export default function CreateQueenScreen() {
         notes: notes.trim() || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create queen");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

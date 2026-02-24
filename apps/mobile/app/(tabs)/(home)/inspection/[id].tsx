@@ -11,6 +11,7 @@ import type {
   InspectionObservations,
 } from "../../../../services/api";
 import { useStyles, typography, type ThemeColors } from "../../../../theme";
+import { formatDate } from "../../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
   container: { flex: 1, backgroundColor: c.bgPrimary },
@@ -49,11 +50,6 @@ const createStyles = (c: ThemeColors) => ({
     fontFamily: typography.families.bodySemiBold,
   },
 });
-
-function formatDate(dateStr?: string | null) {
-  if (!dateStr) return "N/A";
-  return new Date(dateStr).toLocaleDateString();
-}
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   const styles = useStyles(createStyles);

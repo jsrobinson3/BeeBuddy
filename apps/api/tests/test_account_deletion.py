@@ -140,3 +140,62 @@ class TestDataExport:
         assert len(apiaries) >= 1
         names = [a["name"] for a in apiaries]
         assert "Export Test Apiary" in names
+
+
+class TestDeleteDataFlag:
+    async def test_delete_stores_delete_data_false(self, client: AsyncClient):
+        """Default delete_data flag should be false in preferences."""
+        email = unique_email()
+        resp = await register(client, email)
+        token = resp.json()["access_token"]
+
+        resp = await client.request(
+            "DELETE",
+            f"{PREFIX}/users/me",
+            headers=auth(token),
+            json={"password": "secret123"},
+        )
+        assert resp.status_code == 200
+
+    async def test_delete_stores_delete_data_true(self, client: AsyncClient):
+        """Explicit delete_data=true should be accepted."""
+        email = unique_email()
+        resp = await register(client, email)
+        token = resp.json()["access_token"]
+
+        resp = await client.request(
+            "DELETE",
+            f"{PREFIX}/users/me",
+            headers=auth(token),
+            json={"password": "secret123", "delete_data": True},
+        )
+        assert resp.status_code == 200
+        assert "scheduled" in resp.json()["detail"].lower()
+
+    async def test_delete_backward_compat(self, client: AsyncClient):
+        """Omitting delete_data field should work (backward-compatible)."""
+        email = unique_email()
+        resp = await register(client, email)
+        token = resp.json()["access_token"]
+
+        resp = await client.request(
+            "DELETE",
+            f"{PREFIX}/users/me",
+            headers=auth(token),
+            json={"password": "secret123"},
+        )
+        assert resp.status_code == 200
+
+    async def test_wrong_password_rejected(self, client: AsyncClient):
+        """Wrong password should be rejected with 403."""
+        email = unique_email()
+        resp = await register(client, email)
+        token = resp.json()["access_token"]
+
+        resp = await client.request(
+            "DELETE",
+            f"{PREFIX}/users/me",
+            headers=auth(token),
+            json={"password": "wrongpassword", "delete_data": True},
+        )
+        assert resp.status_code == 403

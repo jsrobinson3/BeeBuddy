@@ -57,6 +57,23 @@ export const formSubmitStyles = (c: ThemeColors) => ({
   },
 });
 
+export const formDeleteStyles = (c: ThemeColors) => ({
+  deleteButton: {
+    backgroundColor: "transparent" as const,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center" as const,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: c.danger,
+  },
+  deleteText: {
+    color: c.danger,
+    fontSize: 16,
+    fontFamily: typography.families.bodySemiBold,
+  },
+});
+
 export const formContainerStyles = (c: ThemeColors) => ({
   container: {
     flex: 1,

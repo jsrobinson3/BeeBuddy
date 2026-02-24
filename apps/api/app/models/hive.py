@@ -81,3 +81,6 @@ class Hive(Base):
         "Event", back_populates="hive", cascade="all, delete-orphan"
     )
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="hive")
+    cadences: Mapped[list["TaskCadence"]] = relationship(
+        "TaskCadence", back_populates="hive", cascade="all, delete-orphan"
+    )

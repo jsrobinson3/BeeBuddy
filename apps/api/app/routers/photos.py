@@ -1,7 +1,8 @@
 """Photo management endpoints.
 
-All photo access is authenticated — uploads go through the API (not presigned
-URLs) and downloads are streamed from S3 behind auth.
+Uploads go through the API; photo URLs are short-lived S3 presigned URLs
+returned in PhotoResponse.  The streaming endpoint remains for web/direct
+access but requires Bearer header or cookie auth (no query-param tokens).
 """
 
 from uuid import UUID
@@ -74,7 +75,9 @@ async def upload_photo(
             "caption": caption,
         },
     )
-    return PhotoResponse.model_validate(photo)
+    resp = PhotoResponse.model_validate(photo)
+    photo_service.attach_presigned_url(resp)
+    return resp
 
 
 @router.get(
@@ -91,26 +94,26 @@ async def list_photos(
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found")
     photos = await photo_service.get_photos_for_inspection(db, inspection_id)
-    return [PhotoResponse.model_validate(p) for p in photos]
+    return photo_service.attach_presigned_urls(
+        [PhotoResponse.model_validate(p) for p in photos]
+    )
 
 
 @router.get("/photos/{photo_id}/file")
 async def download_photo(
     photo_id: UUID,
-    token: str | None = None,
     request: Request = None,  # type: ignore[assignment]
     db: AsyncSession = Depends(get_db),
 ):
     """Download a photo file.
 
-    Accepts auth via Bearer header, cookie, or ``?token=`` query param
-    (React Native ``<Image>`` cannot send custom headers).
+    Accepts auth via Bearer header or cookie. Query-param tokens are no
+    longer accepted — use presigned URLs from PhotoResponse instead.
     """
-    resolved_token = token
-    if not resolved_token:
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            resolved_token = auth_header[7:]
+    resolved_token = None
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        resolved_token = auth_header[7:]
     if not resolved_token:
         resolved_token = request.cookies.get("access_token")
     if not resolved_token:

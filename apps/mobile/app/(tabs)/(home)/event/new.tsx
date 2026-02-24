@@ -21,6 +21,7 @@ import {
   pickerStyles,
   errorStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 type EventType = "swarm" | "split" | "combine" | "requeen" | "feed" | "winter_prep";
 
@@ -66,8 +67,8 @@ export default function CreateEventScreen() {
         notes: notes.trim() || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create event");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

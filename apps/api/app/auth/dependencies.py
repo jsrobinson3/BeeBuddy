@@ -45,6 +45,13 @@ async def get_current_user(
     except (JWTError, ValueError):
         raise credentials_exception
 
+    # Reject access tokens that were invalidated on logout
+    from app.auth.token_blocklist import is_blocked
+
+    jti = payload.get("jti")
+    if jti and await is_blocked(jti):
+        raise credentials_exception
+
     user = await db.get(User, user_id)
     if user is None or user.deleted_at is not None:
         raise credentials_exception

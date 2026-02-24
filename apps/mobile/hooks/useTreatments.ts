@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
-import type { CreateTreatmentInput } from "../services/api";
+import type { CreateTreatmentInput, UpdateTreatmentInput } from "../services/api";
 
 export function useTreatments(hiveId?: string) {
   return useQuery({
@@ -24,6 +24,28 @@ export function useCreateTreatment() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["treatments"] });
       queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+    },
+  });
+}
+
+export function useUpdateTreatment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateTreatmentInput }) =>
+      api.updateTreatment(id, data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["treatments"] });
+      queryClient.invalidateQueries({ queryKey: ["treatments", variables.id] });
+    },
+  });
+}
+
+export function useDeleteTreatment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTreatment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["treatments"] });
     },
   });
 }

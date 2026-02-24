@@ -17,14 +17,16 @@ from app.schemas.inspection import (
     InspectionUpdate,
 )
 from app.schemas.photo import PhotoResponse
-from app.services import inspection_service
+from app.services import inspection_service, photo_service
 
 router = APIRouter(prefix="/inspections")
 
 
 def _photos_from_orm(inspection: Inspection) -> list[PhotoResponse]:
-    """Build PhotoResponse list from an inspection's eager-loaded photos."""
-    return [PhotoResponse.model_validate(p) for p in inspection.photos]
+    """Build PhotoResponse list with presigned URLs from eager-loaded photos."""
+    return photo_service.attach_presigned_urls(
+        [PhotoResponse.model_validate(p) for p in inspection.photos]
+    )
 
 
 # -- Static template data --------------------------------------------------

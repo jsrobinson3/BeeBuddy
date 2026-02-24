@@ -21,6 +21,7 @@ import {
   formSubmitStyles,
   pickerStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 const HONEY_TYPES: { label: string; value: string }[] = [
   { label: "Wildflower", value: "wildflower" },
@@ -76,8 +77,8 @@ export default function CreateHarvestScreen() {
         notes: notes.trim() || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create harvest");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

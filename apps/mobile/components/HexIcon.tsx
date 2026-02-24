@@ -2,7 +2,7 @@
  * Hexagonal icon frame — wraps any child (typically a Lucide icon) in a
  * flat-top hexagon SVG clip. Used for tab bar icons, avatars, and badges.
  */
-import React from "react";
+import React, { useMemo } from "react";
 import { View } from "react-native";
 import Svg, { Polygon } from "react-native-svg";
 
@@ -73,8 +73,15 @@ export function HexIcon({
   const fill = filled ? (fillColor ?? colors.honey) : "none";
   const stroke = strokeColor ?? colors.honey;
 
+  const containerStyle = useMemo(() => ({
+    width: size,
+    height: size,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  }), [size]);
+
   return (
-    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+    <View style={containerStyle}>
       <HexBackground size={size} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
       {children}
     </View>

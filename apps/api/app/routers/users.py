@@ -65,6 +65,34 @@ async def update_preferences(
     return await user_service.update_preferences(db, current_user, prefs)
 
 
+def _schedule_hard_delete(user: User, delete_data: bool) -> dict:
+    """Schedule the hard-delete Celery task and return updated prefs."""
+    prefs = user.preferences or {}
+    prefs["_delete_data"] = delete_data
+    try:
+        task_result = hard_delete_user.apply_async(
+            args=[str(user.id)], countdown=30 * 86400,
+        )
+        prefs["_deletion_task_id"] = task_result.id
+    except Exception:
+        logger.warning("Could not schedule hard-delete task (Celery unavailable)")
+    return prefs
+
+
+def _send_deletion_email(user: User) -> None:
+    """Send the deletion confirmation email (best-effort)."""
+    try:
+        cancel_token = auth_service.create_account_deletion_token(user.id)
+        send_email_task.delay(
+            user.email,
+            "Your account is scheduled for deletion",
+            "account_deletion.html",
+            {"token": cancel_token, "name": user.name or "Beekeeper"},
+        )
+    except Exception:
+        logger.warning("Could not send deletion email (Celery unavailable)")
+
+
 @router.delete("/me", status_code=200)
 async def delete_me(
     data: DeleteAccountRequest,
@@ -72,11 +100,7 @@ async def delete_me(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft-delete the current user's account (GDPR). Requires password confirmation.
-
-    Schedules hard deletion after 30 days. Sends a confirmation email with a
-    cancel link. Clears auth cookies and invalidates all tokens.
-    """
+    """Soft-delete the current user's account (GDPR). Requires password."""
     if current_user.password_hash is None:
         raise HTTPException(
             status_code=400, detail="OAuth-only accounts cannot delete via password",
@@ -84,31 +108,12 @@ async def delete_me(
     if not verify_password(data.password, current_user.password_hash):
         raise HTTPException(status_code=403, detail="Incorrect password")
 
-    # Soft-delete + invalidate tokens
     current_user.deleted_at = datetime.now(UTC)
     current_user.password_changed_at = datetime.now(UTC)
-
-    # Schedule hard-delete in 30 days
-    task_result = hard_delete_user.apply_async(
-        args=[str(current_user.id)], countdown=30 * 86400,
-    )
-
-    # Store the Celery task ID so we can revoke it on cancel
-    prefs = current_user.preferences or {}
-    prefs["_deletion_task_id"] = task_result.id
-    current_user.preferences = prefs
-
+    current_user.preferences = _schedule_hard_delete(current_user, data.delete_data)
     await db.commit()
 
-    # Send deletion confirmation email with cancel link
-    cancel_token = auth_service.create_account_deletion_token(current_user.id)
-    send_email_task.delay(
-        current_user.email,
-        "Your account is scheduled for deletion",
-        "account_deletion.html",
-        {"token": cancel_token, "name": current_user.name or "Beekeeper"},
-    )
-
+    _send_deletion_email(current_user)
     clear_auth_cookies(response)
     return {"detail": "Account scheduled for deletion. Check your email for a cancellation link."}
 

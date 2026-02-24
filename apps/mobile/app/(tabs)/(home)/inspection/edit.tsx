@@ -18,72 +18,22 @@ import {
 } from "../../../../hooks/useInspections";
 import { useUnits } from "../../../../hooks/useUnits";
 import type { UpdateInspectionInput } from "../../../../services/api";
-import { useStyles, typography, type ThemeColors } from "../../../../theme";
+import { useStyles } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 import {
   type FormState,
   type FormSetter,
-  BeginnerFields,
-  IntermediateFields,
-  AdvancedFields,
+  type TemplateLevel,
+  TEMPLATE_OPTIONS,
+  ObservationFields,
   GeneralFields,
   WeatherFields,
   buildObservations,
   buildWeather,
   inspectionToFormState,
+  inspectionFormStyles as createStyles,
 } from "./fields";
-
-type TemplateLevel = FormState["template"];
-
-const TEMPLATE_OPTIONS: TemplateLevel[] = [
-  "Beginner",
-  "Intermediate",
-  "Advanced",
-];
-
-const createStyles = (c: ThemeColors) => ({
-  container: {
-    flex: 1,
-    backgroundColor: c.bgPrimary,
-  },
-  content: {
-    padding: 16,
-  },
-  sectionLabel: {
-    fontSize: 16,
-    fontFamily: typography.families.displaySemiBold,
-    color: c.textPrimary,
-    marginTop: 8,
-    marginBottom: 12,
-  },
-  submitButton: {
-    backgroundColor: c.primaryFill,
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center" as const,
-    marginTop: 8,
-  },
-  submitDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
-    color: c.textOnPrimary,
-    fontSize: 16,
-    fontFamily: typography.families.bodySemiBold,
-  },
-});
-
-function ObservationFields({ s, set }: { s: FormState; set: FormSetter }) {
-  const isInt = s.template === "Intermediate" || s.template === "Advanced";
-  const isAdv = s.template === "Advanced";
-  return (
-    <>
-      <BeginnerFields s={s} set={set} />
-      {isInt && <IntermediateFields s={s} set={set} />}
-      {isAdv && <AdvancedFields s={s} set={set} />}
-    </>
-  );
-}
 
 function SubmitButton({
   isPending,
@@ -203,8 +153,8 @@ export default function EditInspectionScreen() {
       };
       await updateInspection.mutateAsync({ id: id!, data: input });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to update inspection");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

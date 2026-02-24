@@ -1,6 +1,7 @@
 """Auth endpoints — register, login, refresh, logout, verify, reset, OAuth stub."""
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -11,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookies import clear_auth_cookies, set_auth_cookies
 from app.auth.jwt import decode_token
+from app.auth.token_blocklist import block_token
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
+    LogoutRequest,
     OAuthCallback,
     RefreshRequest,
     RegisterRequest,
@@ -101,8 +104,41 @@ async def refresh(
 
 
 @router.post("/logout", status_code=204)
-async def logout(response: Response):
-    """Clear auth cookies (web clients)."""
+async def logout(
+    request: Request,
+    response: Response,
+    data: LogoutRequest | None = None,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+):
+    """Clear auth cookies and invalidate both tokens server-side.
+
+    Web clients send tokens via HttpOnly cookies.
+    Native clients send them in the JSON body.
+    """
+    tokens_to_blocklist: list[str] = []
+
+    # Collect tokens from cookies (web) and body (native)
+    for tok in (
+        refresh_token,
+        data.refresh_token if data else None,
+        access_token,
+        data.access_token if data else None,
+    ):
+        if tok:
+            tokens_to_blocklist.append(tok)
+
+    for tok in tokens_to_blocklist:
+        try:
+            payload = decode_token(tok)
+            jti = payload.get("jti")
+            if jti:
+                exp = payload.get("exp", 0)
+                remaining = int(exp - datetime.now(UTC).timestamp())
+                await block_token(jti, remaining)
+        except JWTError:
+            pass  # Token already expired or invalid — nothing to blocklist
+
     clear_auth_cookies(response)
     return None
 

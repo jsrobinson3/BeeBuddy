@@ -32,6 +32,13 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutRequest(BaseModel):
+    """Logout payload for native clients that send tokens in the body."""
+
+    access_token: str | None = None
+    refresh_token: str | None = None
+
+
 class OAuthCallback(BaseModel):
     """OAuth2 authorization-code callback payload."""
 

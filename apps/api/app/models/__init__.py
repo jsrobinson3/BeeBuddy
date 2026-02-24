@@ -9,6 +9,7 @@ from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
 from app.models.queen import Queen, QueenOrigin, QueenStatus
 from app.models.task import Task, TaskSource
+from app.models.task_cadence import TaskCadence
 from app.models.treatment import Treatment
 from app.models.user import ExperienceLevel, User
 
@@ -32,4 +33,5 @@ __all__ = [
     "EventType",
     "Task",
     "TaskSource",
+    "TaskCadence",
 ]

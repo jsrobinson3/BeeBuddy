@@ -27,6 +27,12 @@ export interface RefreshInput {
 
 // ─── User Types ───────────────────────────────────────────────────────────────
 
+export interface UserPreferences {
+  [key: string]: unknown;
+  units?: "metric" | "imperial";
+  hemisphere?: "north" | "south" | null;
+}
+
 export interface User {
   id: string;
   name: string | null;
@@ -34,7 +40,7 @@ export interface User {
   experience_level: "beginner" | "intermediate" | "advanced" | null;
   locale: string | null;
   timezone: string;
-  preferences: Record<string, unknown> | null;
+  preferences: UserPreferences | null;
   created_at: string;
 }
 
@@ -209,6 +215,7 @@ export interface InspectionPhoto {
   caption: string | null;
   ai_analysis: Record<string, unknown> | null;
   uploaded_at: string;
+  url: string | null;
 }
 
 export interface Inspection {
@@ -383,7 +390,7 @@ export interface UpdateEventInput {
 
 // ─── Task Types ───────────────────────────────────────────────────────────────
 
-export type TaskSource = "manual" | "ai_recommended";
+export type TaskSource = "manual" | "ai_recommended" | "system";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 export interface Task {
@@ -419,5 +426,62 @@ export interface UpdateTaskInput {
   due_date?: string;
   completed_at?: string | null;
   priority?: TaskPriority;
+}
+
+// ─── Cadence Types ─────────────────────────────────────────────────────────────
+
+export type CadenceCategory = "recurring" | "seasonal";
+export type CadenceSeason =
+  | "spring"
+  | "summer"
+  | "fall"
+  | "winter"
+  | "year_round";
+
+export type CadenceScope = "user" | "hive";
+
+export interface CadenceTemplate {
+  key: string;
+  title: string;
+  description: string;
+  category: CadenceCategory;
+  season: CadenceSeason;
+  priority: TaskPriority;
+  interval_days: number | null;
+  season_month: number | null;
+  season_day: number;
+  scope: CadenceScope;
+}
+
+export interface Cadence {
+  id: string;
+  user_id: string;
+  hive_id: string | null;
+  cadence_key: string;
+  is_active: boolean;
+  last_generated_at: string | null;
+  next_due_date: string | null;
+  custom_interval_days: number | null;
+  custom_season_month: number | null;
+  custom_season_day: number | null;
+  created_at: string;
+}
+
+export interface UpdateCadenceInput {
+  is_active?: boolean;
+  custom_interval_days?: number | null;
+  custom_season_month?: number | null;
+  custom_season_day?: number | null;
+}
+
+// ─── Account Deletion Types ──────────────────────────────────────────────────
+
+export interface DeleteAccountInput {
+  password: string;
+  delete_data?: boolean;
+}
+
+export interface DeleteAccountResponse {
+  detail: string;
 }
 

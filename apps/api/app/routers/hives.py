@@ -9,7 +9,7 @@ from app.auth.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.hive import HiveCreate, HiveResponse, HiveUpdate
-from app.services import apiary_service, hive_service
+from app.services import apiary_service, cadence_service, hive_service
 
 router = APIRouter(prefix="/hives")
 
@@ -39,7 +39,27 @@ async def create_hive(
     apiary = await apiary_service.get_apiary(db, data.apiary_id)
     if not apiary or apiary.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Apiary not found")
-    return await hive_service.create_hive(db, data.model_dump())
+    hive = await hive_service.create_hive(db, data.model_dump())
+    hemisphere = await cadence_service.resolve_hemisphere(db, current_user)
+
+    # Auto-initialize user-level cadences on first hive creation
+    existing_cadences = await cadence_service.get_cadences(db, user_id=current_user.id)
+    if not existing_cadences:
+        await cadence_service.initialize_cadences(
+            db, user_id=current_user.id, hemisphere=hemisphere,
+        )
+
+    # Always initialize hive-scoped cadences for the new hive
+    await cadence_service.initialize_hive_cadences(
+        db, user_id=current_user.id, hive_id=hive.id, hemisphere=hemisphere,
+    )
+
+    # Generate tasks for any cadences that are now due
+    await cadence_service.generate_due_tasks(
+        db, user_id=current_user.id, hemisphere=hemisphere,
+    )
+
+    return hive
 
 
 @router.get("/{hive_id}", response_model=HiveResponse)

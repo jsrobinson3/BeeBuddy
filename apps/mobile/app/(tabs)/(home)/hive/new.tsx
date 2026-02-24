@@ -23,6 +23,7 @@ import {
   type ThemeColors,
   pickerStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -358,8 +359,8 @@ export default function CreateHiveScreen() {
       });
       reset();
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create hive");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }, [name, apiary_id, hiveType, source, notes, createHive, reset, router]);
 
