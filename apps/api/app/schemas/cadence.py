@@ -18,6 +18,7 @@ class CadenceTemplateResponse(BaseModel):
     interval_days: int | None = None
     season_month: int | None = None
     season_day: int = 1
+    scope: str = "user"
 
 
 class CadenceResponse(BaseModel):
@@ -27,6 +28,7 @@ class CadenceResponse(BaseModel):
 
     id: UUID
     user_id: UUID
+    hive_id: UUID | None = None
     cadence_key: str
     is_active: bool
     last_generated_at: datetime | None = None

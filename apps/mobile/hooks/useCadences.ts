@@ -9,10 +9,10 @@ export function useCadenceCatalog() {
   });
 }
 
-export function useCadences() {
+export function useCadences(hiveId?: string) {
   return useQuery({
-    queryKey: ["cadences"],
-    queryFn: () => api.getCadences(),
+    queryKey: ["cadences", { hiveId }],
+    queryFn: () => api.getCadences(hiveId),
   });
 }
 

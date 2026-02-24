@@ -161,7 +161,13 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
   async function pickAndUpload(
     launcher: () => Promise<ImagePicker.ImagePickerResult>,
   ) {
-    const result = await launcher();
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await launcher();
+    } catch (err: unknown) {
+      Alert.alert("Could not open picker", getErrorMessage(err));
+      return;
+    }
     if (result.canceled || result.assets.length === 0) return;
 
     const asset = result.assets[0];
@@ -179,7 +185,12 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
     }
   }
 
-  function handleCamera() {
+  async function handleCamera() {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Camera access is required to take photos.");
+      return;
+    }
     pickAndUpload(() =>
       ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
@@ -188,7 +199,12 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
     );
   }
 
-  function handleGallery() {
+  async function handleGallery() {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission needed", "Photo library access is required to select photos.");
+      return;
+    }
     pickAndUpload(() =>
       ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],

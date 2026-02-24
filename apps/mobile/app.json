@@ -46,6 +46,13 @@
         {
           "locationAlwaysAndWhenInUsePermission": "BeeBuddy uses your location to set apiary coordinates and provide local weather-based task recommendations."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "BeeBuddy needs access to your photos to attach them to hive inspections.",
+          "cameraPermission": "BeeBuddy needs camera access to photograph your hives during inspections."
+        }
       ]
     ],
     "experiments": {

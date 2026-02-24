@@ -48,6 +48,18 @@ const createStyles = (c: ThemeColors) => ({
     backgroundColor: c.selectedBg, borderWidth: 1, borderColor: c.primaryFill,
   },
   addButtonText: { fontSize: 13, fontFamily: typography.families.bodySemiBold, color: c.honey },
+  editButton: {
+    backgroundColor: c.primaryFill,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: "center" as const,
+    marginBottom: 8,
+  },
+  editButtonText: {
+    color: c.textOnPrimary,
+    fontSize: 16,
+    fontFamily: typography.families.bodySemiBold,
+  },
 });
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -77,10 +89,10 @@ function InspectionItem(
   );
 }
 
-function TreatmentItem({ treatment }: { treatment: Treatment }) {
+function TreatmentItem({ treatment, onPress }: { treatment: Treatment; onPress: () => void }) {
   const styles = useStyles(createStyles);
   return (
-    <View style={styles.listItem}>
+    <Pressable style={styles.listItem} onPress={onPress}>
       <Text style={styles.listDate}>{treatment.treatment_type}</Text>
       {treatment.product_name && (
         <Text style={styles.listDetail}>{treatment.product_name}</Text>
@@ -89,20 +101,20 @@ function TreatmentItem({ treatment }: { treatment: Treatment }) {
         {formatDate(treatment.started_at)}
         {treatment.ended_at ? ` - ${formatDate(treatment.ended_at)}` : ""}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
-function EventItem({ event }: { event: HiveEvent }) {
+function EventItem({ event, onPress }: { event: HiveEvent; onPress: () => void }) {
   const styles = useStyles(createStyles);
   return (
-    <View style={styles.listItem}>
+    <Pressable style={styles.listItem} onPress={onPress}>
       <Text style={styles.listDate}>{event.event_type}</Text>
       <Text style={styles.listDetail}>{formatDate(event.occurred_at)}</Text>
       {event.notes && (
         <Text style={styles.listNotes} numberOfLines={2}>{event.notes}</Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -110,12 +122,13 @@ interface HarvestItemProps {
   harvest: Harvest;
   toDisplayWeight: (kg: number) => number;
   weightLabel: string;
+  onPress: () => void;
 }
 
-function HarvestItem({ harvest, toDisplayWeight, weightLabel }: HarvestItemProps) {
+function HarvestItem({ harvest, toDisplayWeight, weightLabel, onPress }: HarvestItemProps) {
   const styles = useStyles(createStyles);
   return (
-    <View style={styles.listItem}>
+    <Pressable style={styles.listItem} onPress={onPress}>
       <Text style={styles.listDate}>{formatDate(harvest.harvested_at)}</Text>
       {harvest.weight_kg != null && (
         <Text style={styles.listDetail}>
@@ -125,7 +138,7 @@ function HarvestItem({ harvest, toDisplayWeight, weightLabel }: HarvestItemProps
       {harvest.honey_type && (
         <Text style={styles.listNotes}>{harvest.honey_type}</Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -177,6 +190,12 @@ export default function HiveDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Pressable
+        style={styles.editButton}
+        onPress={() => router.push(`/hive/edit?id=${id}` as any)}
+      >
+        <Text style={styles.editButtonText}>Edit Hive</Text>
+      </Pressable>
       <Card>
         <Text style={styles.sectionTitle}>Hive Info</Text>
         <InfoRow label="Type" value={hive?.hive_type ?? "N/A"} />
@@ -226,7 +245,7 @@ export default function HiveDetailScreen() {
         />
         {recentTreatments.length > 0 ? (
           recentTreatments.map((item: Treatment) => (
-            <TreatmentItem key={item.id} treatment={item} />
+            <TreatmentItem key={item.id} treatment={item} onPress={() => router.push(`/treatment/${item.id}` as any)} />
           ))
         ) : (
           <Text style={styles.noData}>No treatments recorded</Text>
@@ -245,6 +264,7 @@ export default function HiveDetailScreen() {
               harvest={item}
               toDisplayWeight={units.toDisplayWeight}
               weightLabel={units.weightLabel}
+              onPress={() => router.push(`/harvest/${item.id}` as any)}
             />
           ))
         ) : (
@@ -259,7 +279,7 @@ export default function HiveDetailScreen() {
         />
         {recentEvents.length > 0 ? (
           recentEvents.map((item: HiveEvent) => (
-            <EventItem key={item.id} event={item} />
+            <EventItem key={item.id} event={item} onPress={() => router.push(`/event/${item.id}` as any)} />
           ))
         ) : (
           <Text style={styles.noData}>No events recorded</Text>

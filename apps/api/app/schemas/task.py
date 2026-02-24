@@ -45,7 +45,7 @@ class TaskUpdate(BaseModel):
     apiary_id: UUID | None = None
     title: str | None = None
     description: str | None = None
-    due_date: datetime | None = None
+    due_date: date | None = None
     recurring: bool | None = None
     recurrence_rule: str | None = None
     source: TaskSource | None = None
@@ -64,7 +64,7 @@ class TaskResponse(BaseModel):
     apiary_id: UUID | None = None
     title: str
     description: str | None = None
-    due_date: datetime | None = None
+    due_date: date | None = None
     recurring: bool = False
     recurrence_rule: str | None = None
     source: TaskSource

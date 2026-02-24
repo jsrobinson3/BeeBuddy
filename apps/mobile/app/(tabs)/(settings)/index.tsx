@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { SegmentedControl } from "../../../components/SegmentedControl";
 import {
@@ -304,8 +304,14 @@ export default function SettingsScreen() {
       <View style={layout.section}>
         <Text style={layout.sectionTitle}>About</Text>
         <SettingsItem title="Version" subtitle="0.1.0" />
-        <SettingsItem title="Open Source Licenses" />
-        <SettingsItem title="Privacy Policy" />
+        <SettingsItem
+          title="Open Source Licenses"
+          onPress={() => router.push("/licenses" as any)}
+        />
+        <SettingsItem
+          title="Privacy Policy"
+          onPress={() => Linking.openURL("https://beebuddyai.com/legal/privacy/")}
+        />
       </View>
 
       <View style={layout.section}>

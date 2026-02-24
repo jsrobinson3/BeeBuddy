@@ -30,6 +30,11 @@ class CadenceSeason(StrEnum):
     YEAR_ROUND = "year_round"
 
 
+class CadenceScope(StrEnum):
+    USER = "user"
+    HIVE = "hive"
+
+
 @dataclass(frozen=True, slots=True)
 class CadenceTemplate:
     """A single cadence template definition."""
@@ -43,6 +48,7 @@ class CadenceTemplate:
     interval_days: int | None = None  # for recurring cadences
     season_month: int | None = None  # 1-12, for seasonal cadences
     season_day: int = 1  # day of month for seasonal cadences
+    scope: CadenceScope = CadenceScope.USER  # user-level or per-hive
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +68,7 @@ CADENCE_CATALOG: list[CadenceTemplate] = [
         season=CadenceSeason.YEAR_ROUND,
         priority="medium",
         interval_days=14,
+        scope=CadenceScope.HIVE,
     ),
     CadenceTemplate(
         key="varroa_monitoring",
@@ -74,6 +81,7 @@ CADENCE_CATALOG: list[CadenceTemplate] = [
         season=CadenceSeason.YEAR_ROUND,
         priority="high",
         interval_days=30,
+        scope=CadenceScope.HIVE,
     ),
     CadenceTemplate(
         key="equipment_check",
@@ -319,3 +327,8 @@ def get_template(key: str) -> CadenceTemplate | None:
         if t.key == key:
             return t
     return None
+
+
+def get_hive_templates() -> list[CadenceTemplate]:
+    """Return only cadence templates scoped to individual hives."""
+    return [t for t in CADENCE_CATALOG if t.scope == CadenceScope.HIVE]

@@ -4,7 +4,7 @@ import { FlatList, Pressable, Text, View } from "react-native";
 import {
   Warehouse,
   Hexagon,
-  Activity,
+  ListChecks,
   ClipboardCheck,
   MapPin,
   Plus,
@@ -16,6 +16,7 @@ import { HexIcon } from "../../../components/HexIcon";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { useApiaries } from "../../../hooks/useApiaries";
 import { useHives } from "../../../hooks/useHives";
+import { useTasks } from "../../../hooks/useTasks";
 import type { Apiary, Hive } from "../../../services/api";
 import {
   useStyles,
@@ -28,7 +29,6 @@ import {
 } from "../../../theme";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
@@ -220,11 +220,11 @@ function StatCard({
 function StatsRow({
   apiaryCount,
   totalHives,
-  activeHives,
+  pendingTasks,
 }: {
   apiaryCount: number;
   totalHives: number;
-  activeHives: number;
+  pendingTasks: number;
 }) {
   const s = useStyles(createHeaderStyles);
   return (
@@ -240,9 +240,9 @@ function StatsRow({
         label="Total Hives"
       />
       <StatCard
-        icon={<StatHexIcon icon={Activity} />}
-        value={activeHives}
-        label="Active"
+        icon={<StatHexIcon icon={ListChecks} />}
+        value={pendingTasks}
+        label="Pending Tasks"
       />
     </View>
   );
@@ -251,11 +251,11 @@ function StatsRow({
 function DashboardHeader({
   apiaryCount,
   totalHives,
-  activeHives,
+  pendingTasks,
 }: {
   apiaryCount: number;
   totalHives: number;
-  activeHives: number;
+  pendingTasks: number;
 }) {
   const s = useStyles(createHeaderStyles);
   const greeting = useMemo(() => getGreeting(), []);
@@ -274,7 +274,7 @@ function DashboardHeader({
       <StatsRow
         apiaryCount={apiaryCount}
         totalHives={totalHives}
-        activeHives={activeHives}
+        pendingTasks={pendingTasks}
       />
     </View>
   );
@@ -427,6 +427,7 @@ export default function ApiariesScreen() {
   const router = useRouter();
   const { data: apiaries, isLoading, error, refetch } = useApiaries();
   const { data: hives } = useHives();
+  const { data: tasks } = useTasks();
   const s = useStyles(createLayoutStyles);
 
   if (isLoading) {
@@ -444,7 +445,8 @@ export default function ApiariesScreen() {
 
   const allHives = hives ?? [];
   const allApiaries = apiaries ?? [];
-  const activeHives = allHives.filter((h) => h.status === "active").length;
+  const allTasks = tasks ?? [];
+  const pendingTasks = allTasks.filter((t) => !t.completed_at).length;
 
   function handleInspect(hiveId: string) {
     router.push(`/inspection/new?hive_id=${hiveId}` as any);
@@ -455,7 +457,7 @@ export default function ApiariesScreen() {
       <DashboardHeader
         apiaryCount={allApiaries.length}
         totalHives={allHives.length}
-        activeHives={activeHives}
+        pendingTasks={pendingTasks}
       />
       <QuickActions hives={allHives} onInspect={handleInspect} />
       {allApiaries.length > 0 && (

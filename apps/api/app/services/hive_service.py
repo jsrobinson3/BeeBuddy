@@ -3,11 +3,12 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.apiary import Apiary
 from app.models.hive import Hive
+from app.models.task_cadence import TaskCadence
 
 
 async def get_hives(
@@ -60,6 +61,13 @@ async def update_hive(db: AsyncSession, hive: Hive, data: dict) -> Hive:
 
 
 async def delete_hive(db: AsyncSession, hive: Hive) -> None:
-    """Soft-delete a hive."""
-    hive.deleted_at = datetime.now(UTC)
+    """Soft-delete a hive and its associated cadences."""
+    now = datetime.now(UTC)
+    hive.deleted_at = now
+    # Soft-delete hive-scoped cadences (FK CASCADE only fires on hard delete)
+    await db.execute(
+        update(TaskCadence)
+        .where(TaskCadence.hive_id == hive.id, TaskCadence.deleted_at.is_(None))
+        .values(deleted_at=now)
+    )
     await db.commit()

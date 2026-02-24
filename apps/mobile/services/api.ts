@@ -47,6 +47,7 @@ export type {
   CreateTaskInput,
   UpdateTaskInput,
   CadenceCategory,
+  CadenceScope,
   CadenceSeason,
   CadenceTemplate,
   Cadence,
@@ -95,6 +96,7 @@ import type {
   DeleteAccountResponse,
 } from "./api.types";
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 
 import { API_BASE_URL } from "./config";
 
@@ -489,8 +491,9 @@ class ApiClient {
     return this.request<CadenceTemplate[]>("/cadences/catalog");
   }
 
-  async getCadences() {
-    return this.request<Cadence[]>("/cadences");
+  async getCadences(hiveId?: string) {
+    const params = hiveId ? `?hive_id=${hiveId}` : "";
+    return this.request<Cadence[]>(`/cadences${params}`);
   }
 
   async initializeCadences() {
@@ -512,27 +515,43 @@ class ApiClient {
 
   async uploadPhoto(inspectionId: string, fileUri: string, caption?: string) {
     const url = `${this.config.baseUrl}/api/v1/inspections/${inspectionId}/photos`;
-    const formData = new FormData();
 
+    // On native, use expo-file-system's uploadAsync which uses platform-native
+    // upload APIs, bypassing React Native's networking layer entirely.
+    if (!isWeb) {
+      const ext = (fileUri.split("/").pop()?.split(".").pop() ?? "jpg").toLowerCase();
+      const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+      const headers: Record<string, string> = {};
+      if (this.config.token) headers["Authorization"] = `Bearer ${this.config.token}`;
+
+      const result = await FileSystem.uploadAsync(url, fileUri, {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType,
+        headers,
+        parameters: caption ? { caption } : undefined,
+      });
+
+      if (result.status < 200 || result.status >= 300) {
+        const error = JSON.parse(result.body).detail ?? `Upload failed: ${result.status}`;
+        throw new Error(error);
+      }
+      return JSON.parse(result.body) as InspectionPhoto;
+    }
+
+    const formData = new FormData();
     const filename = fileUri.split("/").pop() || "photo.jpg";
     const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
     const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-
     formData.append("file", { uri: fileUri, name: filename, type: mimeType } as any);
     if (caption) formData.append("caption", caption);
-
-    const headers: Record<string, string> = {};
-    if (isWeb) {
-      headers["X-Requested-With"] = "BeeBuddy";
-    } else if (this.config.token) {
-      headers["Authorization"] = `Bearer ${this.config.token}`;
-    }
 
     const response = await fetch(url, {
       method: "POST",
       body: formData,
-      headers,
-      ...(isWeb && { credentials: "include" as RequestCredentials }),
+      headers: { "X-Requested-With": "BeeBuddy" },
+      credentials: "include" as RequestCredentials,
     });
 
     if (!response.ok) {

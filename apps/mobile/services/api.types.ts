@@ -438,6 +438,8 @@ export type CadenceSeason =
   | "winter"
   | "year_round";
 
+export type CadenceScope = "user" | "hive";
+
 export interface CadenceTemplate {
   key: string;
   title: string;
@@ -448,20 +450,28 @@ export interface CadenceTemplate {
   interval_days: number | null;
   season_month: number | null;
   season_day: number;
+  scope: CadenceScope;
 }
 
 export interface Cadence {
   id: string;
   user_id: string;
+  hive_id: string | null;
   cadence_key: string;
   is_active: boolean;
   last_generated_at: string | null;
   next_due_date: string | null;
+  custom_interval_days: number | null;
+  custom_season_month: number | null;
+  custom_season_day: number | null;
   created_at: string;
 }
 
 export interface UpdateCadenceInput {
   is_active?: boolean;
+  custom_interval_days?: number | null;
+  custom_season_month?: number | null;
+  custom_season_day?: number | null;
 }
 
 // ─── Account Deletion Types ──────────────────────────────────────────────────

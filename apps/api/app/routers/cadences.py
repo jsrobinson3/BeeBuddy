@@ -14,50 +14,18 @@ Hemisphere awareness:
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.cadence_catalog import CADENCE_CATALOG
 from app.db.session import get_db
-from app.models.apiary import Apiary
 from app.models.user import User
 from app.schemas.cadence import CadenceResponse, CadenceTemplateResponse, CadenceUpdate
 from app.schemas.task import TaskResponse
 from app.services import cadence_service
-from app.services.cadence_service import Hemisphere, detect_hemisphere
 
 router = APIRouter(prefix="/cadences")
-
-
-async def _resolve_hemisphere(
-    db: AsyncSession, user: User,
-) -> Hemisphere:
-    """Determine the user's hemisphere.
-
-    Priority:
-    1. Explicit preference (preferences.hemisphere = "north" | "south")
-    2. Latitude of their first apiary that has coordinates
-    3. Default: "north"
-    """
-    prefs = user.preferences or {}
-    explicit = prefs.get("hemisphere")
-    if explicit in ("north", "south"):
-        return explicit
-
-    # Fall back to first apiary with a latitude
-    result = await db.execute(
-        select(Apiary.latitude)
-        .where(
-            Apiary.user_id == user.id,
-            Apiary.deleted_at.is_(None),
-            Apiary.latitude.isnot(None),
-        )
-        .limit(1)
-    )
-    lat = result.scalar_one_or_none()
-    return detect_hemisphere(lat)
 
 
 @router.get("/catalog", response_model=list[CadenceTemplateResponse])
@@ -74,6 +42,7 @@ async def list_catalog():
             interval_days=t.interval_days,
             season_month=t.season_month,
             season_day=t.season_day,
+            scope=t.scope.value,
         )
         for t in CADENCE_CATALOG
     ]
@@ -81,11 +50,12 @@ async def list_catalog():
 
 @router.get("", response_model=list[CadenceResponse])
 async def list_cadences(
+    hive_id: UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List the current user's cadence subscriptions."""
-    return await cadence_service.get_cadences(db, user_id=current_user.id)
+    """List the current user's cadence subscriptions, optionally filtered by hive."""
+    return await cadence_service.get_cadences(db, user_id=current_user.id, hive_id=hive_id)
 
 
 @router.post("/initialize", response_model=list[CadenceResponse], status_code=201)
@@ -98,7 +68,7 @@ async def initialize_cadences(
     Idempotent — existing cadences are not duplicated.
     Seasonal cadences are adjusted for the user's hemisphere.
     """
-    hemisphere = await _resolve_hemisphere(db, current_user)
+    hemisphere = await cadence_service.resolve_hemisphere(db, current_user)
     return await cadence_service.initialize_cadences(
         db, user_id=current_user.id, hemisphere=hemisphere,
     )
@@ -127,7 +97,7 @@ async def update_cadence(
 
     # Recalculate next_due_date when scheduling overrides changed
     if schedule_changed:
-        hemisphere = await _resolve_hemisphere(db, current_user)
+        hemisphere = await cadence_service.resolve_hemisphere(db, current_user)
         cadence.next_due_date = cadence_service._compute_next_due(
             cadence.cadence_key,
             hemisphere=hemisphere,
@@ -151,7 +121,7 @@ async def generate_tasks(
     This is also called automatically by the daily Celery beat job,
     but users can trigger it manually.
     """
-    hemisphere = await _resolve_hemisphere(db, current_user)
+    hemisphere = await cadence_service.resolve_hemisphere(db, current_user)
     return await cadence_service.generate_due_tasks(
         db, user_id=current_user.id, hemisphere=hemisphere,
     )

@@ -32,6 +32,14 @@ class TaskCadence(Base):
         Date, nullable=True
     )
 
+    # Optional hive scope — NULL means user-level cadence
+    hive_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("hives.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     # User overrides — when set, these take precedence over catalog defaults
     custom_interval_days: Mapped[int | None] = mapped_column(
         Integer, nullable=True
@@ -45,3 +53,4 @@ class TaskCadence(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="cadences")
+    hive: Mapped["Hive | None"] = relationship("Hive", back_populates="cadences")

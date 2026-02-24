@@ -43,6 +43,19 @@ const createStyles = (c: ThemeColors) => ({
     ...shadows.fab,
   },
   fabText: { fontSize: 28, color: c.textOnPrimary, fontFamily: typography.families.body },
+  editButton: {
+    backgroundColor: c.primaryFill,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: "center" as const,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  editButtonText: {
+    color: c.textOnPrimary,
+    fontSize: 16,
+    fontFamily: typography.families.bodySemiBold,
+  },
 });
 
 function HiveCard({ hive, onPress }: { hive: Hive; onPress: () => void }) {
@@ -110,6 +123,12 @@ export default function ApiaryDetailScreen() {
         </Text>
       </View>
 
+      <Pressable
+        style={styles.editButton}
+        onPress={() => router.push(`/apiary/edit?id=${id}` as any)}
+      >
+        <Text style={styles.editButtonText}>Edit Apiary</Text>
+      </Pressable>
       <FlatList
         data={hives ?? []}
         keyExtractor={(item: Hive) => item.id}

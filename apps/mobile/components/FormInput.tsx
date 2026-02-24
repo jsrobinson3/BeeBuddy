@@ -45,6 +45,7 @@ export function FormInput({
   error,
   value,
   onChangeText,
+  style,
   ...rest
 }: FormInputProps) {
   const styles = useStyles(createStyles);
@@ -53,7 +54,7 @@ export function FormInput({
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        style={[styles.input, error && styles.inputError]}
+        style={[styles.input, error && styles.inputError, style]}
         value={value}
         onChangeText={onChangeText}
         placeholderTextColor={colors.placeholder}
