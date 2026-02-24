@@ -5,6 +5,7 @@ import { Card } from "../../../../components/Card";
 import { EmptyState } from "../../../../components/EmptyState";
 import { ErrorDisplay } from "../../../../components/ErrorDisplay";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
+import { WeatherCard } from "../../../../components/WeatherCard";
 import { useApiary } from "../../../../hooks/useApiaries";
 import { useHives } from "../../../../hooks/useHives";
 import type { Hive } from "../../../../services/api";
@@ -122,6 +123,10 @@ export default function ApiaryDetailScreen() {
           {hiveCount} {hiveCount === 1 ? "hive" : "hives"}
         </Text>
       </View>
+
+      {apiary?.latitude != null && apiary?.longitude != null && (
+        <WeatherCard lat={apiary.latitude} lng={apiary.longitude} />
+      )}
 
       <Pressable
         style={styles.editButton}
