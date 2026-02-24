@@ -55,6 +55,7 @@ function LoginForm(p: FormProps) {
     <View style={s.formArea}>
       {p.error ? <Text style={s.error}>{p.error}</Text> : null}
       <AuthInput
+        testID="login-email-input"
         placeholder="Email"
         value={p.email}
         onChangeText={p.setEmail}
@@ -64,6 +65,7 @@ function LoginForm(p: FormProps) {
         editable={!p.loading}
       />
       <AuthInput
+        testID="login-password-input"
         placeholder="Password"
         value={p.password}
         onChangeText={p.setPassword}
@@ -71,6 +73,7 @@ function LoginForm(p: FormProps) {
         editable={!p.loading}
       />
       <AuthSubmitButton
+        testID="login-submit-button"
         label="Sign In"
         loading={p.loading}
         onPress={p.onSubmit}

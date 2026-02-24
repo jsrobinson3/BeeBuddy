@@ -1,0 +1,131 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# App Store Screenshot Flow
+# ──────────────────────────────────────────────────────────────────────────────
+# Navigates through every key screen of BeeBuddy and captures screenshots
+# suitable for Apple App Store submission.
+#
+# Usage:
+#   maestro test .maestro/flows/01-appstore-screenshots.yaml
+#
+# With custom credentials:
+#   maestro test -e EMAIL=you@example.com -e PASSWORD=secret \
+#     .maestro/flows/01-appstore-screenshots.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+
+appId: com.beebuddyai.app
+
+env:
+  EMAIL: test@beebuddy.com
+  PASSWORD: testpassword123
+
+---
+
+# ── 1. Login screen ──────────────────────────────────────────────────────────
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+# The login screen shows a gradient header with "Your beekeeping companion"
+- assertVisible: "Your beekeeping companion"
+
+- takeScreenshot: 01-login
+
+# ── 2. Sign in ───────────────────────────────────────────────────────────────
+- tapOn:
+    id: "login-email-input"
+- inputText: ${EMAIL}
+
+- tapOn:
+    id: "login-password-input"
+- inputText: ${PASSWORD}
+
+- tapOn:
+    id: "login-submit-button"
+
+# Wait for navigation to dashboard
+- extendedWaitUntil:
+    visible:
+      id: "dashboard-screen"
+    timeout: 15000
+
+- waitForAnimationToEnd
+
+# ── 3. Dashboard / Apiaries list ─────────────────────────────────────────────
+# After login we land on the home tab which shows greeting + stats + apiaries.
+- takeScreenshot: 02-dashboard
+
+# ── 4. Apiary detail ─────────────────────────────────────────────────────────
+# Tap the first apiary card to see its hives.
+- tapOn:
+    id: "apiary-card-0"
+
+- extendedWaitUntil:
+    visible:
+      id: "apiary-detail-screen"
+    timeout: 5000
+
+- waitForAnimationToEnd
+
+- takeScreenshot: 03-apiary-detail
+
+# ── 5. Hive detail ───────────────────────────────────────────────────────────
+# Tap the first hive to see the full hive record.
+- tapOn:
+    id: "hive-card-0"
+
+- extendedWaitUntil:
+    visible: "Hive Info"
+    timeout: 5000
+
+- waitForAnimationToEnd
+
+- takeScreenshot: 04-hive-detail
+
+# ── 6. New Inspection form ───────────────────────────────────────────────────
+# From hive detail, tap "+ Add" next to "Recent Inspections" to open the form.
+- scrollUntilVisible:
+    element:
+      text: "Recent Inspections"
+    direction: DOWN
+
+- tapOn:
+    text: "+ Add"
+
+- extendedWaitUntil:
+    visible: "Inspection Date"
+    timeout: 5000
+
+- waitForAnimationToEnd
+
+- takeScreenshot: 05-new-inspection
+
+# ── 7. Navigate to Tasks tab ─────────────────────────────────────────────────
+# Tap the back button multiple times to return to dashboard, then switch tabs.
+- back
+- back
+- back
+
+- waitForAnimationToEnd
+
+# ── 8. Tasks tab ─────────────────────────────────────────────────────────────
+- tapOn: "Tasks"
+
+- waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible: "Manage Task Cadences"
+    timeout: 5000
+
+- takeScreenshot: 06-tasks
+
+# ── 9. Settings tab ──────────────────────────────────────────────────────────
+- tapOn: "Settings"
+
+- waitForAnimationToEnd
+
+- extendedWaitUntil:
+    visible: "Appearance"
+    timeout: 5000
+
+- takeScreenshot: 07-settings

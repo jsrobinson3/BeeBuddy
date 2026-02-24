@@ -58,7 +58,7 @@ const createStyles = (c: ThemeColors) => ({
   },
 });
 
-function HiveCard({ hive, onPress }: { hive: Hive; onPress: () => void }) {
+function HiveCard({ hive, testID, onPress }: { hive: Hive; testID?: string; onPress: () => void }) {
   const styles = useStyles(createStyles);
   const { colors } = useTheme();
 
@@ -69,7 +69,7 @@ function HiveCard({ hive, onPress }: { hive: Hive; onPress: () => void }) {
   }
 
   return (
-    <Card onPress={onPress}>
+    <Card testID={testID} onPress={onPress}>
       <View style={styles.hiveRow}>
         <Text style={styles.hiveName}>{hive.name}</Text>
         <View style={styles.badges}>
@@ -109,7 +109,7 @@ export default function ApiaryDetailScreen() {
   const hiveCount = hives?.length ?? 0;
 
   return (
-    <View style={styles.container}>
+    <View testID="apiary-detail-screen" style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
           {apiary?.hex_color && (
@@ -133,9 +133,10 @@ export default function ApiaryDetailScreen() {
         data={hives ?? []}
         keyExtractor={(item: Hive) => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }: { item: Hive }) => (
+        renderItem={({ item, index }: { item: Hive; index: number }) => (
           <HiveCard
             hive={item}
+            testID={`hive-card-${index}`}
             onPress={() => router.push(`/hive/${item.id}` as any)}
           />
         )}

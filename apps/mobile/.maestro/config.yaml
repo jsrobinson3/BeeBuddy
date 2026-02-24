@@ -1,0 +1,15 @@
+# Maestro configuration for BeeBuddy
+# https://maestro.mobile.dev/
+
+appId: com.beebuddyai.app
+name: BeeBuddy Screenshots
+
+# Default tags applied to all flows in this directory
+tags:
+  - screenshots
+
+# Environment variables shared across all flows.
+# Override at runtime: maestro test -e EMAIL=you@example.com ...
+env:
+  EMAIL: ${EMAIL:-test@beebuddy.com}
+  PASSWORD: ${PASSWORD:-testpassword123}

@@ -5,6 +5,7 @@ import { useStyles, type ThemeColors } from "../theme";
 
 interface CardProps {
   children: ReactNode;
+  testID?: string;
   onPress?: () => void;
   style?: ViewStyle;
 }
@@ -23,10 +24,11 @@ const createStyles = (c: ThemeColors) => ({
   },
 });
 
-export function Card({ children, onPress, style }: CardProps) {
+export function Card({ children, testID, onPress, style }: CardProps) {
   const styles = useStyles(createStyles);
   return (
     <Pressable
+      testID={testID}
       style={[styles.card, style]}
       onPress={onPress}
       disabled={!onPress}

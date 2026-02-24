@@ -379,14 +379,16 @@ function HiveBadge({ count }: { count: number }) {
 
 function ApiaryCard({
   apiary,
+  index,
   onPress,
 }: {
   apiary: Apiary;
+  index: number;
   onPress: () => void;
 }) {
   const s = useStyles(createApiaryCardStyles);
   return (
-    <Pressable style={s.apiaryCard} onPress={onPress}>
+    <Pressable testID={`apiary-card-${index}`} style={s.apiaryCard} onPress={onPress}>
       <ApiaryCardIcon />
       <ApiaryCardInfo name={apiary.name} city={apiary.city} />
       <HiveBadge count={apiary.hive_count} />
@@ -475,17 +477,18 @@ export default function ApiariesScreen() {
     />
   );
 
-  function renderApiary({ item }: { item: Apiary }) {
+  function renderApiary({ item, index }: { item: Apiary; index: number }) {
     return (
       <ApiaryCard
         apiary={item}
+        index={index}
         onPress={() => router.push(`/apiary/${item.id}` as any)}
       />
     );
   }
 
   return (
-    <View style={s.container}>
+    <View testID="dashboard-screen" style={s.container}>
       <FlatList
         data={allApiaries}
         keyExtractor={(item: Apiary) => item.id}

@@ -28,12 +28,14 @@ const createButtonStyles = (c: ThemeColors) => ({
 });
 
 interface AuthSubmitButtonProps {
+  testID?: string;
   label: string;
   loading: boolean;
   onPress: () => void;
 }
 
 export function AuthSubmitButton({
+  testID,
   label,
   loading,
   onPress,
@@ -43,6 +45,7 @@ export function AuthSubmitButton({
 
   return (
     <Pressable
+      testID={testID}
       style={[s.button, loading && s.buttonDisabled]}
       onPress={onPress}
       disabled={loading}

@@ -9,7 +9,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "web:wsl": "REACT_NATIVE_PACKAGER_HOSTNAME=$(ip route show | grep -i default | awk '{print $3}') expo start --web",
-    "test": "jest"
+    "test": "jest",
+    "screenshots": "bash scripts/take-screenshots.sh",
+    "screenshots:single": "maestro test .maestro/flows/01-appstore-screenshots.yaml"
   },
   "dependencies": {
     "@react-native-community/datetimepicker": "^8.6.0",

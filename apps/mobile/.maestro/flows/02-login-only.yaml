@@ -1,0 +1,19 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Login Screen Screenshot
+# ──────────────────────────────────────────────────────────────────────────────
+# Captures just the login screen — useful when you only need to update the
+# branding / onboarding screenshot.
+# ──────────────────────────────────────────────────────────────────────────────
+
+appId: com.beebuddyai.app
+
+---
+
+- launchApp:
+    clearState: true
+
+- waitForAnimationToEnd
+
+- assertVisible: "Your beekeeping companion"
+
+- takeScreenshot: login-screen
