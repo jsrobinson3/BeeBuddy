@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -7,14 +7,19 @@ import {
   Pressable,
   ScrollView,
   Text,
+  View,
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
 import { SegmentedControl } from "../../../../components/SegmentedControl";
+import { useApiary } from "../../../../hooks/useApiaries";
+import { useHive } from "../../../../hooks/useHives";
 import { useCreateInspection } from "../../../../hooks/useInspections";
 import { useUnits } from "../../../../hooks/useUnits";
+import { useCurrentWeather } from "../../../../hooks/useWeather";
 import type { CreateInspectionInput } from "../../../../services/api";
-import { useStyles } from "../../../../theme";
+import { mapWeatherCode } from "../../../../services/weather";
+import { useStyles, typography, type ThemeColors } from "../../../../theme";
 import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 import {
@@ -92,6 +97,19 @@ function SubmitButton({
   );
 }
 
+const createAutoFillStyles = (c: ThemeColors) => ({
+  weatherHeader: {
+    flexDirection: "row" as const,
+    alignItems: "baseline" as const,
+    gap: 6,
+  },
+  autoFillHint: {
+    fontSize: 12,
+    fontFamily: typography.families.body,
+    color: c.honey,
+  },
+});
+
 function FormContent({
   s,
   set,
@@ -99,6 +117,7 @@ function FormContent({
   onSubmit,
   tempLabel,
   system,
+  weatherAutoFilled,
 }: {
   s: FormState;
   set: FormSetter;
@@ -106,8 +125,10 @@ function FormContent({
   onSubmit: () => void;
   tempLabel: string;
   system: string;
+  weatherAutoFilled: boolean;
 }) {
   const styles = useStyles(createStyles);
+  const autoFillStyles = useStyles(createAutoFillStyles);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <DatePickerField
@@ -125,7 +146,12 @@ function FormContent({
       <ObservationFields s={s} set={set} />
       <Text style={styles.sectionLabel}>General</Text>
       <GeneralFields s={s} set={set} />
-      <Text style={styles.sectionLabel}>Weather</Text>
+      <View style={autoFillStyles.weatherHeader}>
+        <Text style={styles.sectionLabel}>Weather</Text>
+        {weatherAutoFilled && (
+          <Text style={autoFillStyles.autoFillHint}>(auto-filled)</Text>
+        )}
+      </View>
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />
     </ScrollView>
@@ -139,6 +165,30 @@ export default function CreateInspectionScreen() {
   const { s, set } = useFormState();
   const units = useUnits();
   const styles = useStyles(createStyles);
+
+  // Resolve hive → apiary → location for weather auto-fill
+  const { data: hive } = useHive(hive_id!);
+  const { data: apiary } = useApiary(hive?.apiary_id ?? "");
+  const { data: weather } = useCurrentWeather(
+    apiary?.latitude,
+    apiary?.longitude,
+  );
+
+  const weatherFilled = useRef(false);
+  const [weatherAutoFilled, setWeatherAutoFilled] = useState(false);
+
+  useEffect(() => {
+    if (!weather || weatherFilled.current) return;
+    // Only prefill if user hasn't already entered values
+    if (s.tempC === "" && s.humidityPercent === "" && s.conditions === null) {
+      const displayTemp = units.toDisplayTemp(weather.temp_c);
+      set("tempC", String(Math.round(displayTemp)));
+      set("humidityPercent", String(weather.humidity_percent));
+      set("conditions", weather.conditions);
+      weatherFilled.current = true;
+      setWeatherAutoFilled(true);
+    }
+  }, [weather]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit() {
     try {
@@ -179,6 +229,7 @@ export default function CreateInspectionScreen() {
         onSubmit={handleSubmit}
         tempLabel={units.tempLabel}
         system={units.system}
+        weatherAutoFilled={weatherAutoFilled}
       />
     </KeyboardAvoidingView>
   );

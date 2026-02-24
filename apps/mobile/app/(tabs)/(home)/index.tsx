@@ -14,10 +14,13 @@ import { EmptyState } from "../../../components/EmptyState";
 import { ErrorDisplay } from "../../../components/ErrorDisplay";
 import { HexIcon } from "../../../components/HexIcon";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
+import { WeatherInsightCard } from "../../../components/WeatherInsightCard";
 import { useApiaries } from "../../../hooks/useApiaries";
 import { useHives } from "../../../hooks/useHives";
 import { useTasks } from "../../../hooks/useTasks";
+import { useWeatherForecast } from "../../../hooks/useWeather";
 import type { Apiary, Hive } from "../../../services/api";
+import { generateInsights } from "../../../utils/weatherInsights";
 import {
   useStyles,
   useTheme,
@@ -430,6 +433,24 @@ export default function ApiariesScreen() {
   const { data: tasks } = useTasks();
   const s = useStyles(createLayoutStyles);
 
+  // Use the first apiary with location for weather forecast
+  const locatedApiary = useMemo(
+    () => (apiaries ?? []).find((a) => a.latitude != null && a.longitude != null),
+    [apiaries],
+  );
+  const { data: forecast } = useWeatherForecast(
+    locatedApiary?.latitude,
+    locatedApiary?.longitude,
+  );
+
+  const insights = useMemo(
+    () =>
+      forecast
+        ? generateInsights(forecast.daily, tasks ?? [], apiaries ?? [])
+        : [],
+    [forecast, tasks, apiaries],
+  );
+
   if (isLoading) {
     return <LoadingSpinner fullscreen />;
   }
@@ -459,6 +480,7 @@ export default function ApiariesScreen() {
         totalHives={allHives.length}
         pendingTasks={pendingTasks}
       />
+      <WeatherInsightCard insights={insights} />
       <QuickActions hives={allHives} onInspect={handleInspect} />
       {allApiaries.length > 0 && (
         <SectionHeading icon={MapPin} title="Your Apiaries" />
