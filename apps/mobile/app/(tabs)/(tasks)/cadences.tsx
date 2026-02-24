@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useMemo } from "react";
 import { FlatList, Pressable, Switch, Text, View } from "react-native";
 
 import { EmptyState } from "../../../components/EmptyState";
@@ -265,8 +265,9 @@ export default function CadencesScreen() {
   const updateCadence = useUpdateCadence();
   const styles = useStyles(createLayoutStyles);
 
-  const templateMap = new Map(
-    (catalog ?? []).map((t) => [t.key, t]),
+  const templateMap = useMemo(
+    () => new Map((catalog ?? []).map((t) => [t.key, t])),
+    [catalog],
   );
 
   const handleInit = useCallback(() => {
@@ -306,10 +307,13 @@ export default function CadencesScreen() {
   }
 
   // Sort: active first, then by cadence_key
-  const sorted = [...cadences].sort((a, b) => {
-    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
-    return a.cadence_key.localeCompare(b.cadence_key);
-  });
+  const sorted = useMemo(
+    () => [...cadences].sort((a, b) => {
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return a.cadence_key.localeCompare(b.cadence_key);
+    }),
+    [cadences],
+  );
 
   return (
     <View style={styles.container}>

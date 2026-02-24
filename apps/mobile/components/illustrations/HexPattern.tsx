@@ -66,7 +66,7 @@ export function HexPattern({ width = 200, height = 200 }: Props) {
     { cx: 100 - R * 1.5, cy: 100 - H * 1.5, fill: "none", strokeOnly: true },
     { cx: 100 + R * 3, cy: 100, fill: "none", strokeOnly: true },
     { cx: 100 - R * 3, cy: 100, fill: colors.forestPale, strokeOnly: false },
-  ], [colors, R, H]);
+  ], [colors]);
 
   const cells = hexagons.map((hex, i) => (
     <HexCell

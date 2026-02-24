@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../services/api";
-import type { UserUpdate } from "../services/api";
+import type { UserUpdate, DeleteAccountInput } from "../services/api";
 
 export function useCurrentUser() {
   return useQuery({
@@ -26,5 +26,11 @@ export function useUpdatePreferences() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user", "me"] });
     },
+  });
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: (data: DeleteAccountInput) => api.deleteMe(data),
   });
 }

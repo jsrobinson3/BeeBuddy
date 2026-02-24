@@ -21,6 +21,7 @@ import {
   pickerStyles,
   errorStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 const TREATMENT_TYPES: { label: string; value: string }[] = [
   { label: "Varroa Treatment", value: "varroa_treatment" },
@@ -76,8 +77,8 @@ export default function CreateTreatmentScreen() {
         effectiveness_notes: effectivenessNotes.trim() || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create treatment");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

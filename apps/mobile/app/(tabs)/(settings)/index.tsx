@@ -277,6 +277,7 @@ function AccountSection() {
 export default function SettingsScreen() {
   const { logout } = useAuthStore();
   const layout = useStyles(createLayoutStyles);
+  const router = useRouter();
 
   const logoutPressStyle = ({ pressed }: { pressed: boolean }) => [
     layout.logoutButton,
@@ -305,6 +306,15 @@ export default function SettingsScreen() {
         <SettingsItem title="Version" subtitle="0.1.0" />
         <SettingsItem title="Open Source Licenses" />
         <SettingsItem title="Privacy Policy" />
+      </View>
+
+      <View style={layout.section}>
+        <Text style={layout.sectionTitle}>Danger Zone</Text>
+        <SettingsItem
+          title="Delete Account"
+          subtitle="Permanently delete your account"
+          onPress={() => router.push("/settings/delete-account" as any)}
+        />
       </View>
 
       <Pressable style={logoutPressStyle} onPress={logout}>

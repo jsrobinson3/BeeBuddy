@@ -43,23 +43,24 @@ export const typography = {
   },
 } as const;
 
+/**
+ * Shadow tokens — shadowColor is intentionally omitted so components
+ * can supply the theme-aware `c.shadowColor` via their createStyles factory.
+ */
 export const shadows = {
   card: {
-    shadowColor: "#3f4a30",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
   },
   cardHover: {
-    shadowColor: "#3f4a30",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
   },
   fab: {
-    shadowColor: "#3f4a30",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 4,

@@ -7,6 +7,7 @@ class DeleteAccountRequest(BaseModel):
     """Request to delete account (requires password confirmation)."""
 
     password: str
+    delete_data: bool = False
 
 
 class CancelDeletionRequest(BaseModel):

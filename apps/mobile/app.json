@@ -17,7 +17,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.beebuddyai.app",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "BeeBuddy uses your location to set apiary coordinates and provide local weather-based task recommendations."
+        "NSLocationWhenInUseUsageDescription": "BeeBuddy uses your location to set apiary coordinates and provide local weather-based task recommendations.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -26,7 +27,11 @@
         "backgroundColor": "#3f4a30"
       },
       "package": "com.beebuddyai.app",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",

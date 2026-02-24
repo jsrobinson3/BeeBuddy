@@ -13,11 +13,7 @@ import { useHarvests } from "../../../../hooks/useHarvests";
 import { useUnits } from "../../../../hooks/useUnits";
 import type { Inspection, Queen, Treatment, HiveEvent, Harvest } from "../../../../services/api";
 import { useStyles, typography, type ThemeColors } from "../../../../theme";
-
-function formatDate(dateStr?: string | null) {
-  if (!dateStr) return "N/A";
-  return new Date(dateStr).toLocaleDateString();
-}
+import { formatDate } from "../../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
   container: { flex: 1, backgroundColor: c.bgPrimary },

@@ -7,6 +7,7 @@ import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { useTasks, useUpdateTask } from "../../../hooks/useTasks";
 import type { Task } from "../../../services/api";
 import { useStyles, useTheme, typography, type ThemeColors } from "../../../theme";
+import { formatDate } from "../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
   container: {
@@ -79,11 +80,6 @@ const createStyles = (c: ThemeColors) => ({
   },
 });
 
-function formatDueDate(dateStr?: string | null): string {
-  if (!dateStr) return "No due date";
-  return new Date(dateStr).toLocaleDateString();
-}
-
 function TaskCard({
   task,
   onToggleComplete,
@@ -117,7 +113,7 @@ function TaskCard({
           {task.title}
         </Text>
         <View style={styles.cardMeta}>
-          <Text style={styles.dueDate}>{formatDueDate(task.due_date)}</Text>
+          <Text style={styles.dueDate}>{formatDate(task.due_date)}</Text>
         </View>
       </View>
     </Pressable>
@@ -159,7 +155,7 @@ export default function TasksScreen() {
 
   function handleToggle(task: Task) {
     const newCompletedAt = task.completed_at ? null : new Date().toISOString();
-    updateTask.mutateAsync({
+    updateTask.mutate({
       id: task.id,
       data: { completed_at: newCompletedAt },
     });

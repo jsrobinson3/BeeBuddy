@@ -30,6 +30,8 @@ export type ThemeColors = {
   // Gradient
   gradientStart: string;
   gradientEnd: string;
+  textOnGradient: string;
+  textOnGradientMuted: string;
 
   // Borders
   border: string;
@@ -90,6 +92,8 @@ export const lightTheme: ThemeColors = {
 
   gradientStart: palette.forest.dark,
   gradientEnd: palette.honey.pale,
+  textOnGradient: palette.comb.white,
+  textOnGradientMuted: "rgba(250, 250, 247, 0.8)",
 
   border: "#ddd8cc",
   borderLight: "#eae7df",
@@ -122,56 +126,58 @@ export const lightTheme: ThemeColors = {
 };
 
 export const darkTheme: ThemeColors = {
-  bgPrimary: "#1a1e15",
-  bgSurface: "#252b1e",
-  bgElevated: "#2f3727",
-  bgInput: "#2f3727",
-  bgInputSoft: "#2f3727",
+  bgPrimary: palette.dark.bg,
+  bgSurface: palette.dark.bgElevated,
+  bgElevated: palette.dark.bgSurface,
+  bgInput: palette.dark.bgSurface,
+  bgInputSoft: palette.dark.bgSurface,
 
   textPrimary: palette.comb.cream,
-  textSecondary: "#b3b99f",
-  textMuted: "#7a7f6e",
+  textSecondary: palette.dark.textSecondary,
+  textMuted: palette.dark.textMuted,
   textOnPrimary: palette.forest.DEFAULT,
   textOnDanger: palette.white,
 
   honey: palette.honey.DEFAULT,
   honeyLight: palette.honey.light,
-  honeyPale: "#3a3520",
+  honeyPale: palette.dark.honeyPale,
   honeyDark: palette.honey.dark,
   forest: palette.forest.DEFAULT,
   forestLight: palette.forest.light,
-  forestPale: "#353d29",
+  forestPale: palette.dark.forestPale,
   forestDark: palette.forest.dark,
 
-  gradientStart: "#0f1209",
-  gradientEnd: "#3a3520",
+  gradientStart: palette.dark.gradientStart,
+  gradientEnd: palette.dark.gradientEnd,
+  textOnGradient: palette.comb.white,
+  textOnGradientMuted: "rgba(250, 250, 247, 0.8)",
 
   border: palette.forest.DEFAULT,
-  borderLight: "#353d29",
+  borderLight: palette.dark.borderLight,
   borderFocus: palette.honey.DEFAULT,
 
   primaryFill: palette.honey.DEFAULT,
   primaryFillPressed: palette.honey.dark,
   secondaryFill: palette.transparent,
-  selectedBg: "#3a3520",
+  selectedBg: palette.dark.selectedBg,
   selectedBorder: palette.honey.DEFAULT,
   selectedText: palette.honey.DEFAULT,
 
-  success: "#5a9c4f",
-  warning: "#c8890a",
-  danger: "#e04a3a",
-  info: "#5b8ab5",
+  success: palette.dark.success,
+  warning: palette.dark.warning,
+  danger: palette.dark.danger,
+  info: palette.dark.info,
 
-  shadowColor: "#000000",
-  placeholder: "#7a7f6e",
+  shadowColor: palette.black,
+  placeholder: palette.dark.placeholder,
   switchTrackFalse: palette.forest.DEFAULT,
   switchTrackTrue: palette.honey.DEFAULT,
   switchThumb: palette.comb.cream,
 
-  tabBarBg: "#1a1e15",
+  tabBarBg: palette.dark.bg,
   tabBarActiveTint: palette.honey.DEFAULT,
-  tabBarInactiveTint: "#b3b99f",
-  headerBackground: "#1a1e15",
+  tabBarInactiveTint: palette.dark.tabBarInactiveTint,
+  headerBackground: palette.dark.bg,
   headerTint: palette.comb.cream,
   statusBarStyle: "dark",
 };

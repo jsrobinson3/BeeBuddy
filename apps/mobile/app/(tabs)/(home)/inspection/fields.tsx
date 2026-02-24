@@ -8,6 +8,7 @@ import type {
   InspectionObservations,
   WeatherSnapshot,
 } from "../../../../services/api";
+import { typography, type ThemeColors } from "../../../../theme";
 
 const POPULATION_OPTIONS = [
   { label: "Low", value: "low" },
@@ -306,6 +307,65 @@ export function buildWeather(s: FormState): WeatherSnapshot | undefined {
     humidity_percent: hum,
     conditions: s.conditions,
   };
+}
+
+export type TemplateLevel = FormState["template"];
+
+export const TEMPLATE_OPTIONS: TemplateLevel[] = [
+  "Beginner",
+  "Intermediate",
+  "Advanced",
+];
+
+export const inspectionFormStyles = (c: ThemeColors) => ({
+  container: {
+    flex: 1,
+    backgroundColor: c.bgPrimary,
+  },
+  content: {
+    padding: 16,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontFamily: typography.families.displaySemiBold,
+    color: c.textPrimary,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  submitButton: {
+    backgroundColor: c.primaryFill,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center" as const,
+    marginTop: 8,
+  },
+  submitDisabled: {
+    opacity: 0.6,
+  },
+  submitText: {
+    color: c.textOnPrimary,
+    fontSize: 16,
+    fontFamily: typography.families.bodySemiBold,
+  },
+});
+
+export function ObservationFields({
+  s,
+  set,
+}: {
+  s: FormState;
+  set: FormSetter;
+}) {
+  const isInt =
+    s.template === "Intermediate" || s.template === "Advanced";
+  const isAdv = s.template === "Advanced";
+  return (
+    <>
+      <BeginnerFields s={s} set={set} />
+      {isInt && <IntermediateFields s={s} set={set} />}
+      {isAdv && <AdvancedFields s={s} set={set} />}
+    </>
+  );
 }
 
 function capitalize(s: string): FormState["template"] {

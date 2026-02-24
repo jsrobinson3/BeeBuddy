@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { Platform } from "react-native";
 import { api } from "../services/api";
+import { API_BASE_URL } from "../services/config";
+import { queryClient } from "../services/queryClient";
 
 const isWeb = Platform.OS === "web";
 
@@ -8,9 +10,6 @@ const isWeb = Platform.OS === "web";
 const SecureStore: typeof import("expo-secure-store") | null = isWeb
   ? null
   : require("expo-secure-store");
-
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
 
 const TOKEN_KEY = "beebuddy_access_token";
 const REFRESH_TOKEN_KEY = "beebuddy_refresh_token";
@@ -44,10 +43,13 @@ type AuthActions = {
 // ---------------------------------------------------------------------------
 
 function parseUser(data: Record<string, unknown>): User {
+  if (typeof data.id !== "string" || typeof data.email !== "string") {
+    throw new Error("Invalid user data");
+  }
   return {
-    id: data.id as string,
+    id: data.id,
+    email: data.email,
     name: (data.name as string) ?? null,
-    email: data.email as string,
     experience_level: (data.experience_level as string) ?? null,
   };
 }
@@ -87,6 +89,18 @@ async function saveTokens(access: string, refresh: string): Promise<void> {
 async function clearTokens(): Promise<void> {
   await SecureStore!.deleteItemAsync(TOKEN_KEY);
   await SecureStore!.deleteItemAsync(REFRESH_TOKEN_KEY);
+}
+
+/** Invalidate tokens server-side and clear SecureStore (native only). */
+async function invalidateAndClearTokens(
+  accessToken: string | null,
+  refreshToken: string | null,
+): Promise<void> {
+  await authFetch("/api/v1/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+  }).catch(() => {});
+  await clearTokens();
 }
 
 /** Read tokens from SecureStore (native only). */
@@ -188,13 +202,14 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
       if (isWeb) {
         await authFetch("/api/v1/auth/logout", { method: "POST" });
       } else {
-        await clearTokens();
+        await invalidateAndClearTokens(get().token, get().refreshToken);
       }
     } catch {
       // Network error or server down — still clear client state below
     } finally {
       api.setToken(undefined);
       set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
+      queryClient.clear();
     }
   },
 

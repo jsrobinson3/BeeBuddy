@@ -96,6 +96,7 @@ async def delete_me(
     # Store the Celery task ID so we can revoke it on cancel
     prefs = current_user.preferences or {}
     prefs["_deletion_task_id"] = task_result.id
+    prefs["_delete_data"] = data.delete_data
     current_user.preferences = prefs
 
     await db.commit()

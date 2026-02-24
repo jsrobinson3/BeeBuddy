@@ -13,6 +13,7 @@ import { FormInput } from "../../../components/FormInput";
 import { useCurrentUser, useUpdateUser } from "../../../hooks/useUser";
 import { useAuthStore } from "../../../stores/auth";
 import { useStyles, typography, type ThemeColors } from "../../../theme";
+import { getErrorMessage } from "../../../utils/getErrorMessage";
 
 const createStyles = (c: ThemeColors) => ({
   container: {
@@ -129,8 +130,8 @@ function ProfileForm() {
       await updateUser.mutateAsync(data);
       await fetchUser();
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to update profile");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

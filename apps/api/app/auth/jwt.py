@@ -11,13 +11,18 @@ ALGORITHM = "HS256"
 
 
 def create_access_token(data: dict) -> str:
-    """Create a short-lived access token."""
+    """Create a short-lived access token with a unique jti for revocation."""
     settings = get_settings()
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(
         minutes=settings.access_token_expire_minutes,
     )
-    to_encode.update({"exp": expire, "iat": datetime.now(UTC), "type": "access"})
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.now(UTC),
+        "type": "access",
+        "jti": uuid.uuid4().hex,
+    })
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 

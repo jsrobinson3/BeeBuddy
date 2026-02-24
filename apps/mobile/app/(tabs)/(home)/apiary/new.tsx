@@ -27,6 +27,7 @@ import {
   formContainerStyles,
   formSubmitStyles,
 } from "../../../../theme";
+import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 const PRECISION_OPTIONS = [
   { label: "Exact (~11 m)", value: "exact" },
@@ -160,8 +161,8 @@ export default function CreateApiaryScreen() {
         notes: notes.trim() || undefined,
       });
       router.back();
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Failed to create apiary");
+    } catch (err: unknown) {
+      Alert.alert("Error", getErrorMessage(err));
     }
   }
 

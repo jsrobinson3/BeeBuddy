@@ -1,174 +1,19 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
+
 import { GradientHeader } from "../../components/GradientHeader";
-import { useAuthStore } from "../../stores/auth";
 import {
-  useStyles,
-  useTheme,
-  typography,
-  radii,
-  type ThemeColors,
-} from "../../theme";
+  AuthHeader,
+  AuthInput,
+  AuthLinkButton,
+  AuthSubmitButton,
+} from "../../components/auth";
+import { useAuthStore } from "../../stores/auth";
+import { getErrorMessage } from "../../utils/getErrorMessage";
+import { useStyles, typography, type ThemeColors } from "../../theme";
 
-/* ---------- Header styles & component ---------- */
-
-const createHeaderStyles = (c: ThemeColors) => ({
-  content: {
-    alignItems: "center" as const,
-    paddingBottom: 40,
-  },
-  logo: {
-    fontSize: 42,
-    fontFamily: typography.families.display,
-  },
-  logoHoney: {
-    color: c.honey,
-  },
-  logoLight: {
-    color: "#fafaf7",
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: typography.families.body,
-    color: "rgba(250, 250, 247, 0.8)",
-    marginTop: 8,
-  },
-});
-
-function HeaderContent() {
-  const s = useStyles(createHeaderStyles);
-  return (
-    <View style={s.content}>
-      <Text style={s.logo}>
-        <Text style={s.logoHoney}>Bee</Text>
-        <Text style={s.logoLight}>Buddy</Text>
-      </Text>
-      <Text style={s.subtitle}>Create your account</Text>
-    </View>
-  );
-}
-
-/* ---------- Input styles & component ---------- */
-
-const createInputStyles = (c: ThemeColors) => ({
-  input: {
-    backgroundColor: c.bgInputSoft,
-    borderRadius: radii.xl,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: typography.families.body,
-    color: c.textPrimary,
-    marginBottom: 12,
-  },
-});
-
-function AuthInput(props: React.ComponentProps<typeof TextInput>) {
-  const s = useStyles(createInputStyles);
-  const { colors } = useTheme();
-  return (
-    <TextInput
-      style={s.input}
-      placeholderTextColor={colors.placeholder}
-      {...props}
-    />
-  );
-}
-
-/* ---------- Button styles & component ---------- */
-
-const createButtonStyles = (c: ThemeColors) => ({
-  button: {
-    backgroundColor: c.primaryFill,
-    borderRadius: radii.xl,
-    padding: 16,
-    alignItems: "center" as const,
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: c.textOnPrimary,
-    fontSize: 18,
-    fontFamily: typography.families.bodySemiBold,
-  },
-});
-
-function SubmitButton({
-  loading,
-  onPress,
-}: {
-  loading: boolean;
-  onPress: () => void;
-}) {
-  const s = useStyles(createButtonStyles);
-  const { colors } = useTheme();
-  const content = loading
-    ? <ActivityIndicator color={colors.textOnPrimary} />
-    : <Text style={s.buttonText}>Create Account</Text>;
-
-  return (
-    <TouchableOpacity
-      style={[s.button, loading && s.buttonDisabled]}
-      onPress={onPress}
-      disabled={loading}
-      activeOpacity={0.8}
-    >
-      {content}
-    </TouchableOpacity>
-  );
-}
-
-/* ---------- Link styles & component ---------- */
-
-const createLinkStyles = (c: ThemeColors) => ({
-  link: {
-    marginTop: 24,
-    marginBottom: 32,
-    alignItems: "center" as const,
-  },
-  linkText: {
-    color: c.textSecondary,
-    fontSize: 14,
-    fontFamily: typography.families.body,
-  },
-  linkAccent: {
-    color: c.honey,
-    fontFamily: typography.families.bodySemiBold,
-  },
-});
-
-function SignInLink({
-  loading,
-  onPress,
-}: {
-  loading: boolean;
-  onPress: () => void;
-}) {
-  const s = useStyles(createLinkStyles);
-  return (
-    <TouchableOpacity
-      style={s.link}
-      onPress={onPress}
-      disabled={loading}
-    >
-      <Text style={s.linkText}>
-        Already have an account?{" "}
-        <Text style={s.linkAccent}>Sign In</Text>
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-/* ---------- Form section ---------- */
+/* ---------- Styles ---------- */
 
 const createFormStyles = (c: ThemeColors) => ({
   formArea: {
@@ -184,10 +29,15 @@ const createFormStyles = (c: ThemeColors) => ({
     textAlign: "center" as const,
     marginBottom: 16,
   },
+  scrollContent: {
+    flexGrow: 1 as const,
+    backgroundColor: c.bgPrimary,
+  },
 });
 
-interface FormSectionProps {
-  error: string;
+/* ---------- Field inputs (extracted to keep RegisterForm <= 50 lines) --- */
+
+interface FieldsProps {
   name: string;
   setName: (v: string) => void;
   email: string;
@@ -197,15 +47,11 @@ interface FormSectionProps {
   confirmPassword: string;
   setConfirmPassword: (v: string) => void;
   loading: boolean;
-  onSubmit: () => void;
-  onNavigate: () => void;
 }
 
-function FormSection(p: FormSectionProps) {
-  const s = useStyles(createFormStyles);
+function RegisterFields(p: FieldsProps) {
   return (
-    <View style={s.formArea}>
-      {p.error ? <Text style={s.error}>{p.error}</Text> : null}
+    <>
       <AuthInput
         placeholder="Name (optional)"
         value={p.name}
@@ -236,25 +82,55 @@ function FormSection(p: FormSectionProps) {
         secureTextEntry
         editable={!p.loading}
       />
-      <SubmitButton loading={p.loading} onPress={p.onSubmit} />
-      <SignInLink loading={p.loading} onPress={p.onNavigate} />
+    </>
+  );
+}
+
+/* ---------- Form sub-component (keeps JSX nesting <= 4) ---------- */
+
+interface FormProps extends FieldsProps {
+  error: string;
+  onSubmit: () => void;
+  onNavigate: () => void;
+}
+
+function RegisterForm(p: FormProps) {
+  const s = useStyles(createFormStyles);
+  return (
+    <View style={s.formArea}>
+      {p.error ? <Text style={s.error}>{p.error}</Text> : null}
+      <RegisterFields
+        name={p.name}
+        setName={p.setName}
+        email={p.email}
+        setEmail={p.setEmail}
+        password={p.password}
+        setPassword={p.setPassword}
+        confirmPassword={p.confirmPassword}
+        setConfirmPassword={p.setConfirmPassword}
+        loading={p.loading}
+      />
+      <AuthSubmitButton
+        label="Create Account"
+        loading={p.loading}
+        onPress={p.onSubmit}
+      />
+      <AuthLinkButton
+        prompt="Already have an account?"
+        action="Sign In"
+        loading={p.loading}
+        onPress={p.onNavigate}
+      />
     </View>
   );
 }
 
-/* ---------- Screen styles & component ---------- */
-
-const createScreenStyles = (c: ThemeColors) => ({
-  scrollContent: {
-    flexGrow: 1 as const,
-    backgroundColor: c.bgPrimary,
-  },
-});
+/* ---------- Screen ---------- */
 
 export default function RegisterScreen() {
   const router = useRouter();
   const register = useAuthStore((s) => s.register);
-  const s = useStyles(createScreenStyles);
+  const s = useStyles(createFormStyles);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -282,9 +158,9 @@ export default function RegisterScreen() {
     setLoading(true);
     try {
       await register(name.trim(), email.trim(), password);
-    } catch (e: any) {
+    } catch (err: unknown) {
       setError(
-        e.message || "Registration failed. Please try again."
+        getErrorMessage(err) || "Registration failed. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -298,9 +174,9 @@ export default function RegisterScreen() {
       bounces={false}
     >
       <GradientHeader height={260}>
-        <HeaderContent />
+        <AuthHeader subtitle="Create your account" />
       </GradientHeader>
-      <FormSection
+      <RegisterForm
         error={error}
         name={name}
         setName={setName}

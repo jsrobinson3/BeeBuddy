@@ -1,248 +1,20 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
+
 import { GradientHeader } from "../../components/GradientHeader";
-import { useAuthStore } from "../../stores/auth";
 import {
-  useStyles,
-  useTheme,
-  typography,
-  radii,
-  type ThemeColors,
-} from "../../theme";
+  AuthHeader,
+  AuthInput,
+  AuthLinkButton,
+  AuthSocialSection,
+  AuthSubmitButton,
+} from "../../components/auth";
+import { useAuthStore } from "../../stores/auth";
+import { getErrorMessage } from "../../utils/getErrorMessage";
+import { useStyles, typography, type ThemeColors } from "../../theme";
 
-/* ---------- Header styles & component ---------- */
-
-const createHeaderStyles = (c: ThemeColors) => ({
-  content: {
-    alignItems: "center" as const,
-    paddingBottom: 40,
-  },
-  logo: {
-    fontSize: 42,
-    fontFamily: typography.families.display,
-  },
-  logoHoney: {
-    color: c.honey,
-  },
-  logoLight: {
-    color: "#fafaf7",
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: typography.families.body,
-    color: "rgba(250, 250, 247, 0.8)",
-    marginTop: 8,
-  },
-});
-
-function HeaderContent() {
-  const s = useStyles(createHeaderStyles);
-  return (
-    <View style={s.content}>
-      <Text style={s.logo}>
-        <Text style={s.logoHoney}>Bee</Text>
-        <Text style={s.logoLight}>Buddy</Text>
-      </Text>
-      <Text style={s.subtitle}>Your beekeeping companion</Text>
-    </View>
-  );
-}
-
-/* ---------- Input styles & component ---------- */
-
-const createInputStyles = (c: ThemeColors) => ({
-  input: {
-    backgroundColor: c.bgInputSoft,
-    borderRadius: radii.xl,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: typography.families.body,
-    color: c.textPrimary,
-    marginBottom: 12,
-  },
-});
-
-function AuthInput(props: React.ComponentProps<typeof TextInput>) {
-  const s = useStyles(createInputStyles);
-  const { colors } = useTheme();
-  return (
-    <TextInput
-      style={s.input}
-      placeholderTextColor={colors.placeholder}
-      {...props}
-    />
-  );
-}
-
-/* ---------- Button styles & component ---------- */
-
-const createButtonStyles = (c: ThemeColors) => ({
-  button: {
-    backgroundColor: c.primaryFill,
-    borderRadius: radii.xl,
-    padding: 16,
-    alignItems: "center" as const,
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    color: c.textOnPrimary,
-    fontSize: 18,
-    fontFamily: typography.families.bodySemiBold,
-  },
-});
-
-function SubmitButton({
-  loading,
-  onPress,
-}: {
-  loading: boolean;
-  onPress: () => void;
-}) {
-  const s = useStyles(createButtonStyles);
-  const { colors } = useTheme();
-  const content = loading
-    ? <ActivityIndicator color={colors.textOnPrimary} />
-    : <Text style={s.buttonText}>Sign In</Text>;
-
-  return (
-    <TouchableOpacity
-      style={[s.button, loading && s.buttonDisabled]}
-      onPress={onPress}
-      disabled={loading}
-      activeOpacity={0.8}
-    >
-      {content}
-    </TouchableOpacity>
-  );
-}
-
-/* ---------- Social styles & components ---------- */
-
-const createSocialStyles = (c: ThemeColors) => ({
-  dividerRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1 as const,
-    height: 1,
-    backgroundColor: c.border,
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    fontSize: 13,
-    fontFamily: typography.families.body,
-    color: c.textMuted,
-  },
-  socialRow: {
-    flexDirection: "row" as const,
-    justifyContent: "center" as const,
-    gap: 16,
-  },
-  socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.xl,
-    backgroundColor: c.bgInputSoft,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  },
-  socialLabel: {
-    fontSize: 18,
-    fontFamily: typography.families.bodySemiBold,
-    color: c.textPrimary,
-  },
-});
-
-function Divider() {
-  const s = useStyles(createSocialStyles);
-  return (
-    <View style={s.dividerRow}>
-      <View style={s.dividerLine} />
-      <Text style={s.dividerText}>Or continue with</Text>
-      <View style={s.dividerLine} />
-    </View>
-  );
-}
-
-function SocialButtons() {
-  const s = useStyles(createSocialStyles);
-  return (
-    <View style={s.socialRow}>
-      <Pressable style={s.socialButton}>
-        <Text style={s.socialLabel}>G</Text>
-      </Pressable>
-      <Pressable style={s.socialButton}>
-        <Text style={s.socialLabel}>A</Text>
-      </Pressable>
-    </View>
-  );
-}
-
-function SocialSection() {
-  return (
-    <View>
-      <Divider />
-      <SocialButtons />
-    </View>
-  );
-}
-
-/* ---------- Link styles & component ---------- */
-
-const createLinkStyles = (c: ThemeColors) => ({
-  link: {
-    marginTop: 24,
-    marginBottom: 32,
-    alignItems: "center" as const,
-  },
-  linkText: {
-    color: c.textSecondary,
-    fontSize: 14,
-    fontFamily: typography.families.body,
-  },
-  linkAccent: {
-    color: c.honey,
-    fontFamily: typography.families.bodySemiBold,
-  },
-});
-
-function RegisterLink({
-  loading,
-  onPress,
-}: {
-  loading: boolean;
-  onPress: () => void;
-}) {
-  const s = useStyles(createLinkStyles);
-  return (
-    <TouchableOpacity
-      style={s.link}
-      onPress={onPress}
-      disabled={loading}
-    >
-      <Text style={s.linkText}>
-        Don't have an account?{" "}
-        <Text style={s.linkAccent}>Register</Text>
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-/* ---------- Form section ---------- */
+/* ---------- Styles ---------- */
 
 const createFormStyles = (c: ThemeColors) => ({
   formArea: {
@@ -258,9 +30,15 @@ const createFormStyles = (c: ThemeColors) => ({
     textAlign: "center" as const,
     marginBottom: 16,
   },
+  scrollContent: {
+    flexGrow: 1 as const,
+    backgroundColor: c.bgPrimary,
+  },
 });
 
-interface FormSectionProps {
+/* ---------- Form sub-component (keeps JSX nesting <= 4) ---------- */
+
+interface FormProps {
   error: string;
   email: string;
   setEmail: (v: string) => void;
@@ -271,7 +49,7 @@ interface FormSectionProps {
   onNavigate: () => void;
 }
 
-function FormSection(p: FormSectionProps) {
+function LoginForm(p: FormProps) {
   const s = useStyles(createFormStyles);
   return (
     <View style={s.formArea}>
@@ -292,26 +70,28 @@ function FormSection(p: FormSectionProps) {
         secureTextEntry
         editable={!p.loading}
       />
-      <SubmitButton loading={p.loading} onPress={p.onSubmit} />
-      <SocialSection />
-      <RegisterLink loading={p.loading} onPress={p.onNavigate} />
+      <AuthSubmitButton
+        label="Sign In"
+        loading={p.loading}
+        onPress={p.onSubmit}
+      />
+      <AuthSocialSection />
+      <AuthLinkButton
+        prompt="Don't have an account?"
+        action="Register"
+        loading={p.loading}
+        onPress={p.onNavigate}
+      />
     </View>
   );
 }
 
-/* ---------- Screen styles & component ---------- */
-
-const createScreenStyles = (c: ThemeColors) => ({
-  scrollContent: {
-    flexGrow: 1 as const,
-    backgroundColor: c.bgPrimary,
-  },
-});
+/* ---------- Screen ---------- */
 
 export default function LoginScreen() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const s = useStyles(createScreenStyles);
+  const s = useStyles(createFormStyles);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -328,8 +108,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email.trim(), password);
-    } catch (e: any) {
-      setError(e.message || "Login failed. Please try again.");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err) || "Login failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -342,9 +122,9 @@ export default function LoginScreen() {
       bounces={false}
     >
       <GradientHeader height={260}>
-        <HeaderContent />
+        <AuthHeader subtitle="Your beekeeping companion" />
       </GradientHeader>
-      <FormSection
+      <LoginForm
         error={error}
         email={email}
         setEmail={setEmail}

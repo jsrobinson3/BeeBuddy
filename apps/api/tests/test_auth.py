@@ -440,6 +440,69 @@ class TestLogoutInvalidation:
         )
         assert resp.status_code == 401
 
+    async def test_native_body_logout_invalidates_tokens(self, client: AsyncClient):
+        """Native clients send tokens in the JSON body instead of cookies."""
+        email = unique_email()
+        await register(client, email)
+
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+        access = body["access_token"]
+        refresh = body["refresh_token"]
+
+        # Logout via body (native-style, no cookies)
+        resp = await client.post(
+            f"{PREFIX}/auth/logout",
+            json={"access_token": access, "refresh_token": refresh},
+        )
+        assert resp.status_code == 204
+
+        # Old refresh token should be rejected
+        resp = await client.post(
+            f"{PREFIX}/auth/refresh",
+            json={"refresh_token": refresh},
+        )
+        assert resp.status_code == 401
+
+        # Old access token should be rejected
+        resp = await client.get(
+            f"{PREFIX}/users/me",
+            headers={"Authorization": f"Bearer {access}"},
+        )
+        assert resp.status_code == 401
+
+    async def test_access_token_rejected_after_logout(self, client: AsyncClient):
+        """Access tokens should be blocklisted after logout (cookie flow)."""
+        email = unique_email()
+        await register(client, email)
+
+        resp = await client.post(f"{PREFIX}/auth/login", json={
+            "email": email,
+            "password": "secret123",
+        })
+        assert resp.status_code == 200
+        access = resp.json()["access_token"]
+        access_cookie = resp.cookies.get("access_token")
+        refresh_cookie = resp.cookies.get("refresh_token")
+
+        # Logout with cookies
+        resp = await client.post(
+            f"{PREFIX}/auth/logout",
+            cookies={"access_token": access_cookie, "refresh_token": refresh_cookie},
+        )
+        assert resp.status_code == 204
+
+        # Access token from body should be rejected too (same JTI)
+        resp = await client.get(
+            f"{PREFIX}/users/me",
+            headers={"Authorization": f"Bearer {access}"},
+        )
+        assert resp.status_code == 401
+
     async def test_login_works_after_logout(self, client: AsyncClient):
         """Full cycle: login → logout → login again with a different account."""
         email_a = unique_email()
