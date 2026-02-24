@@ -12,6 +12,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@nozbe/watermelondb": "^0.28.0",
     "@react-native-community/datetimepicker": "^8.6.0",
     "@tanstack/react-query": "^5.90.21",
     "expo": "~54.0.33",
