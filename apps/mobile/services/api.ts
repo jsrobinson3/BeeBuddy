@@ -8,6 +8,7 @@ export type {
   RegisterInput,
   RefreshInput,
   User,
+  UserPreferences,
   UserUpdate,
   Apiary,
   CreateApiaryInput,
@@ -50,6 +51,8 @@ export type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  DeleteAccountInput,
+  DeleteAccountResponse,
 } from "./api.types";
 
 import type {
@@ -88,12 +91,14 @@ import type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  DeleteAccountInput,
+  DeleteAccountResponse,
 } from "./api.types";
 import { Platform } from "react-native";
 
-const isWeb = Platform.OS === "web";
+import { API_BASE_URL } from "./config";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+const isWeb = Platform.OS === "web";
 
 interface ApiConfig {
   baseUrl: string;
@@ -225,6 +230,13 @@ class ApiClient {
   async updatePreferences(data: Record<string, unknown>) {
     return this.request<User>("/users/me/preferences", {
       method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteMe(data: DeleteAccountInput) {
+    return this.request<DeleteAccountResponse>("/users/me", {
+      method: "DELETE",
       body: JSON.stringify(data),
     });
   }
@@ -545,11 +557,21 @@ class ApiClient {
 export const api = new ApiClient({ baseUrl: API_BASE_URL });
 
 /**
- * Authenticated URL for loading a photo in <Image>.
- * Pass the access token as a query param since React Native's Image
- * component cannot send custom Authorization headers.
+ * Build an expo-image source for a photo.
+ * Uses the presigned S3 URL when available; falls back to the streaming
+ * endpoint with an Authorization header.
+ * Always includes `cacheKey` (stable S3 key) so presigned URL query-param
+ * changes don't bust the disk cache.
  */
-export function getPhotoFileUrl(photoId: string, token?: string): string {
-  const base = `${API_BASE_URL}/api/v1/photos/${photoId}/file`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+export function getPhotoSource(
+  photo: { id: string; s3_key: string; url: string | null },
+  token?: string,
+): { uri: string; cacheKey: string; headers?: Record<string, string> } {
+  if (photo.url) {
+    return { uri: photo.url, cacheKey: photo.s3_key };
+  }
+  const uri = `${API_BASE_URL}/api/v1/photos/${photo.id}/file`;
+  return token
+    ? { uri, cacheKey: photo.s3_key, headers: { Authorization: `Bearer ${token}` } }
+    : { uri, cacheKey: photo.s3_key };
 }

@@ -27,6 +27,12 @@ export interface RefreshInput {
 
 // ─── User Types ───────────────────────────────────────────────────────────────
 
+export interface UserPreferences {
+  [key: string]: unknown;
+  units?: "metric" | "imperial";
+  hemisphere?: "north" | "south" | null;
+}
+
 export interface User {
   id: string;
   name: string | null;
@@ -34,7 +40,7 @@ export interface User {
   experience_level: "beginner" | "intermediate" | "advanced" | null;
   locale: string | null;
   timezone: string;
-  preferences: Record<string, unknown> | null;
+  preferences: UserPreferences | null;
   created_at: string;
 }
 
@@ -209,6 +215,7 @@ export interface InspectionPhoto {
   caption: string | null;
   ai_analysis: Record<string, unknown> | null;
   uploaded_at: string;
+  url: string | null;
 }
 
 export interface Inspection {
@@ -455,5 +462,16 @@ export interface Cadence {
 
 export interface UpdateCadenceInput {
   is_active?: boolean;
+}
+
+// ─── Account Deletion Types ──────────────────────────────────────────────────
+
+export interface DeleteAccountInput {
+  password: string;
+  delete_data?: boolean;
+}
+
+export interface DeleteAccountResponse {
+  detail: string;
 }
 

@@ -6,6 +6,7 @@ export function useInspectionPhotos(inspectionId: string) {
     queryKey: ["photos", inspectionId],
     queryFn: () => api.getInspectionPhotos(inspectionId),
     enabled: !!inspectionId,
+    staleTime: 4 * 60 * 1000, // Refetch before 5-min presigned URL TTL expires
   });
 }
 

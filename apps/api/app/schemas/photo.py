@@ -18,3 +18,4 @@ class PhotoResponse(BaseModel):
     caption: str | None = None
     ai_analysis: dict[str, Any] | None = None
     uploaded_at: datetime
+    url: str | None = None

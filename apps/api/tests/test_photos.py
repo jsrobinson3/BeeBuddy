@@ -1,7 +1,7 @@
-"""Photo upload integration tests.
+"""Photo integration tests.
 
 Requires the API and MinIO to be running (e.g. via docker compose up).
-Tests the authenticated multipart upload / download flow (no presigned URLs).
+Tests the authenticated multipart upload / download flow with presigned URLs.
 """
 
 import uuid
@@ -87,7 +87,7 @@ async def upload_photo(
 
 
 class TestUploadPhoto:
-    async def test_upload_returns_photo_record(self, client: AsyncClient):
+    async def test_upload_returns_photo_record_with_presigned_url(self, client: AsyncClient):
         token, _, _ = await get_tokens(client)
         headers = auth(token)
         _, _, inspection_id = await setup_inspection(client, headers)
@@ -97,6 +97,8 @@ class TestUploadPhoto:
         assert body["s3_key"].endswith(".png")
         assert body["caption"] == "Frame 3"
         assert "id" in body
+        assert body["url"] is not None
+        assert "X-Amz-Signature" in body["url"]
 
     async def test_upload_rejects_invalid_ext(self, client: AsyncClient):
         token, _, _ = await get_tokens(client)
@@ -125,7 +127,7 @@ class TestUploadPhoto:
 
 
 class TestListAndDownloadPhotos:
-    async def test_list_photos(self, client: AsyncClient):
+    async def test_list_photos_includes_presigned_urls(self, client: AsyncClient):
         token, _, _ = await get_tokens(client)
         headers = auth(token)
         _, _, inspection_id = await setup_inspection(client, headers)
@@ -139,6 +141,8 @@ class TestListAndDownloadPhotos:
         assert resp.status_code == 200
         photos = resp.json()
         assert len(photos) == 1
+        assert photos[0]["url"] is not None
+        assert "X-Amz-Signature" in photos[0]["url"]
 
     async def test_download_photo_with_bearer(self, client: AsyncClient):
         token, _, _ = await get_tokens(client)
@@ -155,19 +159,19 @@ class TestListAndDownloadPhotos:
         assert resp.headers["content-type"] == "image/png"
         assert resp.content == TINY_PNG
 
-    async def test_download_photo_with_token_query_param(self, client: AsyncClient):
+    async def test_download_photo_rejects_token_query_param(self, client: AsyncClient):
+        """?token= query param is no longer accepted — clients must use presigned URLs."""
         token, _, _ = await get_tokens(client)
         headers = auth(token)
         _, _, inspection_id = await setup_inspection(client, headers)
 
         photo = await upload_photo(client, headers, inspection_id)
 
-        # No auth header — use ?token= query param instead
+        # No auth header, only ?token= query param — should be rejected
         resp = await client.get(
             f"{PREFIX}/photos/{photo['id']}/file?token={token}",
         )
-        assert resp.status_code == 200
-        assert resp.content == TINY_PNG
+        assert resp.status_code == 401
 
 
 class TestDeletePhoto:
@@ -194,7 +198,7 @@ class TestDeletePhoto:
 
 
 class TestPhotosInInspectionResponse:
-    async def test_photos_included_in_inspection_response(self, client: AsyncClient):
+    async def test_photos_included_in_inspection_response_with_urls(self, client: AsyncClient):
         token, _, _ = await get_tokens(client)
         headers = auth(token)
         _, _, inspection_id = await setup_inspection(client, headers)
@@ -209,6 +213,8 @@ class TestPhotosInInspectionResponse:
         body = resp.json()
         assert "photos" in body
         assert len(body["photos"]) >= 1
+        assert body["photos"][0]["url"] is not None
+        assert "X-Amz-Signature" in body["photos"][0]["url"]
 
 
 class TestNoAuth:

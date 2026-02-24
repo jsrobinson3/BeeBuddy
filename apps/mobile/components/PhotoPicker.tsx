@@ -2,19 +2,22 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
+  Dimensions,
+  Modal,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 
 import { useInspectionPhotos, useUploadPhoto, useDeletePhoto } from "../hooks/usePhotos";
-import { getPhotoFileUrl } from "../services/api";
+import { getPhotoSource } from "../services/api";
 import type { InspectionPhoto } from "../services/api";
 import { useAuthStore } from "../stores/auth";
 import { useStyles, typography, useTheme, type ThemeColors } from "../theme";
+import { getErrorMessage } from "../utils/getErrorMessage";
 
 const createStyles = (c: ThemeColors) => ({
   container: {
@@ -82,25 +85,56 @@ const createStyles = (c: ThemeColors) => ({
     fontStyle: "italic" as const,
     marginTop: 4,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  modalClose: {
+    position: "absolute" as const,
+    top: 56,
+    right: 20,
+    zIndex: 10,
+    padding: 8,
+  },
+  modalCloseText: {
+    fontSize: 18,
+    fontFamily: typography.families.bodySemiBold,
+    color: "#fff",
+  },
+  modalImage: {
+    width: Dimensions.get("window").width - 32,
+    height: Dimensions.get("window").height * 0.7,
+    borderRadius: 12,
+  },
+  modalCaption: {
+    fontSize: 14,
+    fontFamily: typography.families.body,
+    color: "#fff",
+    marginTop: 12,
+    textAlign: "center" as const,
+    paddingHorizontal: 24,
+  },
 });
 
 function Thumbnail({
   photo,
   token,
+  onPress,
   onLongPress,
   styles,
 }: {
   photo: InspectionPhoto;
   token: string | null;
+  onPress: () => void;
   onLongPress: () => void;
   styles: ReturnType<typeof createStyles>;
 }) {
+  const source = getPhotoSource(photo, token ?? undefined);
   return (
-    <Pressable onLongPress={onLongPress} style={styles.thumbnail}>
-      <Image
-        source={{ uri: getPhotoFileUrl(photo.id, token ?? undefined) }}
-        style={styles.thumbnailImage}
-      />
+    <Pressable onPress={onPress} onLongPress={onLongPress} style={styles.thumbnail}>
+      <Image source={source} style={styles.thumbnailImage} contentFit="cover" transition={150} />
       {photo.caption && (
         <Text style={styles.captionText} numberOfLines={1}>
           {photo.caption}
@@ -120,6 +154,7 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
   const uploadPhoto = useUploadPhoto();
   const deletePhoto = useDeletePhoto();
   const [uploading, setUploading] = useState(false);
+  const [viewingPhoto, setViewingPhoto] = useState<InspectionPhoto | null>(null);
   const styles = useStyles(createStyles);
   const { colors } = useTheme();
 
@@ -137,8 +172,8 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
         inspectionId,
         fileUri: asset.uri,
       });
-    } catch (err: any) {
-      Alert.alert("Upload failed", err.message ?? "Could not upload photo");
+    } catch (err: unknown) {
+      Alert.alert("Upload failed", getErrorMessage(err));
     } finally {
       setUploading(false);
     }
@@ -223,6 +258,7 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
               key={photo.id}
               photo={photo}
               token={token}
+              onPress={() => setViewingPhoto(photo)}
               onLongPress={() => handleDelete(photo)}
               styles={styles}
             />
@@ -233,6 +269,30 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
       {photos && photos.length === 0 && !uploading && (
         <Text style={styles.noPhotos}>No photos yet</Text>
       )}
+
+      <Modal
+        visible={viewingPhoto !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingPhoto(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setViewingPhoto(null)}>
+          <Pressable style={styles.modalClose} onPress={() => setViewingPhoto(null)}>
+            <Text style={styles.modalCloseText}>Close</Text>
+          </Pressable>
+          {viewingPhoto && (
+            <Image
+              source={getPhotoSource(viewingPhoto, token ?? undefined)}
+              style={styles.modalImage}
+              contentFit="contain"
+              transition={200}
+            />
+          )}
+          {viewingPhoto?.caption && (
+            <Text style={styles.modalCaption}>{viewingPhoto.caption}</Text>
+          )}
+        </Pressable>
+      </Modal>
     </View>
   );
 }

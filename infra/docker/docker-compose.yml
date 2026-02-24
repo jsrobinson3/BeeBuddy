@@ -123,6 +123,7 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - S3_ENDPOINT_URL=http://minio:9000
+      - S3_PUBLIC_URL=http://localhost:9000
       - S3_BUCKET=beebuddy-photos
       - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_PROVIDER=ollama
@@ -158,6 +159,10 @@ services:
       - LLM_PROVIDER=ollama
       - LLM_MODEL=llama3.2:3b
       - SECRET_KEY=local-dev-secret-do-not-use-in-production
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - S3_ENDPOINT_URL=http://minio:9000
+      - S3_BUCKET=beebuddy-photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,7 +172,13 @@ services:
       - ../../apps/api:/app
       - api_venv:/app/.venv
     command: >
-      sh -c "uv sync --frozen --no-dev && uv run celery -A app.tasks worker --loglevel=info"
+      sh -c "uv sync --frozen --no-dev && uv run celery -A app.tasks worker --loglevel=info -B"
+    healthcheck:
+      test: ["CMD-SHELL", "uv run celery -A app.tasks inspect ping --timeout 10"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
     profiles:
       - workers
 

@@ -13,10 +13,11 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 _client = None
+_public_client = None
 
 
 def _get_client():
-    """Get the boto3 S3 client for all operations."""
+    """Get the boto3 S3 client for internal operations."""
     global _client
     if _client is None:
         settings = get_settings()
@@ -29,6 +30,44 @@ def _get_client():
             config=Config(signature_version="s3v4"),
         )
     return _client
+
+
+def _get_public_client():
+    """Get a boto3 S3 client using the public URL for presigned URLs.
+
+    Falls back to the internal client if s3_public_url is not configured.
+    """
+    global _public_client
+    if _public_client is None:
+        settings = get_settings()
+        if not settings.s3_public_url:
+            return _get_client()
+        _public_client = boto3.client(
+            "s3",
+            endpoint_url=settings.s3_public_url,
+            region_name=settings.s3_region,
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            config=Config(signature_version="s3v4"),
+        )
+    return _public_client
+
+
+def generate_presigned_url(s3_key: str) -> str | None:
+    """Generate a short-lived presigned GET URL for an S3 object.
+
+    Returns None if S3 credentials are not configured.
+    Synchronous — boto3 presigning is local computation, no network call.
+    """
+    settings = get_settings()
+    if not settings.aws_access_key_id:
+        return None
+    client = _get_public_client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.s3_bucket, "Key": s3_key},
+        ExpiresIn=settings.presigned_url_ttl_seconds,
+    )
 
 
 async def ensure_bucket_exists() -> None:
