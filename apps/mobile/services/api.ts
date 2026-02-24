@@ -571,6 +571,34 @@ class ApiClient {
       method: "DELETE",
     });
   }
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+
+  async syncPull(lastPulledAt: number | null) {
+    return this.request<{
+      changes: Record<string, { created: any[]; updated: any[]; deleted: string[] }>;
+      timestamp: number;
+    }>("/sync/pull", {
+      method: "POST",
+      body: JSON.stringify({
+        last_pulled_at: lastPulledAt,
+        schema_version: 1,
+      }),
+    });
+  }
+
+  async syncPush(
+    changes: Record<string, { created: any[]; updated: any[]; deleted: string[] }>,
+    lastPulledAt: number,
+  ) {
+    return this.request<{ ok: boolean }>("/sync/push", {
+      method: "POST",
+      body: JSON.stringify({
+        changes,
+        last_pulled_at: lastPulledAt,
+      }),
+    });
+  }
 }
 
 export const api = new ApiClient({ baseUrl: API_BASE_URL });

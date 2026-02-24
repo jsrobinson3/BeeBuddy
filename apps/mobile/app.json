@@ -53,7 +53,8 @@
           "photosPermission": "BeeBuddy needs access to your photos to attach them to hive inspections.",
           "cameraPermission": "BeeBuddy needs camera access to photograph your hives during inspections."
         }
-      ]
+      ],
+      "@nozbe/watermelondb/expo-plugin"
     ],
     "experiments": {
       "typedRoutes": true

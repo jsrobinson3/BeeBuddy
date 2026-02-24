@@ -3,6 +3,8 @@ import { Platform } from "react-native";
 import { api } from "../services/api";
 import { API_BASE_URL } from "../services/config";
 import { queryClient } from "../services/queryClient";
+import { database } from "../database";
+import { syncDatabase } from "../database/sync";
 
 const isWeb = Platform.OS === "web";
 
@@ -176,6 +178,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     set({ isAuthenticated: true });
     await get().fetchUser();
+    if (!isWeb) syncDatabase();
   },
 
   register: async (name, email, password) => {
@@ -195,6 +198,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     set({ isAuthenticated: true });
     await get().fetchUser();
+    if (!isWeb) syncDatabase();
   },
 
   logout: async () => {
@@ -210,6 +214,13 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
       api.setToken(undefined);
       set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
       queryClient.clear();
+      if (!isWeb) {
+        try {
+          await database.write(() => database.unsafeResetDatabase());
+        } catch {
+          // Database reset failed — not critical
+        }
+      }
     }
   },
 

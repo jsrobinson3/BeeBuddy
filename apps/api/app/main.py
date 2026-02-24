@@ -20,6 +20,7 @@ from app.routers import (
     inspections,
     photos,
     queens,
+    sync,
     tasks,
     treatments,
     users,
@@ -75,3 +76,4 @@ app.include_router(harvests.router, prefix=settings.api_v1_prefix, tags=["harves
 app.include_router(events.router, prefix=settings.api_v1_prefix, tags=["events"])
 app.include_router(tasks.router, prefix=settings.api_v1_prefix, tags=["tasks"])
 app.include_router(cadences.router, prefix=settings.api_v1_prefix, tags=["cadences"])
+app.include_router(sync.router, prefix=settings.api_v1_prefix, tags=["sync"])
