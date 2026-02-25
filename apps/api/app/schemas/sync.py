@@ -1,8 +1,9 @@
 """Pydantic schemas for WatermelonDB sync protocol."""
 
+import math
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TableChanges(BaseModel):
@@ -18,12 +19,20 @@ class SyncPullRequest(BaseModel):
 
     last_pulled_at: float | None = Field(
         None,
+        ge=0,
         description="Unix timestamp (ms) of last successful pull. None for first sync.",
     )
     schema_version: int = Field(1, description="Client schema version")
     migration: dict[str, Any] | None = Field(
         None, description="Migration info if schema changed"
     )
+
+    @field_validator("last_pulled_at")
+    @classmethod
+    def validate_last_pulled_at(cls, v: float | None) -> float | None:
+        if v is not None and not math.isfinite(v):
+            raise ValueError("last_pulled_at must be a finite number")
+        return v
 
 
 class SyncPullResponse(BaseModel):
@@ -38,5 +47,13 @@ class SyncPushRequest(BaseModel):
 
     changes: dict[str, TableChanges]
     last_pulled_at: float = Field(
-        description="Unix timestamp (ms) of last successful pull"
+        ge=0,
+        description="Unix timestamp (ms) of last successful pull",
     )
+
+    @field_validator("last_pulled_at")
+    @classmethod
+    def validate_last_pulled_at(cls, v: float) -> float:
+        if not math.isfinite(v):
+            raise ValueError("last_pulled_at must be a finite number")
+        return v

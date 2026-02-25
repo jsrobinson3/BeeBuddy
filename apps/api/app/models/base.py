@@ -26,6 +26,7 @@ class Base(DeclarativeBase):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+        index=True,
     )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

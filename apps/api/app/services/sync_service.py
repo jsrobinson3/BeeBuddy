@@ -9,7 +9,7 @@ Ownership hierarchy:
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import select, text
@@ -52,6 +52,58 @@ _JSON_FIELDS: dict[str, set[str]] = {
     "inspection_photos": {"ai_analysis"},
 }
 
+# Writable fields per table — only these may be set via setattr on updates.
+# System fields (id, user_id, created_at, deleted_at) are never writable.
+_WRITABLE_FIELDS: dict[str, set[str]] = {
+    "apiaries": {
+        "name", "latitude", "longitude", "city",
+        "country_code", "hex_color", "notes", "archived_at",
+    },
+    "hives": {
+        "apiary_id", "name", "hive_type", "status",
+        "source", "installation_date", "color", "order", "notes",
+    },
+    "queens": {
+        "hive_id", "marking_color", "marking_year", "origin",
+        "status", "race", "quality", "fertilized", "clipped",
+        "birth_date", "introduced_date", "replaced_date", "notes",
+    },
+    "inspections": {
+        "hive_id", "inspected_at", "duration_minutes",
+        "experience_template", "observations", "weather",
+        "impression", "attention", "reminder", "reminder_date",
+        "ai_summary", "notes",
+    },
+    "inspection_photos": {
+        "inspection_id", "s3_key", "caption",
+        "ai_analysis", "url", "uploaded_at",
+    },
+    "treatments": {
+        "hive_id", "treatment_type", "product_name", "method",
+        "started_at", "ended_at", "dosage",
+        "effectiveness_notes", "follow_up_date",
+    },
+    "harvests": {
+        "hive_id", "harvested_at", "weight_kg", "moisture_percent",
+        "honey_type", "flavor_notes", "color",
+        "frames_harvested", "notes",
+    },
+    "events": {
+        "hive_id", "event_type", "occurred_at", "details", "notes",
+    },
+    "tasks": {
+        "hive_id", "apiary_id", "title", "description",
+        "due_date", "recurring", "recurrence_rule", "source",
+        "completed_at", "priority",
+    },
+    "task_cadences": {
+        "hive_id", "cadence_key", "is_active",
+        "last_generated_at", "next_due_date",
+        "custom_interval_days", "custom_season_month",
+        "custom_season_day",
+    },
+}
+
 # WatermelonDB column name → backend column name mappings for fields
 # where the names differ between client schema and server schema.
 _COLUMN_RENAMES: dict[str, dict[str, str]] = {
@@ -91,12 +143,21 @@ def _datetime_to_ms(dt: datetime | None) -> float | None:
     return dt.timestamp() * 1000.0
 
 
+def _date_to_iso(d: date | None) -> str | None:
+    """Convert a date to ISO-8601 string (YYYY-MM-DD) for WatermelonDB."""
+    if d is None:
+        return None
+    return d.isoformat()
+
+
 def _serialize_value(value: Any) -> Any:
     """Serialize a single Python value for WatermelonDB."""
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, datetime):
         return _datetime_to_ms(value)
+    if isinstance(value, date):
+        return _date_to_iso(value)
     if isinstance(value, dict | list):
         return value  # JSONB — already JSON-serializable
     if hasattr(value, "value"):
@@ -175,20 +236,24 @@ async def _pull_table(
     ownership_filter: Any,
     last_pulled_at: datetime | None,
 ) -> dict[str, list]:
-    """Query a single table for changes since last_pulled_at."""
-    created = []
+    """Query a single table for changes since last_pulled_at.
+
+    All live records are returned in the ``updated`` array (never ``created``)
+    because the mobile client uses ``sendCreatedAsUpdated: true``.
+    WatermelonDB requires the server response to match this convention.
+    """
     updated = []
     deleted = []
 
     if last_pulled_at is None:
-        # First sync: return all non-deleted records as "created"
+        # First sync: return all non-deleted records
         stmt = select(model).where(
             model.deleted_at.is_(None),
             ownership_filter,
         )
         result = await db.execute(stmt)
         for record in result.scalars().all():
-            created.append(_serialize_record(table_name, record))
+            updated.append(_serialize_record(table_name, record))
     else:
         # Subsequent sync: return records changed since last_pulled_at
         stmt = select(model).where(
@@ -199,12 +264,10 @@ async def _pull_table(
         for record in result.scalars().all():
             if record.deleted_at is not None:
                 deleted.append(str(record.id))
-            elif record.created_at > last_pulled_at:
-                created.append(_serialize_record(table_name, record))
             else:
                 updated.append(_serialize_record(table_name, record))
 
-    return {"created": created, "updated": updated, "deleted": deleted}
+    return {"created": [], "updated": updated, "deleted": deleted}
 
 
 async def pull_changes(
@@ -229,15 +292,45 @@ async def pull_changes(
     inspection_ids = await _get_user_inspection_ids(db, hive_ids)
 
     # Define ownership filters per table
+    # Use false() equivalent (id IS NULL) when the user has no records
+    _no_hives = Hive.id.is_(None)
+    _no_queens = Queen.id.is_(None)
+    _no_insp = Inspection.id.is_(None)
+    _no_photos = InspectionPhoto.id.is_(None)
+    _no_treat = Treatment.id.is_(None)
+    _no_harv = Harvest.id.is_(None)
+    _no_evt = Event.id.is_(None)
+
     ownership_filters: dict[str, Any] = {
         "apiaries": Apiary.user_id == user_id,
-        "hives": Hive.apiary_id.in_(apiary_ids) if apiary_ids else Hive.id == None,
-        "queens": Queen.hive_id.in_(hive_ids) if hive_ids else Queen.id == None,
-        "inspections": Inspection.hive_id.in_(hive_ids) if hive_ids else Inspection.id == None,
-        "inspection_photos": InspectionPhoto.inspection_id.in_(inspection_ids) if inspection_ids else InspectionPhoto.id == None,
-        "treatments": Treatment.hive_id.in_(hive_ids) if hive_ids else Treatment.id == None,
-        "harvests": Harvest.hive_id.in_(hive_ids) if hive_ids else Harvest.id == None,
-        "events": Event.hive_id.in_(hive_ids) if hive_ids else Event.id == None,
+        "hives": (
+            Hive.apiary_id.in_(apiary_ids) if apiary_ids
+            else _no_hives
+        ),
+        "queens": (
+            Queen.hive_id.in_(hive_ids) if hive_ids
+            else _no_queens
+        ),
+        "inspections": (
+            Inspection.hive_id.in_(hive_ids) if hive_ids
+            else _no_insp
+        ),
+        "inspection_photos": (
+            InspectionPhoto.inspection_id.in_(inspection_ids)
+            if inspection_ids else _no_photos
+        ),
+        "treatments": (
+            Treatment.hive_id.in_(hive_ids) if hive_ids
+            else _no_treat
+        ),
+        "harvests": (
+            Harvest.hive_id.in_(hive_ids) if hive_ids
+            else _no_harv
+        ),
+        "events": (
+            Event.hive_id.in_(hive_ids) if hive_ids
+            else _no_evt
+        ),
         "tasks": Task.user_id == user_id,
         "task_cadences": TaskCadence.user_id == user_id,
     }
@@ -281,6 +374,14 @@ def _prepare_record_data(
             if isinstance(val, (int, float)):
                 data[field_name] = _ms_to_datetime(val)
 
+    # Convert date-only fields (ISO string → date)
+    date_fields = _get_date_fields(table_name)
+    for field_name in date_fields:
+        if field_name in data and data[field_name] is not None:
+            val = data[field_name]
+            if isinstance(val, str):
+                data[field_name] = date.fromisoformat(val)
+
     return data
 
 
@@ -298,6 +399,77 @@ def _get_datetime_fields(table_name: str) -> set[str]:
         "task_cadences": {"last_generated_at"},
     }
     return common | specific.get(table_name, set())
+
+
+def _get_date_fields(table_name: str) -> set[str]:
+    """Return the set of date-only (Date, not DateTime) field names."""
+    specific: dict[str, set[str]] = {
+        "hives": {"installation_date"},
+        "queens": {"birth_date", "introduced_date", "replaced_date"},
+        "treatments": {"follow_up_date"},
+        "tasks": {"due_date"},
+        "task_cadences": {"next_due_date"},
+    }
+    return specific.get(table_name, set())
+
+
+def _parse_uuid(value: str) -> uuid.UUID | None:
+    """Parse a UUID string, returning None on invalid input."""
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _verify_new_record_ownership(
+    table_name: str,
+    data: dict[str, Any],
+    apiary_ids: set[uuid.UUID],
+    hive_ids: set[uuid.UUID],
+    inspection_ids: set[uuid.UUID],
+) -> bool:
+    """Verify FK ownership for a new child record."""
+    if table_name == "hives":
+        fk = _parse_uuid(str(data.get("apiary_id", "")))
+        return fk is not None and fk in apiary_ids
+    if table_name in (
+        "queens", "inspections", "treatments",
+        "harvests", "events",
+    ):
+        fk = _parse_uuid(str(data.get("hive_id", "")))
+        return fk is not None and fk in hive_ids
+    if table_name == "inspection_photos":
+        fk = _parse_uuid(str(data.get("inspection_id", "")))
+        return fk is not None and fk in inspection_ids
+    # Top-level tables (apiaries, tasks, task_cadences) get user_id injected
+    return True
+
+
+def _apply_update(
+    table_name: str,
+    existing: Any,
+    data: dict[str, Any],
+) -> None:
+    """Apply allowlisted field updates to an existing record."""
+    allowed = _WRITABLE_FIELDS.get(table_name, set())
+    for key, value in data.items():
+        if key in allowed and hasattr(existing, key):
+            setattr(existing, key, value)
+    existing.updated_at = datetime.now(UTC)
+
+
+async def _batch_fetch(
+    db: AsyncSession,
+    model: type,
+    record_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, Any]:
+    """Fetch multiple records by ID in a single query."""
+    if not record_ids:
+        return {}
+    result = await db.execute(
+        select(model).where(model.id.in_(record_ids))
+    )
+    return {r.id: r for r in result.scalars().all()}
 
 
 async def push_changes(
@@ -323,62 +495,148 @@ async def push_changes(
         if model is None:
             continue
 
-        # Process created/updated records (sendCreatedAsUpdated means
-        # creates come in the "updated" list too)
-        for raw_record in table_changes.get("created", []) + table_changes.get("updated", []):
-            record_id = raw_record.get("id")
-            if not record_id:
-                continue
-
-            data = _prepare_record_data(table_name, raw_record)
-
-            # Check if record already exists
-            existing = await db.get(model, uuid.UUID(record_id))
-
-            if existing is not None:
-                # Server-wins: skip if server record is newer than client's last pull
-                if last_pulled_at and existing.updated_at > last_pulled_at:
-                    continue
-
-                # Verify ownership before updating
-                if not _verify_ownership(
-                    table_name, existing, user_id, apiary_ids, hive_ids, inspection_ids
-                ):
-                    continue
-
-                # Apply changes
-                for key, value in data.items():
-                    if key in ("id", "created_at"):
-                        continue
-                    if hasattr(existing, key):
-                        setattr(existing, key, value)
-                existing.updated_at = datetime.now(UTC)
-            else:
-                # New record — create it
-                data["id"] = uuid.UUID(record_id)
-                # Inject user_id for tables that require it
-                if table_name in ("apiaries", "tasks", "task_cadences"):
-                    data["user_id"] = user_id
-                # Remove 'id' from data to set it separately
-                new_record = model(**data)
-                db.add(new_record)
-
-        # Process deletions
-        for record_id in table_changes.get("deleted", []):
-            existing = await db.get(model, uuid.UUID(record_id))
-            if existing is None:
-                continue
-
-            if not _verify_ownership(
-                table_name, existing, user_id, apiary_ids, hive_ids, inspection_ids
-            ):
-                continue
-
-            # Soft-delete
-            existing.deleted_at = datetime.now(UTC)
-            existing.updated_at = datetime.now(UTC)
+        await _push_upserts(
+            db, model, table_name, table_changes,
+            user_id, last_pulled_at,
+            apiary_ids, hive_ids, inspection_ids,
+        )
+        await _push_deletions(
+            db, model, table_name, table_changes,
+            user_id, apiary_ids, hive_ids, inspection_ids,
+        )
 
     await db.commit()
+
+
+async def _push_upserts(
+    db: AsyncSession,
+    model: type,
+    table_name: str,
+    table_changes: dict,
+    user_id: uuid.UUID,
+    last_pulled_at: datetime | None,
+    apiary_ids: set[uuid.UUID],
+    hive_ids: set[uuid.UUID],
+    inspection_ids: set[uuid.UUID],
+) -> None:
+    """Process created/updated records for a single table."""
+    raw_records = (
+        table_changes.get("created", [])
+        + table_changes.get("updated", [])
+    )
+    if not raw_records:
+        return
+
+    # W1: Batch-fetch existing records in one query
+    parsed_ids: list[tuple[uuid.UUID, dict]] = []
+    for raw in raw_records:
+        rid = _parse_uuid(str(raw.get("id", "")))
+        if rid is None:
+            continue
+        parsed_ids.append((rid, raw))
+
+    all_ids = [rid for rid, _ in parsed_ids]
+    existing_map = await _batch_fetch(db, model, all_ids)
+
+    for record_id, raw_record in parsed_ids:
+        data = _prepare_record_data(table_name, raw_record)
+        existing = existing_map.get(record_id)
+
+        if existing is not None:
+            _handle_update(
+                table_name, existing, data, last_pulled_at,
+                user_id, apiary_ids, hive_ids, inspection_ids,
+            )
+        else:
+            _handle_create(
+                db, model, table_name, data, record_id,
+                user_id, apiary_ids, hive_ids, inspection_ids,
+            )
+
+
+def _handle_update(
+    table_name: str,
+    existing: Any,
+    data: dict[str, Any],
+    last_pulled_at: datetime | None,
+    user_id: uuid.UUID,
+    apiary_ids: set[uuid.UUID],
+    hive_ids: set[uuid.UUID],
+    inspection_ids: set[uuid.UUID],
+) -> None:
+    """Update an existing record with ownership and conflict checks."""
+    if last_pulled_at and existing.updated_at > last_pulled_at:
+        return
+    if not _verify_ownership(
+        table_name, existing,
+        user_id, apiary_ids, hive_ids, inspection_ids,
+    ):
+        return
+    _apply_update(table_name, existing, data)
+
+
+def _handle_create(
+    db: AsyncSession,
+    model: type,
+    table_name: str,
+    data: dict[str, Any],
+    record_id: uuid.UUID,
+    user_id: uuid.UUID,
+    apiary_ids: set[uuid.UUID],
+    hive_ids: set[uuid.UUID],
+    inspection_ids: set[uuid.UUID],
+) -> None:
+    """Create a new record with ownership validation."""
+    # C1: Verify FK ownership for child tables
+    if not _verify_new_record_ownership(
+        table_name, data,
+        apiary_ids, hive_ids, inspection_ids,
+    ):
+        return
+
+    data["id"] = record_id
+    if table_name in ("apiaries", "tasks", "task_cadences"):
+        data["user_id"] = user_id
+    new_record = model(**data)
+    db.add(new_record)
+
+
+async def _push_deletions(
+    db: AsyncSession,
+    model: type,
+    table_name: str,
+    table_changes: dict,
+    user_id: uuid.UUID,
+    apiary_ids: set[uuid.UUID],
+    hive_ids: set[uuid.UUID],
+    inspection_ids: set[uuid.UUID],
+) -> None:
+    """Process soft-deletions for a single table."""
+    deleted_raw = table_changes.get("deleted", [])
+    if not deleted_raw:
+        return
+
+    # W1: Batch-fetch records to delete
+    parsed_ids = []
+    for rid_str in deleted_raw:
+        rid = _parse_uuid(str(rid_str))
+        if rid is not None:
+            parsed_ids.append(rid)
+
+    existing_map = await _batch_fetch(db, model, parsed_ids)
+
+    now = datetime.now(UTC)
+    for record_id in parsed_ids:
+        existing = existing_map.get(record_id)
+        if existing is None:
+            continue
+        if not _verify_ownership(
+            table_name, existing,
+            user_id, apiary_ids, hive_ids, inspection_ids,
+        ):
+            continue
+        existing.deleted_at = now
+        existing.updated_at = now
 
 
 def _verify_ownership(
