@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -28,6 +29,15 @@ from app.routers import (
 from app.services import s3_service
 
 settings = get_settings()
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        environment=settings.sentry_environment,
+        send_default_pii=True,
+        enable_tracing=True,
+    )
 
 
 @asynccontextmanager
@@ -60,6 +70,9 @@ app.add_middleware(
 )
 
 # Rate-limit exceeded handler (slowapi)
+from app.routers.auth import limiter  # noqa: E402
+
+app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include routers

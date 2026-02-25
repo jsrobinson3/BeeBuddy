@@ -4,6 +4,7 @@ import logging
 import socket
 import ssl
 
+import sentry_sdk
 from celery import Celery
 
 from app.config import get_settings
@@ -11,6 +12,15 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        environment=settings.sentry_environment,
+        send_default_pii=True,
+        enable_tracing=True,
+    )
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
 celery_app.conf.broker_connection_retry_on_startup = True

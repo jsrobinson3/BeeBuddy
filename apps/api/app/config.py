@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str | None = None
 
+    # Sentry
+    sentry_dsn: str | None = None
+    sentry_traces_sample_rate: float = 0.2
+    sentry_environment: str = "development"
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8081", "http://localhost:19006"]
 

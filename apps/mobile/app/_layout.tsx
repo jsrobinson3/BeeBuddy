@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
 import { DatabaseProvider } from "@nozbe/watermelondb/react";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -15,6 +16,14 @@ import { queryClient } from "../services/queryClient";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
 import { ThemeProvider, useTheme, typography } from "../theme";
+
+if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+    tracesSampleRate: 0.2,
+    environment: __DEV__ ? "development" : "production",
+  });
+}
 
 SplashScreen.preventAutoHideAsync();
 
@@ -65,10 +74,7 @@ function AppStack() {
 
 function SyncManager() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  // Only sync on native platforms where WatermelonDB is available
-  if (Platform.OS !== "web" && isAuthenticated) {
-    useSyncOnForeground();
-  }
+  useSyncOnForeground(Platform.OS !== "web" && isAuthenticated);
   return null;
 }
 
@@ -135,10 +141,12 @@ function Providers({ children }: { children: React.ReactNode }) {
   return <DatabaseProvider database={database}>{inner}</DatabaseProvider>;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <Providers>
       <RootNav />
     </Providers>
   );
 }
+
+export default Sentry.wrap(RootLayout);
