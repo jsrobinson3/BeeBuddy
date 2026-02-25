@@ -65,7 +65,6 @@ const createLayoutStyles = (c: ThemeColors) => ({
     position: "absolute" as const,
     right: 20,
     bottom: 20,
-    ...shadows.fab,
   },
 });
 
@@ -402,8 +401,8 @@ function HexFab({ onPress }: { onPress: () => void }) {
   const { colors } = useTheme();
   return (
     <Pressable style={s.fab} onPress={onPress}>
-      <HexIcon size={56} filled fillColor={colors.primaryFill}>
-        <Plus size={26} color={colors.textOnPrimary} />
+      <HexIcon size={64} filled fillColor={colors.primaryFill}>
+        <Plus size={28} color={colors.textOnPrimary} />
       </HexIcon>
     </Pressable>
   );

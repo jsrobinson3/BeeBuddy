@@ -167,7 +167,10 @@ class TestListAndDownloadPhotos:
 
         photo = await upload_photo(client, headers, inspection_id)
 
-        # No auth header, only ?token= query param — should be rejected
+        # No auth header, only ?token= query param — should be rejected.
+        # Clear cookies so the client doesn't inadvertently send the
+        # access_token cookie that was set during registration.
+        client.cookies.clear()
         resp = await client.get(
             f"{PREFIX}/photos/{photo['id']}/file?token={token}",
         )

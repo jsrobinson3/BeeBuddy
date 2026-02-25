@@ -11,11 +11,12 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#fdbc48"
+      "backgroundColor": "#1A2628"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.beebuddyai.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "BeeBuddy uses your location to set apiary coordinates and provide local weather-based task recommendations.",
         "ITSAppUsesNonExemptEncryption": false
@@ -54,7 +55,10 @@
           "cameraPermission": "BeeBuddy needs camera access to photograph your hives during inspections."
         }
       ],
-      "@nozbe/watermelondb/expo-plugin"
+      "@morrowdigital/watermelondb-expo-plugin",
+      "@sentry/react-native",
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true

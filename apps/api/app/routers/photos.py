@@ -102,7 +102,7 @@ async def list_photos(
 @router.get("/photos/{photo_id}/file")
 async def download_photo(
     photo_id: UUID,
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Download a photo file.

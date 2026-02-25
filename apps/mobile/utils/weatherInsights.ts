@@ -7,6 +7,11 @@ const MAX_INSPECTION_TEMP_C = 30;
 const EXTREME_COLD_C = 10;
 const EXTREME_HOT_C = 38;
 
+function formatTemp(celsius: number, useFahrenheit?: boolean): string {
+  if (useFahrenheit) return `${Math.round(celsius * 9/5 + 32)}\u00b0F`;
+  return `${Math.round(celsius)}\u00b0C`;
+}
+
 function getDayName(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
@@ -61,6 +66,7 @@ export function generateInsights(
   daily: DayForecast[],
   tasks: Task[],
   apiaries: Apiary[],
+  useFahrenheit?: boolean,
 ): string[] {
   if (daily.length === 0) return [];
 
@@ -106,11 +112,11 @@ export function generateInsights(
     if (todayForecast) {
       if (todayForecast.temp_max_c < EXTREME_COLD_C) {
         insights.push(
-          `Cold temperatures today (${Math.round(todayForecast.temp_max_c)}\u00b0C) \u2014 avoid opening hives to keep the colony warm`,
+          `Cold temperatures today (${formatTemp(todayForecast.temp_max_c, useFahrenheit)}) \u2014 avoid opening hives to keep the colony warm`,
         );
       } else if (todayForecast.temp_max_c > EXTREME_HOT_C) {
         insights.push(
-          `Extreme heat today (${Math.round(todayForecast.temp_max_c)}\u00b0C) \u2014 ensure hives have adequate ventilation and water`,
+          `Extreme heat today (${formatTemp(todayForecast.temp_max_c, useFahrenheit)}) \u2014 ensure hives have adequate ventilation and water`,
         );
       }
     }
@@ -119,7 +125,7 @@ export function generateInsights(
     if (bestDay) {
       const bestName = getDayName(bestDay.date);
       insights.push(
-        `${bestName} looks ideal for hive inspections \u2014 ${Math.round(bestDay.temp_max_c)}\u00b0C and ${bestDay.conditions === "sunny" ? "sunny" : "fair"}`,
+        `${bestName} looks ideal for hive inspections \u2014 ${formatTemp(bestDay.temp_max_c, useFahrenheit)} and ${bestDay.conditions === "sunny" ? "sunny" : "fair"}`,
       );
     }
   }
