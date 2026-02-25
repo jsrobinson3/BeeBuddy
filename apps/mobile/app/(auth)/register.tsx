@@ -7,6 +7,7 @@ import {
   AuthHeader,
   AuthInput,
   AuthLinkButton,
+  AuthSocialSection,
   AuthSubmitButton,
 } from "../../components/auth";
 import { useAuthStore } from "../../stores/auth";
@@ -90,6 +91,7 @@ function RegisterFields(p: FieldsProps) {
 
 interface FormProps extends FieldsProps {
   error: string;
+  onError: (msg: string) => void;
   onSubmit: () => void;
   onNavigate: () => void;
 }
@@ -115,6 +117,7 @@ function RegisterForm(p: FormProps) {
         loading={p.loading}
         onPress={p.onSubmit}
       />
+      <AuthSocialSection onError={p.onError} disabled={p.loading} />
       <AuthLinkButton
         prompt="Already have an account?"
         action="Sign In"
@@ -178,6 +181,7 @@ export default function RegisterScreen() {
       </GradientHeader>
       <RegisterForm
         error={error}
+        onError={setError}
         name={name}
         setName={setName}
         email={email}

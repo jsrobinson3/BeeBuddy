@@ -20,6 +20,14 @@ CSRF_EXEMPT_PATHS = {
     "/api/v1/auth/register",
     "/api/v1/auth/refresh",
     "/api/v1/auth/logout",
+    "/api/v1/auth/oauth/google",
+    "/api/v1/auth/oauth/apple",
+    # Token-based endpoints use out-of-band email tokens to prove intent,
+    # not an existing authenticated session.
+    "/api/v1/auth/verify-email",
+    "/api/v1/auth/resend-verification",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
 }
 
 

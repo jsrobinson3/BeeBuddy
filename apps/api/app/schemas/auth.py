@@ -39,9 +39,9 @@ class LogoutRequest(BaseModel):
     refresh_token: str | None = None
 
 
-class OAuthCallback(BaseModel):
-    """OAuth2 authorization-code callback payload."""
+class OAuthTokenRequest(BaseModel):
+    """Native OAuth ID token payload sent from mobile app."""
 
-    provider: str
-    code: str
-    redirect_uri: str
+    id_token: str
+    name: str | None = None
+    email: str | None = None

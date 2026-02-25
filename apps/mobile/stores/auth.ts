@@ -34,6 +34,8 @@ type AuthState = {
 type AuthActions = {
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  loginWithGoogle: (idToken: string, name?: string | null) => Promise<void>;
+  loginWithApple: (idToken: string, name?: string | null, email?: string | null) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   hydrate: () => Promise<void>;
@@ -188,6 +190,50 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     });
 
     if (!res.ok) await throwAuthError(res, "Registration failed");
+
+    if (!isWeb) {
+      const data = await res.json();
+      await saveTokens(data.access_token, data.refresh_token);
+      api.setToken(data.access_token);
+      set({ token: data.access_token, refreshToken: data.refresh_token });
+    }
+
+    set({ isAuthenticated: true });
+    await get().fetchUser();
+    if (!isWeb) syncDatabase();
+  },
+
+  loginWithGoogle: async (idToken, name) => {
+    const res = await authFetch("/api/v1/auth/oauth/google", {
+      method: "POST",
+      body: JSON.stringify({ id_token: idToken, name: name || undefined }),
+    });
+
+    if (!res.ok) await throwAuthError(res, "Google sign-in failed");
+
+    if (!isWeb) {
+      const data = await res.json();
+      await saveTokens(data.access_token, data.refresh_token);
+      api.setToken(data.access_token);
+      set({ token: data.access_token, refreshToken: data.refresh_token });
+    }
+
+    set({ isAuthenticated: true });
+    await get().fetchUser();
+    if (!isWeb) syncDatabase();
+  },
+
+  loginWithApple: async (idToken, name, email) => {
+    const res = await authFetch("/api/v1/auth/oauth/apple", {
+      method: "POST",
+      body: JSON.stringify({
+        id_token: idToken,
+        name: name || undefined,
+        email: email || undefined,
+      }),
+    });
+
+    if (!res.ok) await throwAuthError(res, "Apple sign-in failed");
 
     if (!isWeb) {
       const data = await res.json();

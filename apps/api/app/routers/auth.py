@@ -13,11 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.cookies import clear_auth_cookies, set_auth_cookies
 from app.auth.jwt import decode_token
 from app.auth.token_blocklist import block_token
+from app.config import get_settings as _get_settings
 from app.db.session import get_db
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
-    OAuthCallback,
+    OAuthTokenRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -28,12 +29,15 @@ from app.schemas.verification import (
     ResetPasswordRequest,
     VerifyEmailRequest,
 )
-from app.services import auth_service
+from app.services import auth_service, oauth_service
 from app.tasks import send_email_task
 
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(
+    key_func=get_remote_address,
+    enabled=_get_settings().sentry_environment == "production",
+)
 router = APIRouter(prefix="/auth")
 
 
@@ -227,9 +231,39 @@ async def reset_password(
     return {"detail": "Password has been reset"}
 
 
-@router.post("/oauth/{provider}", response_model=TokenResponse, status_code=501)
-async def oauth_callback(
-    provider: str, data: OAuthCallback, db: AsyncSession = Depends(get_db)
+@router.post("/oauth/{provider}", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def oauth_login(
+    request: Request,
+    provider: str,
+    data: OAuthTokenRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ):
-    """OAuth callback stub — not yet implemented."""
-    raise HTTPException(status_code=501, detail="OAuth not implemented")
+    """Authenticate via native OAuth ID token (Google or Apple)."""
+    if provider not in ("google", "apple"):
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+
+    try:
+        if provider == "google":
+            payload = await oauth_service.verify_google_id_token(data.id_token)
+            email = payload["email"]
+            name = payload.get("name") or data.name
+        else:
+            payload = await oauth_service.verify_apple_id_token(data.id_token)
+            email = payload.get("email") or data.email
+            name = data.name
+        oauth_sub = payload["sub"]
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+    try:
+        user = await oauth_service.resolve_oauth_user(
+            db, provider, oauth_sub, email, name
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    access, refresh = auth_service.issue_tokens(user.id)
+    set_auth_cookies(response, access, refresh)
+    return TokenResponse(access_token=access, refresh_token=refresh)

@@ -84,13 +84,6 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> tuple[str, str
     return issue_tokens(user.id)
 
 
-async def oauth_login(
-    db: AsyncSession, provider: str, code: str, redirect_uri: str
-) -> User:
-    """OAuth login stub. TODO: implement for Phase 1."""
-    raise NotImplementedError(f"OAuth provider '{provider}' not yet implemented")
-
-
 # -- Email verification tokens ------------------------------------------------
 
 

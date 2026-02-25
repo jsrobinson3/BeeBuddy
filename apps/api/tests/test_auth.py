@@ -129,13 +129,21 @@ class TestRefresh:
 
 
 class TestOAuth:
-    async def test_returns_501(self, client: AsyncClient):
-        resp = await client.post(f"{PREFIX}/auth/oauth/google", json={
-            "provider": "google",
-            "code": "fake",
-            "redirect_uri": "http://localhost",
+    async def test_invalid_provider_returns_400(self, client: AsyncClient):
+        resp = await client.post(f"{PREFIX}/auth/oauth/facebook", json={
+            "id_token": "fake-token",
         })
-        assert resp.status_code == 501
+        assert resp.status_code == 400
+
+    async def test_invalid_token_returns_401(self, client: AsyncClient):
+        resp = await client.post(f"{PREFIX}/auth/oauth/google", json={
+            "id_token": "fake-token",
+        })
+        assert resp.status_code == 401
+
+    async def test_missing_id_token_returns_422(self, client: AsyncClient):
+        resp = await client.post(f"{PREFIX}/auth/oauth/google", json={})
+        assert resp.status_code == 422
 
 
 # -- Protected endpoints ------------------------------------------------------

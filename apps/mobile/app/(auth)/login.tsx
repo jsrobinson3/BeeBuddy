@@ -47,6 +47,7 @@ interface FormProps {
   loading: boolean;
   onSubmit: () => void;
   onNavigate: () => void;
+  onSocialError: (msg: string) => void;
 }
 
 function LoginForm(p: FormProps) {
@@ -75,7 +76,7 @@ function LoginForm(p: FormProps) {
         loading={p.loading}
         onPress={p.onSubmit}
       />
-      <AuthSocialSection />
+      <AuthSocialSection onError={p.onSocialError} disabled={p.loading} />
       <AuthLinkButton
         prompt="Don't have an account?"
         action="Register"
@@ -132,6 +133,7 @@ export default function LoginScreen() {
         setPassword={setPassword}
         loading={loading}
         onSubmit={handleLogin}
+        onSocialError={setError}
         onNavigate={() => router.replace("/(auth)/register" as any)}
       />
     </ScrollView>
