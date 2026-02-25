@@ -1,15 +1,17 @@
 import { useEffect, useRef } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateStatus, Platform } from "react-native";
 import { syncDatabase } from "./sync";
 
 /**
  * Triggers a sync when the app comes to the foreground and on mount.
- * Should be rendered inside the authenticated layout.
+ * No-ops on web or when not authenticated.
  */
-export function useSyncOnForeground(): void {
+export function useSyncOnForeground(enabled: boolean): void {
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
+    if (!enabled || Platform.OS === "web") return;
+
     // Sync on mount (e.g., after login)
     syncDatabase();
 
@@ -24,5 +26,5 @@ export function useSyncOnForeground(): void {
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [enabled]);
 }

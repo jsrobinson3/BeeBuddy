@@ -1,6 +1,8 @@
 import { Model } from "@nozbe/watermelondb";
 import { text, field, date, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb/Model";
+import type Inspection from "./Inspection";
 
 export default class InspectionPhoto extends Model {
   static table = "inspection_photos";
@@ -18,7 +20,7 @@ export default class InspectionPhoto extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @relation("inspections", "inspection_id") inspection!: any;
+  @relation("inspections", "inspection_id") inspection!: Relation<Inspection>;
 
   get aiAnalysis(): Record<string, unknown> | null {
     if (!this.aiAnalysisJson) return null;

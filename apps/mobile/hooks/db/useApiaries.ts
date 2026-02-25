@@ -1,5 +1,4 @@
 import { useMemo, useCallback } from "react";
-import { Q } from "@nozbe/watermelondb";
 import { database } from "../../database";
 import Apiary from "../../database/models/Apiary";
 import type { CreateApiaryInput, UpdateApiaryInput } from "../../services/api.types";

@@ -1,7 +1,10 @@
-import { Model } from "@nozbe/watermelondb";
+import { Model, type Query } from "@nozbe/watermelondb";
 import { text, field, date, children, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb/Model";
 import type { InspectionObservations, WeatherSnapshot } from "../../services/api.types";
+import type Hive from "./Hive";
+import type InspectionPhoto from "./InspectionPhoto";
 
 export default class Inspection extends Model {
   static table = "inspections";
@@ -26,8 +29,8 @@ export default class Inspection extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @relation("hives", "hive_id") hive!: any;
-  @children("inspection_photos") photos!: any;
+  @relation("hives", "hive_id") hive!: Relation<Hive>;
+  @children("inspection_photos") photos!: Query<InspectionPhoto>;
 
   get observations(): InspectionObservations | null {
     if (!this.observationsJson) return null;

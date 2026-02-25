@@ -1,6 +1,15 @@
-import { Model } from "@nozbe/watermelondb";
+import { Model, type Query } from "@nozbe/watermelondb";
 import { text, field, date, children, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb/Model";
+import type Apiary from "./Apiary";
+import type Queen from "./Queen";
+import type Inspection from "./Inspection";
+import type Treatment from "./Treatment";
+import type Harvest from "./Harvest";
+import type Event from "./Event";
+import type Task from "./Task";
+import type TaskCadence from "./TaskCadence";
 
 export default class Hive extends Model {
   static table = "hives";
@@ -28,12 +37,12 @@ export default class Hive extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @relation("apiaries", "apiary_id") apiary!: any;
-  @children("queens") queens!: any;
-  @children("inspections") inspections!: any;
-  @children("treatments") treatments!: any;
-  @children("harvests") harvests!: any;
-  @children("events") events!: any;
-  @children("tasks") tasks!: any;
-  @children("task_cadences") cadences!: any;
+  @relation("apiaries", "apiary_id") apiary!: Relation<Apiary>;
+  @children("queens") queens!: Query<Queen>;
+  @children("inspections") inspections!: Query<Inspection>;
+  @children("treatments") treatments!: Query<Treatment>;
+  @children("harvests") harvests!: Query<Harvest>;
+  @children("events") events!: Query<Event>;
+  @children("tasks") tasks!: Query<Task>;
+  @children("task_cadences") cadences!: Query<TaskCadence>;
 }

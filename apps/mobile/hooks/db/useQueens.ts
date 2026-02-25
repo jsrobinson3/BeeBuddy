@@ -51,6 +51,17 @@ export function useCreateQueen() {
   return useMutationWrapper(fn);
 }
 
+export function useDeleteQueen() {
+  const fn = useCallback(async (id: string) => {
+    const record = await queensCollection.find(id);
+    await database.write(async () => {
+      await record.markAsDeleted();
+    });
+    syncAfterWrite();
+  }, []);
+  return useMutationWrapper(fn);
+}
+
 export function useUpdateQueen() {
   const fn = useCallback(
     async ({ id, data }: { id: string; data: UpdateQueenInput }) => {

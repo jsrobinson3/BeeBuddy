@@ -1,6 +1,8 @@
-import { Model } from "@nozbe/watermelondb";
+import { Model, type Query } from "@nozbe/watermelondb";
 import { text, field, date, children, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type Hive from "./Hive";
+import type Task from "./Task";
 
 export default class Apiary extends Model {
   static table = "apiaries";
@@ -21,6 +23,6 @@ export default class Apiary extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @children("hives") hives!: any;
-  @children("tasks") tasks!: any;
+  @children("hives") hives!: Query<Hive>;
+  @children("tasks") tasks!: Query<Task>;
 }

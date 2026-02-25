@@ -11,7 +11,7 @@ const tasksCollection = database.get<Task>("tasks");
 
 export function useTasks(filters?: { hive_id?: string; apiary_id?: string }) {
   const observable = useMemo(() => {
-    const conditions: any[] = [];
+    const conditions: Q.Clause[] = [];
     if (filters?.hive_id) conditions.push(Q.where("hive_id", filters.hive_id));
     if (filters?.apiary_id)
       conditions.push(Q.where("apiary_id", filters.apiary_id));

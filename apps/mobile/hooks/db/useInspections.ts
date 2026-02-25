@@ -96,6 +96,17 @@ export function useUpdateInspection() {
   return useMutationWrapper(fn);
 }
 
+export function useDeleteInspection() {
+  const fn = useCallback(async (id: string) => {
+    const record = await inspectionsCollection.find(id);
+    await database.write(async () => {
+      await record.markAsDeleted();
+    });
+    syncAfterWrite();
+  }, []);
+  return useMutationWrapper(fn);
+}
+
 /** Inspection templates are server-only, keep as React Query */
 export function useInspectionTemplate(
   level: "beginner" | "intermediate" | "advanced",

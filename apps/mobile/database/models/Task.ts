@@ -1,6 +1,9 @@
 import { Model } from "@nozbe/watermelondb";
 import { text, field, date, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb/Model";
+import type Hive from "./Hive";
+import type Apiary from "./Apiary";
 
 export default class Task extends Model {
   static table = "tasks";
@@ -23,6 +26,6 @@ export default class Task extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @relation("hives", "hive_id") hive!: any;
-  @relation("apiaries", "apiary_id") apiary!: any;
+  @relation("hives", "hive_id") hive!: Relation<Hive>;
+  @relation("apiaries", "apiary_id") apiary!: Relation<Apiary>;
 }

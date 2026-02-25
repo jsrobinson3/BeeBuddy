@@ -2,7 +2,7 @@
  * Generic hook that subscribes to a WatermelonDB Observable and returns
  * a React-Query-compatible shape: { data, isLoading, error }.
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import type { Observable } from "rxjs";
 
 export function useObservable<T>(observable: Observable<T> | null): {
@@ -13,8 +13,6 @@ export function useObservable<T>(observable: Observable<T> | null): {
   const [data, setData] = useState<T | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const obsRef = useRef(observable);
-  obsRef.current = observable;
 
   useEffect(() => {
     if (!observable) {

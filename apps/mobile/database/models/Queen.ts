@@ -1,6 +1,8 @@
 import { Model } from "@nozbe/watermelondb";
 import { text, field, date, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb/Model";
+import type Hive from "./Hive";
 
 export default class Queen extends Model {
   static table = "queens";
@@ -25,5 +27,5 @@ export default class Queen extends Model {
   @readonly @date("created_at") createdAt!: Date;
   @readonly @date("updated_at") updatedAt!: Date;
 
-  @relation("hives", "hive_id") hive!: any;
+  @relation("hives", "hive_id") hive!: Relation<Hive>;
 }

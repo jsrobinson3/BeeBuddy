@@ -11,7 +11,8 @@ import {
   useUpdateCadence,
 } from "../../../hooks/useCadences";
 import { useHives } from "../../../hooks/useHives";
-import type { Cadence, CadenceTemplate } from "../../../services/api";
+import type TaskCadence from "../../../database/models/TaskCadence";
+import type { CadenceTemplate } from "../../../services/api";
 import {
   useStyles,
   useTheme,
@@ -160,15 +161,15 @@ function formatDueDate(dateStr: string | null): string {
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function formatSchedule(cadence: Cadence, template: CadenceTemplate | undefined): string | null {
+function formatSchedule(cadence: TaskCadence, template: CadenceTemplate | undefined): string | null {
   if (!template) return null;
   if (template.category === "recurring") {
-    const days = cadence.custom_interval_days ?? template.interval_days;
+    const days = cadence.customIntervalDays ?? template.interval_days;
     return days ? `Every ${days} days` : null;
   }
   if (template.category === "seasonal") {
-    const month = cadence.custom_season_month ?? template.season_month;
-    const day = cadence.custom_season_day ?? template.season_day;
+    const month = cadence.customSeasonMonth ?? template.season_month;
+    const day = cadence.customSeasonDay ?? template.season_day;
     if (month) {
       const monthName = new Date(2000, month - 1).toLocaleString("default", { month: "long" });
       return `${monthName} ${day}`;
@@ -182,7 +183,7 @@ function ScheduleEditor({
   template,
   onSave,
 }: {
-  cadence: Cadence;
+  cadence: TaskCadence;
   template: CadenceTemplate | undefined;
   onSave: (data: {
     custom_interval_days?: number | null;
@@ -194,13 +195,13 @@ function ScheduleEditor({
   const isRecurring = template?.category === "recurring";
 
   const [interval, setInterval] = useState(
-    String(cadence.custom_interval_days ?? template?.interval_days ?? ""),
+    String(cadence.customIntervalDays ?? template?.interval_days ?? ""),
   );
   const [month, setMonth] = useState(
-    String(cadence.custom_season_month ?? template?.season_month ?? ""),
+    String(cadence.customSeasonMonth ?? template?.season_month ?? ""),
   );
   const [day, setDay] = useState(
-    String(cadence.custom_season_day ?? template?.season_day ?? "1"),
+    String(cadence.customSeasonDay ?? template?.season_day ?? "1"),
   );
 
   function handleSave() {
@@ -263,7 +264,7 @@ function CardMeta({
   template,
   hiveName,
 }: {
-  cadence: Cadence;
+  cadence: TaskCadence;
   template: CadenceTemplate | undefined;
   hiveName: string | null;
 }) {
@@ -285,9 +286,9 @@ function CardMeta({
             <Text style={styles.badgeText}>{season}</Text>
           </View>
         )}
-        {cadence.next_due_date && cadence.is_active && (
+        {cadence.nextDueDate && cadence.isActive && (
           <View style={styles.dueBadge}>
-            <Text style={styles.dueBadgeText}>{formatDueDate(cadence.next_due_date)}</Text>
+            <Text style={styles.dueBadgeText}>{formatDueDate(cadence.nextDueDate)}</Text>
           </View>
         )}
       </View>
@@ -305,7 +306,7 @@ function CadenceCard({
   onPress,
   onSaveSchedule,
 }: {
-  cadence: Cadence;
+  cadence: TaskCadence;
   template: CadenceTemplate | undefined;
   hiveName: string | null;
   onToggle: (active: boolean) => void;
@@ -316,9 +317,9 @@ function CadenceCard({
   const styles = useStyles(createCardStyles);
   const { colors } = useTheme();
 
-  const title = template?.title ?? cadence.cadence_key;
+  const title = template?.title ?? cadence.cadenceKey;
   const description = template?.description ?? null;
-  const inactive = !cadence.is_active;
+  const inactive = !cadence.isActive;
 
   return (
     <Pressable style={styles.card} onPress={onPress}>
@@ -332,7 +333,7 @@ function CadenceCard({
           </Text>
         </View>
         <Switch
-          value={cadence.is_active}
+          value={cadence.isActive}
           onValueChange={onToggle}
           trackColor={{ false: colors.switchTrackFalse, true: colors.switchTrackTrue }}
           thumbColor={colors.switchThumb}
@@ -395,7 +396,7 @@ function InitializePrompt({ onInit, loading }: { onInit: () => void; loading: bo
 
 type SectionItem =
   | { type: "header"; title: string }
-  | { type: "cadence"; cadence: Cadence; hiveName: string | null };
+  | { type: "cadence"; cadence: TaskCadence; hiveName: string | null };
 
 export default function CadencesScreen() {
   const { data: cadences, isLoading, error, refetch } = useCadences();
@@ -408,12 +409,12 @@ export default function CadencesScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const templateMap = useMemo(
-    () => new Map((catalog ?? []).map((t) => [t.key, t])),
+    () => new Map<string, CadenceTemplate>((catalog ?? []).map((t: CadenceTemplate) => [t.key, t])),
     [catalog],
   );
 
   const hiveMap = useMemo(
-    () => new Map((hives ?? []).map((h) => [h.id, h.name])),
+    () => new Map<string, string>((hives ?? []).map((h: { id: string; name: string }) => [h.id, h.name])),
     [hives],
   );
 
@@ -438,11 +439,11 @@ export default function CadencesScreen() {
 
   const sections = useMemo(() => {
     const items = [...(cadences ?? [])].sort((a, b) => {
-      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
-      return a.cadence_key.localeCompare(b.cadence_key);
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return a.cadenceKey.localeCompare(b.cadenceKey);
     });
-    const general = items.filter((c) => !c.hive_id);
-    const perHive = items.filter((c) => !!c.hive_id);
+    const general = items.filter((c) => !c.hiveId);
+    const perHive = items.filter((c) => !!c.hiveId);
     const result: SectionItem[] = [];
     if (general.length > 0) {
       result.push({ type: "header", title: "General" });
@@ -451,7 +452,7 @@ export default function CadencesScreen() {
     if (perHive.length > 0) {
       result.push({ type: "header", title: "Per-Hive" });
       perHive.forEach((c) =>
-        result.push({ type: "cadence", cadence: c, hiveName: hiveMap.get(c.hive_id!) ?? "Unknown" }),
+        result.push({ type: "cadence", cadence: c, hiveName: hiveMap.get(c.hiveId!) ?? "Unknown" }),
       );
     }
     return result;
@@ -498,7 +499,7 @@ export default function CadencesScreen() {
           return (
             <CadenceCard
               cadence={cadence}
-              template={templateMap.get(cadence.cadence_key)}
+              template={templateMap.get(cadence.cadenceKey)}
               hiveName={hiveName}
               onToggle={(active) => handleToggle(cadence.id, active)}
               isExpanded={expandedId === cadence.id}
