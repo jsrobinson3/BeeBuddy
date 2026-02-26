@@ -55,7 +55,10 @@
           "cameraPermission": "BeeBuddy needs camera access to photograph your hives during inspections."
         }
       ],
-      "@morrowdigital/watermelondb-expo-plugin",
+      [
+        "@morrowdigital/watermelondb-expo-plugin",
+        { "disableJsi": true }
+      ],
       "@sentry/react-native",
       "expo-web-browser",
       "expo-apple-authentication",
