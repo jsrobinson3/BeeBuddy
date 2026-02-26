@@ -79,6 +79,12 @@ services:
       - key: CORS_ORIGINS
         scope: RUN_TIME
         value: '["https://beebuddy.app"]'
+      - key: DB_POOL_SIZE
+        scope: RUN_TIME
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        scope: RUN_TIME
+        value: "2"
 
 workers:
   - name: celery-worker
