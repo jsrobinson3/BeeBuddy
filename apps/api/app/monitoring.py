@@ -1,6 +1,9 @@
 """Centralized Sentry initialization for API and Celery workers."""
 
 import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import get_settings
 
@@ -29,4 +32,9 @@ def init_sentry() -> None:
         send_default_pii=False,
         enable_tracing=True,
         before_send=_before_send,
+        integrations=[
+            FastApiIntegration(),
+            StarletteIntegration(),
+            CeleryIntegration(),
+        ],
     )
