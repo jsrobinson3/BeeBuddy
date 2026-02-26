@@ -6,37 +6,17 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_SENTRY_DSN": "https://4a6a84360cbae135c276f6b5f461585c@o4510943683411968.ingest.us.sentry.io/4510943684919296",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "459986261046-0rjro13qv50n9r082mtgvq0s4peofn1o.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "459986261046-15ctulg3rhkfu6m642738nshui7nbgr0.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "459986261046-p9p7ua5pi8o8r03duk360gh3jco6pqls.apps.googleusercontent.com"
-      }
+      "distribution": "internal"
     },
     "preview": {
       "android": {
         "buildType": "apk"
       },
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.beebuddyai.com",
-        "EXPO_PUBLIC_SENTRY_DSN": "https://4a6a84360cbae135c276f6b5f461585c@o4510943683411968.ingest.us.sentry.io/4510943684919296",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "459986261046-0rjro13qv50n9r082mtgvq0s4peofn1o.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "459986261046-15ctulg3rhkfu6m642738nshui7nbgr0.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "459986261046-8a9n0hts6ia47hpk6b359ta7ahpcibbl.apps.googleusercontent.com"
-      }
+      "distribution": "internal"
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
-      },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.beebuddyai.com",
-        "EXPO_PUBLIC_SENTRY_DSN": "https://4a6a84360cbae135c276f6b5f461585c@o4510943683411968.ingest.us.sentry.io/4510943684919296",
-        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "459986261046-0rjro13qv50n9r082mtgvq0s4peofn1o.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "459986261046-15ctulg3rhkfu6m642738nshui7nbgr0.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "459986261046-8a9n0hts6ia47hpk6b359ta7ahpcibbl.apps.googleusercontent.com"
       }
     }
   },
