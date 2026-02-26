@@ -156,6 +156,22 @@ function TextCard({ title, text }: { title: string; text: string }) {
   );
 }
 
+function ReminderCard({ inspection }: { inspection: Inspection }) {
+  const styles = useStyles(createStyles);
+  if (!inspection.reminder && !inspection.reminder_date) return null;
+  return (
+    <Card>
+      <Text style={styles.sectionTitle}>Reminder</Text>
+      {inspection.reminder_date && (
+        <InfoRow label="Date" value={formatDate(inspection.reminder_date)} />
+      )}
+      {inspection.reminder && (
+        <Text style={styles.notesText}>{inspection.reminder}</Text>
+      )}
+    </Card>
+  );
+}
+
 function EditButton({ inspectionId }: { inspectionId: string }) {
   const router = useRouter();
   const styles = useStyles(createStyles);
@@ -184,6 +200,7 @@ function InspectionContent({
       {inspection.observations && <ObservationsCard obs={inspection.observations} />}
       {inspection.notes && <TextCard title="Notes" text={inspection.notes} />}
       {inspection.ai_summary && <TextCard title="AI Summary" text={inspection.ai_summary} />}
+      <ReminderCard inspection={inspection} />
       <Card>
         <Text style={styles.sectionTitle}>Photos</Text>
         <PhotoPicker inspectionId={id} />

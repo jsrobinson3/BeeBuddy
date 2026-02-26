@@ -58,7 +58,21 @@
       "@morrowdigital/watermelondb-expo-plugin",
       "@sentry/react-native",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.459986261046-15ctulg3rhkfu6m642738nshui7nbgr0"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "2.1.20"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

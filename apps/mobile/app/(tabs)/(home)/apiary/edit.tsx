@@ -1,31 +1,33 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-} from "react-native";
+import { Alert, ScrollView } from "react-native";
 
-import { FormInput } from "../../../../components/FormInput";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
-import { useApiary, useUpdateApiary, useDeleteApiary } from "../../../../hooks/useApiaries";
+import {
+  useApiary,
+  useUpdateApiary,
+  useDeleteApiary,
+} from "../../../../hooks/useApiaries";
+import {
+  useLocation,
+  roundToPrecision,
+  type LocationPrecision,
+} from "../../../../hooks/useLocation";
 import {
   useStyles,
   type ThemeColors,
   formContainerStyles,
-  formSubmitStyles,
-  formDeleteStyles,
 } from "../../../../theme";
 import { getErrorMessage } from "../../../../utils/getErrorMessage";
+import { EditApiaryForm } from "./_EditApiaryForm";
+
+/* ---------- Styles ---------- */
 
 const createStyles = (c: ThemeColors) => ({
   ...formContainerStyles(c),
-  ...formSubmitStyles(c),
-  ...formDeleteStyles(c),
 });
+
+/* ---------- Screen ---------- */
 
 export default function EditApiaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,18 +35,29 @@ export default function EditApiaryScreen() {
   const { data: apiary, isLoading } = useApiary(id!);
   const updateApiary = useUpdateApiary();
   const deleteApiary = useDeleteApiary();
+  const loc = useLocation();
   const styles = useStyles(createStyles);
 
   const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [address, setAddress] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [precision, setPrecision] = useState<LocationPrecision>(
+    "approximate",
+  );
   const [notes, setNotes] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (apiary && !initialized) {
       setName(apiary.name ?? "");
-      setCity(apiary.city ?? "");
       setNotes(apiary.notes ?? "");
+      if (apiary.latitude != null) {
+        setLatitude(String(apiary.latitude));
+      }
+      if (apiary.longitude != null) {
+        setLongitude(String(apiary.longitude));
+      }
       setInitialized(true);
     }
   }, [apiary, initialized]);
@@ -53,17 +66,57 @@ export default function EditApiaryScreen() {
     return <LoadingSpinner fullscreen />;
   }
 
+  async function handleUseGPS() {
+    const coords = await loc.getLocation();
+    if (coords) {
+      setLatitude(String(coords.latitude));
+      setLongitude(String(coords.longitude));
+    }
+  }
+
+  async function handleLookupAddress() {
+    const coords = await loc.geocodeAddress(address);
+    if (coords) {
+      setLatitude(String(coords.latitude));
+      setLongitude(String(coords.longitude));
+    }
+  }
+
   async function handleSubmit() {
     if (!name.trim()) {
       Alert.alert("Error", "Name is required");
       return;
     }
+
+    const rawLat = latitude.trim()
+      ? parseFloat(latitude.trim())
+      : undefined;
+    const rawLng = longitude.trim()
+      ? parseFloat(longitude.trim())
+      : undefined;
+    const lat =
+      rawLat !== undefined && !isNaN(rawLat)
+        ? roundToPrecision(rawLat, precision)
+        : undefined;
+    const lng =
+      rawLng !== undefined && !isNaN(rawLng)
+        ? roundToPrecision(rawLng, precision)
+        : undefined;
+
+    // Reverse geocode to derive city from coordinates
+    let city: string | undefined;
+    if (lat !== undefined && lng !== undefined) {
+      city = (await loc.reverseGeocode(lat, lng)) ?? undefined;
+    }
+
     try {
       await updateApiary.mutateAsync({
         id: id!,
         data: {
           name: name.trim(),
-          city: city.trim() || undefined,
+          latitude: lat,
+          longitude: lng,
+          city,
           notes: notes.trim() || undefined,
         },
       });
@@ -92,35 +145,28 @@ export default function EditApiaryScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <FormInput label="Name" value={name} onChangeText={setName} placeholder="e.g. Home Apiary" />
-        <FormInput label="City" value={city} onChangeText={setCity} placeholder="e.g. Portland" />
-        <FormInput
-          label="Notes"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Optional notes..."
-          multiline
-          numberOfLines={4}
-          style={{ textAlignVertical: "top", minHeight: 100 }}
-        />
-        <Pressable
-          style={[styles.submitButton, updateApiary.isPending && styles.submitDisabled]}
-          onPress={handleSubmit}
-          disabled={updateApiary.isPending}
-        >
-          <Text style={styles.submitText}>
-            {updateApiary.isPending ? "Saving..." : "Save Changes"}
-          </Text>
-        </Pressable>
-        <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteText}>Delete Apiary</Text>
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    <ScrollView contentContainerStyle={styles.content}>
+      <EditApiaryForm
+        name={name}
+        setName={setName}
+        address={address}
+        setAddress={setAddress}
+        onLookup={handleLookupAddress}
+        geocoding={loc.geocoding}
+        latitude={latitude}
+        setLatitude={setLatitude}
+        longitude={longitude}
+        setLongitude={setLongitude}
+        precision={precision}
+        setPrecision={setPrecision}
+        notes={notes}
+        setNotes={setNotes}
+        onUseGPS={handleUseGPS}
+        locating={loc.loading}
+        onSubmit={handleSubmit}
+        onDelete={handleDelete}
+        isPending={updateApiary.isPending}
+      />
+    </ScrollView>
   );
 }

@@ -32,8 +32,8 @@ export function useInspection(id: string) {
 
 export function useCreateInspection() {
   const fn = useCallback(async (data: CreateInspectionInput) => {
-    await database.write(async () => {
-      await inspectionsCollection.create((record) => {
+    const created = await database.write(async () => {
+      return inspectionsCollection.create((record) => {
         record._raw.hive_id = data.hive_id;
         record._raw.inspected_at = data.inspected_at
           ? new Date(data.inspected_at).getTime()
@@ -53,6 +53,7 @@ export function useCreateInspection() {
       });
     });
     syncAfterWrite();
+    return { id: created.id };
   }, []);
   return useMutationWrapper(fn);
 }

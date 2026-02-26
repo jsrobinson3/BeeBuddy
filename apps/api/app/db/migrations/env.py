@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import ssl
 from logging.config import fileConfig
 
 from alembic import context
@@ -10,6 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.models import Base
+from app.redis_utils import database_connect_args
 
 config = context.config
 
@@ -18,7 +18,6 @@ if config.config_file_name is not None:
 
 # Prefer DATABASE_URL env var (set in Docker) over alembic.ini default
 database_url = os.environ.get("DATABASE_URL", "")
-_needs_ssl = "sslmode=require" in database_url
 if database_url:
     # Managed DB providers give postgresql:// — ensure asyncpg driver prefix
     if database_url.startswith("postgresql://"):
@@ -52,12 +51,7 @@ def do_run_migrations(connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode using async engine."""
-    connect_args: dict = {}
-    if _needs_ssl:
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-        connect_args["ssl"] = ssl_ctx
+    connect_args = database_connect_args()
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

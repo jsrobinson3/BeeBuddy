@@ -47,7 +47,6 @@ export interface User {
 export interface UserUpdate {
   name?: string;
   email?: string;
-  password?: string;
   experience_level?: string;
   locale?: string;
   timezone?: string;
@@ -473,6 +472,23 @@ export interface UpdateCadenceInput {
   custom_season_month?: number | null;
   custom_season_day?: number | null;
 }
+
+// ─── Account Deletion Types ──────────────────────────────────────────────────
+
+// ─── Sync Types ──────────────────────────────────────────────────────────────
+
+export interface SyncRecord {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface SyncTableChanges {
+  created: SyncRecord[];
+  updated: SyncRecord[];
+  deleted: string[];
+}
+
+export type SyncChangesMap = Record<string, SyncTableChanges>;
 
 // ─── Account Deletion Types ──────────────────────────────────────────────────
 

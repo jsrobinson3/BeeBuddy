@@ -18,9 +18,7 @@ async def update_user(db: AsyncSession, user: User, data: dict[str, Any]) -> Use
 
 async def update_preferences(db: AsyncSession, user: User, prefs: dict[str, Any]) -> User:
     """Merge new keys into the user's JSONB preferences."""
-    current = user.preferences or {}
-    current.update(prefs)
-    user.preferences = current
+    user.preferences = {**(user.preferences or {}), **prefs}
     await db.commit()
     await db.refresh(user)
     return user

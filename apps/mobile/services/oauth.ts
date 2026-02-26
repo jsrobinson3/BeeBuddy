@@ -6,21 +6,60 @@
  */
 
 import * as AppleAuthentication from "expo-apple-authentication";
-import * as Google from "expo-auth-session/providers/google";
+import {
+  GoogleSignin,
+  isSuccessResponse,
+  isErrorWithCode,
+  statusCodes,
+} from "@react-native-google-signin/google-signin";
 
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
 // ── Google ────────────────────────────────────────────────────────────
 
-export function useGoogleAuth() {
-  // Dev builds produce a custom-scheme redirect (beebuddy://) which Google's
-  // web client rejects. Route through Expo's auth proxy for an https:// URI.
-  return Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID,
+export interface GoogleSignInResult {
+  idToken: string;
+  name: string | null;
+}
+
+/**
+ * Configure the native Google Sign-In SDK. Call once at app startup
+ * (e.g. in _layout.tsx) before any sign-in attempt.
+ */
+export function configureGoogleSignIn(): void {
+  GoogleSignin.configure({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
-    redirectUri: "https://auth.expo.io/@jsrobinson3/beebuddy",
+    offlineAccess: false,
   });
+}
+
+/**
+ * Trigger the native Google account picker and return the ID token.
+ * Returns null if the user cancels.
+ */
+export async function signInWithGoogle(): Promise<GoogleSignInResult | null> {
+  await GoogleSignin.hasPlayServices();
+  const response = await GoogleSignin.signIn();
+
+  if (!isSuccessResponse(response)) {
+    return null; // user cancelled
+  }
+
+  const { idToken, user } = response.data;
+  if (!idToken) {
+    throw new Error("Google sign-in succeeded but no ID token was returned");
+  }
+
+  return { idToken, name: user.name ?? null };
+}
+
+/**
+ * Check whether a caught error is a Google Sign-In "in progress" duplicate.
+ */
+export function isSignInInProgress(error: unknown): boolean {
+  return isErrorWithCode(error) && error.code === statusCodes.IN_PROGRESS;
 }
 
 // ── Apple ─────────────────────────────────────────────────────────────

@@ -1,13 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, Switch, Text, TextInput, View } from "react-native";
 
-import { EmptyState } from "../../../components/EmptyState";
 import { ErrorDisplay } from "../../../components/ErrorDisplay";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import {
   useCadences,
   useCadenceCatalog,
-  useInitializeCadences,
+  useGenerateCadenceTasks,
   useUpdateCadence,
 } from "../../../hooks/useCadences";
 import { useHives } from "../../../hooks/useHives";
@@ -126,21 +125,6 @@ const createEditStyles = (c: ThemeColors) => ({
   scheduleInfo: {
     ...typography.sizes.caption, color: c.textMuted,
     fontFamily: typography.families.body, marginTop: spacing.xs,
-  },
-});
-
-const createInitStyles = (c: ThemeColors) => ({
-  initButton: {
-    backgroundColor: c.primaryFill,
-    borderRadius: radii.lg,
-    paddingVertical: spacing.md,
-    alignItems: "center" as const,
-    marginTop: spacing.md,
-  },
-  initButtonText: {
-    ...typography.sizes.body,
-    fontFamily: typography.families.bodySemiBold,
-    color: c.textOnPrimary,
   },
 });
 
@@ -368,30 +352,6 @@ function ListHeader() {
   );
 }
 
-function InitializePrompt({ onInit, loading }: { onInit: () => void; loading: boolean }) {
-  const layout = useStyles(createLayoutStyles);
-  const styles = useStyles(createInitStyles);
-  return (
-    <View style={layout.container}>
-      <View style={layout.list}>
-        <EmptyState
-          title="No cadences set up"
-          subtitle="Initialize your beekeeping task cadences to get seasonal and recurring reminders automatically."
-        />
-        <Pressable
-          style={styles.initButton}
-          onPress={onInit}
-          disabled={loading}
-        >
-          <Text style={styles.initButtonText}>
-            {loading ? "Setting up..." : "Set Up Cadences"}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
 type SectionItem =
@@ -402,7 +362,6 @@ export default function CadencesScreen() {
   const { data: cadences, isLoading, error, refetch } = useCadences();
   const { data: catalog } = useCadenceCatalog();
   const { data: hives } = useHives();
-  const initializeCadences = useInitializeCadences();
   const updateCadence = useUpdateCadence();
   const styles = useStyles(createLayoutStyles);
   const cardStyles = useStyles(createCardStyles);
@@ -418,9 +377,17 @@ export default function CadencesScreen() {
     [hives],
   );
 
-  const handleInit = useCallback(() => {
-    initializeCadences.mutate();
-  }, [initializeCadences]);
+  // Auto-initialize cadences + generate tasks if none exist (runs once).
+  // Uses useGenerateCadenceTasks (POST /cadences/generate) which also
+  // ensures hive-scoped cadences are created for sync-created hives.
+  const generateTasks = useGenerateCadenceTasks();
+  const didAutoInit = useRef(false);
+  useEffect(() => {
+    if (!isLoading && cadences && cadences.length === 0 && !didAutoInit.current) {
+      didAutoInit.current = true;
+      generateTasks.mutate();
+    }
+  }, [isLoading, cadences, generateTasks]);
 
   const handleToggle = useCallback(
     (id: string, active: boolean) => {
@@ -474,12 +441,7 @@ export default function CadencesScreen() {
   }
 
   if (!cadences || cadences.length === 0) {
-    return (
-      <InitializePrompt
-        onInit={handleInit}
-        loading={initializeCadences.isPending}
-      />
-    );
+    return <LoadingSpinner fullscreen />;
   }
 
   return (

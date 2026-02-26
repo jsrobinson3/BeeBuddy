@@ -52,6 +52,9 @@ export type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  SyncRecord,
+  SyncTableChanges,
+  SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
 } from "./api.types";
@@ -92,6 +95,7 @@ import type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
 } from "./api.types";
@@ -576,7 +580,7 @@ class ApiClient {
 
   async syncPull(lastPulledAt: number | null) {
     return this.request<{
-      changes: Record<string, { created: any[]; updated: any[]; deleted: string[] }>;
+      changes: SyncChangesMap;
       timestamp: number;
     }>("/sync/pull", {
       method: "POST",
@@ -588,7 +592,7 @@ class ApiClient {
   }
 
   async syncPush(
-    changes: Record<string, { created: any[]; updated: any[]; deleted: string[] }>,
+    changes: SyncChangesMap,
     lastPulledAt: number,
   ) {
     return this.request<{ ok: boolean }>("/sync/push", {

@@ -15,6 +15,7 @@ import { SegmentedControl } from "../../../../components/SegmentedControl";
 import { useApiary } from "../../../../hooks/useApiaries";
 import { useHive } from "../../../../hooks/useHives";
 import { useCreateInspection } from "../../../../hooks/useInspections";
+import { useUpdateTask } from "../../../../hooks/useTasks";
 import { useUnits } from "../../../../hooks/useUnits";
 import { useCurrentWeather } from "../../../../hooks/useWeather";
 import type { CreateInspectionInput } from "../../../../services/api";
@@ -29,11 +30,12 @@ import {
   TEMPLATE_OPTIONS,
   ObservationFields,
   GeneralFields,
+  ReminderFields,
   WeatherFields,
   buildObservations,
   buildWeather,
   inspectionFormStyles as createStyles,
-} from "./fields";
+} from "./_fields";
 
 function useFormState() {
   const [s, setS] = useState<FormState>({
@@ -61,6 +63,8 @@ function useFormState() {
     tempC: "",
     humidityPercent: "",
     conditions: null,
+    reminder: "",
+    reminderDate: null,
   });
 
   function set<K extends keyof FormState>(
@@ -153,15 +157,21 @@ function FormContent({
         )}
       </View>
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
+      <Text style={styles.sectionLabel}>Reminder</Text>
+      <ReminderFields s={s} set={set} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />
     </ScrollView>
   );
 }
 
 export default function CreateInspectionScreen() {
-  const { hive_id } = useLocalSearchParams<{ hive_id: string }>();
+  const { hive_id, task_id } = useLocalSearchParams<{
+    hive_id: string;
+    task_id?: string;
+  }>();
   const router = useRouter();
   const createInspection = useCreateInspection();
+  const updateTask = useUpdateTask();
   const { s, set } = useFormState();
   const units = useUnits();
   const styles = useStyles(createStyles);
@@ -188,7 +198,7 @@ export default function CreateInspectionScreen() {
       weatherFilled.current = true;
       setWeatherAutoFilled(true);
     }
-  }, [weather]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weather, s.tempC, s.humidityPercent, s.conditions, units, set]);
 
   async function handleSubmit() {
     try {
@@ -209,8 +219,18 @@ export default function CreateInspectionScreen() {
         attention: s.attention,
         duration_minutes: s.durationMinutes ?? undefined,
         notes: s.notes.trim() || undefined,
+        reminder: s.reminder.trim() || undefined,
+        reminder_date: s.reminderDate
+          ? s.reminderDate.toISOString().split("T")[0]
+          : undefined,
       };
       const result = await createInspection.mutateAsync(input);
+      if (task_id) {
+        updateTask.mutate({
+          id: task_id,
+          data: { completed_at: new Date().toISOString() },
+        });
+      }
       router.replace(`/inspection/${result.id}` as any);
     } catch (err: unknown) {
       Alert.alert("Error", getErrorMessage(err));

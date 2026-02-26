@@ -3,6 +3,7 @@ import { Q } from "@nozbe/watermelondb";
 import { database } from "../../database";
 import Hive from "../../database/models/Hive";
 import type { CreateHiveInput, UpdateHiveInput } from "../../services/api.types";
+import { syncDatabase } from "../../database/sync";
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
@@ -42,6 +43,10 @@ export function useCreateHive() {
       });
     });
     syncAfterWrite();
+    // Schedule a follow-up sync to pull back server-generated cadences/tasks.
+    // The first sync pushes the hive; the server then creates cadences + tasks.
+    // This second sync pulls those new records into the local DB.
+    setTimeout(() => syncDatabase(), 3000);
   }, []);
   return useMutationWrapper(fn);
 }

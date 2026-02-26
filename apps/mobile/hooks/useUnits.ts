@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useCurrentUser } from "./useUser";
 import {
   toDisplayTemp,
@@ -16,7 +17,7 @@ export function useUnits() {
   const system: UnitSystem =
     user?.preferences?.units === "imperial" ? "imperial" : "metric";
 
-  return {
+  return useMemo(() => ({
     system,
     toDisplayTemp: (c: number) => toDisplayTemp(c, system),
     toStorageTemp: (v: number) => toStorageTemp(v, system),
@@ -26,5 +27,5 @@ export function useUnits() {
     tempLabel: tempLabel(system),
     weightLabel: weightLabel(system),
     windSpeedLabel: windSpeedLabel(system),
-  };
+  }), [system]);
 }

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 
-import { useGoogleAuth, signInWithApple } from "../../services/oauth";
+import { signInWithGoogle, isSignInInProgress, signInWithApple } from "../../services/oauth";
 import { useAuthStore } from "../../stores/auth";
 import { useTheme, typography, radii, type ThemeColors } from "../../theme";
 import { useStyles } from "../../theme";
@@ -233,31 +233,30 @@ export function AuthSocialSection({
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
 
-  const [request, response, promptAsync] = useGoogleAuth();
-
-  useEffect(() => {
-    if (!response) return;
-    if (response.type === "error") {
-      onError?.(response.error?.message || "Google sign-in failed");
-      return;
-    }
-    if (response.type !== "success") return;
-    const idToken = response.params?.id_token;
-    if (!idToken) return;
+  const handleGoogle = useCallback(async () => {
     setGoogleLoading(true);
-    loginWithGoogle(idToken)
-      .catch((e: Error) => onError?.(e.message || "Google sign-in failed"))
-      .finally(() => setGoogleLoading(false));
-  }, [response]); // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      const result = await signInWithGoogle();
+      if (!result) return; // user cancelled
+      await loginWithGoogle(result.idToken, result.name);
+    } catch (e: unknown) {
+      if (!isSignInInProgress(e)) {
+        onError?.(e instanceof Error ? e.message : "Google sign-in failed");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [loginWithGoogle, onError]);
 
   const handleApple = useCallback(async () => {
     setAppleLoading(true);
     try {
       const result = await signInWithApple();
       await loginWithApple(result.idToken, result.name, result.email);
-    } catch (e: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
-      if (e.code !== "ERR_REQUEST_CANCELED") {
-        onError?.(e.message || "Apple sign-in failed");
+    } catch (e: unknown) {
+      const code = e instanceof Object && "code" in e ? (e as { code: string }).code : undefined;
+      if (code !== "ERR_REQUEST_CANCELED") {
+        onError?.(e instanceof Error ? e.message : "Apple sign-in failed");
       }
     } finally {
       setAppleLoading(false);
@@ -272,9 +271,9 @@ export function AuthSocialSection({
       <SocialButtonStack
         googleLoading={googleLoading}
         appleLoading={appleLoading}
-        googleDisabled={!request}
+        googleDisabled={false}
         allDisabled={isLoading}
-        onGoogle={() => promptAsync()}
+        onGoogle={handleGoogle}
         onApple={handleApple}
       />
     </View>

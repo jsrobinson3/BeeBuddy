@@ -122,6 +122,14 @@ async def generate_tasks(
     but users can trigger it manually.
     """
     hemisphere = await cadence_service.resolve_hemisphere(db, current_user)
+    # Ensure user-level cadences exist (idempotent)
+    await cadence_service.initialize_cadences(
+        db, user_id=current_user.id, hemisphere=hemisphere,
+    )
+    # Ensure hives created via sync have their cadences
+    await cadence_service.ensure_hive_cadences(
+        db, user_id=current_user.id, hemisphere=hemisphere,
+    )
     return await cadence_service.generate_due_tasks(
         db, user_id=current_user.id, hemisphere=hemisphere,
     )

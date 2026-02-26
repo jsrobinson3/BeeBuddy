@@ -7,6 +7,7 @@ Ownership hierarchy:
   - Via inspection→hive→apiary: inspection_photos
 """
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, date, datetime
@@ -335,11 +336,22 @@ async def pull_changes(
         "task_cadences": TaskCadence.user_id == user_id,
     }
 
-    changes: dict[str, dict] = {}
-    for table_name, model in TABLE_MODEL_MAP.items():
-        changes[table_name] = await _pull_table(
-            db, model, table_name, ownership_filters[table_name], last_pulled_at
-        )
+    # Parallelize the 10 _pull_table calls with independent sessions
+    from app.db.session import AsyncSessionLocal
+
+    async def _pull_one(table_name: str, model: type) -> tuple[str, dict]:
+        async with AsyncSessionLocal() as session:
+            data = await _pull_table(
+                session, model, table_name,
+                ownership_filters[table_name], last_pulled_at,
+            )
+        return table_name, data
+
+    results = await asyncio.gather(*[
+        _pull_one(table_name, model)
+        for table_name, model in TABLE_MODEL_MAP.items()
+    ])
+    changes = dict(results)
 
     return {"changes": changes, "timestamp": server_timestamp_ms}
 
@@ -350,7 +362,7 @@ def _prepare_record_data(
     table_name: str, raw: dict[str, Any]
 ) -> dict[str, Any]:
     """Clean and transform a WatermelonDB record dict for the ORM model."""
-    data = {k: v for k, v in raw.items() if k not in _WMDB_INTERNAL_FIELDS}
+    data = {k: v for k, v in raw.items() if k not in _WMDB_INTERNAL_FIELDS and k != "created_at"}
 
     # Apply column renames (client name → server name)
     renames = _COLUMN_RENAMES.get(table_name, {})
@@ -495,11 +507,20 @@ async def push_changes(
         if model is None:
             continue
 
-        await _push_upserts(
+        created_ids = await _push_upserts(
             db, model, table_name, table_changes,
             user_id, last_pulled_at,
             apiary_ids, hive_ids, inspection_ids,
         )
+        # Expand ownership sets with newly created records so that
+        # child records in the same push can reference them (C1 fix)
+        if table_name == "apiaries":
+            apiary_ids.update(created_ids)
+        elif table_name == "hives":
+            hive_ids.update(created_ids)
+        elif table_name == "inspections":
+            inspection_ids.update(created_ids)
+
         await _push_deletions(
             db, model, table_name, table_changes,
             user_id, apiary_ids, hive_ids, inspection_ids,
@@ -518,14 +539,17 @@ async def _push_upserts(
     apiary_ids: set[uuid.UUID],
     hive_ids: set[uuid.UUID],
     inspection_ids: set[uuid.UUID],
-) -> None:
-    """Process created/updated records for a single table."""
+) -> list[uuid.UUID]:
+    """Process created/updated records for a single table.
+
+    Returns a list of IDs for newly created records.
+    """
     raw_records = (
         table_changes.get("created", [])
         + table_changes.get("updated", [])
     )
     if not raw_records:
-        return
+        return []
 
     # W1: Batch-fetch existing records in one query
     parsed_ids: list[tuple[uuid.UUID, dict]] = []
@@ -538,6 +562,7 @@ async def _push_upserts(
     all_ids = [rid for rid, _ in parsed_ids]
     existing_map = await _batch_fetch(db, model, all_ids)
 
+    created_ids: list[uuid.UUID] = []
     for record_id, raw_record in parsed_ids:
         data = _prepare_record_data(table_name, raw_record)
         existing = existing_map.get(record_id)
@@ -548,10 +573,14 @@ async def _push_upserts(
                 user_id, apiary_ids, hive_ids, inspection_ids,
             )
         else:
-            _handle_create(
+            created_id = _handle_create(
                 db, model, table_name, data, record_id,
                 user_id, apiary_ids, hive_ids, inspection_ids,
             )
+            if created_id is not None:
+                created_ids.append(created_id)
+
+    return created_ids
 
 
 def _handle_update(
@@ -585,20 +614,24 @@ def _handle_create(
     apiary_ids: set[uuid.UUID],
     hive_ids: set[uuid.UUID],
     inspection_ids: set[uuid.UUID],
-) -> None:
-    """Create a new record with ownership validation."""
+) -> uuid.UUID | None:
+    """Create a new record with ownership validation.
+
+    Returns the record_id on success, or None if the record was rejected.
+    """
     # C1: Verify FK ownership for child tables
     if not _verify_new_record_ownership(
         table_name, data,
         apiary_ids, hive_ids, inspection_ids,
     ):
-        return
+        return None
 
     data["id"] = record_id
     if table_name in ("apiaries", "tasks", "task_cadences"):
         data["user_id"] = user_id
     new_record = model(**data)
     db.add(new_record)
+    return record_id
 
 
 async def _push_deletions(

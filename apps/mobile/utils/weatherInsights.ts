@@ -1,11 +1,25 @@
 import type { DayForecast } from "../services/weather";
-import type { Task, Apiary } from "../services/api.types";
+import {
+  GOOD_CONDITIONS,
+  MIN_INSPECTION_TEMP_C,
+  MAX_INSPECTION_TEMP_C,
+  EXTREME_COLD_C,
+  EXTREME_HOT_C,
+} from "./weatherConstants";
 
-const GOOD_CONDITIONS = new Set(["sunny", "partly_cloudy"]);
-const MIN_INSPECTION_TEMP_C = 15;
-const MAX_INSPECTION_TEMP_C = 30;
-const EXTREME_COLD_C = 10;
-const EXTREME_HOT_C = 38;
+/** Minimal task shape used by weather insights — works with both API types and WatermelonDB models. */
+export interface WeatherTask {
+  title: string;
+  completedAt: number | string | null;
+  dueDate: string | null;
+  apiaryId: string | null;
+}
+
+/** Minimal apiary shape used by weather insights. */
+export interface WeatherApiary {
+  id: string;
+  name: string;
+}
 
 function formatTemp(celsius: number, useFahrenheit?: boolean): string {
   if (useFahrenheit) return `${Math.round(celsius * 9/5 + 32)}\u00b0F`;
@@ -52,82 +66,121 @@ function findBestDay(daily: DayForecast[]): DayForecast | null {
 }
 
 function findApiaryName(
-  task: Task,
-  apiaries: Apiary[],
+  task: WeatherTask,
+  apiaries: WeatherApiary[],
 ): string | null {
-  if (task.apiary_id) {
-    const apiary = apiaries.find((a) => a.id === task.apiary_id);
+  if (task.apiaryId) {
+    const apiary = apiaries.find((a) => a.id === task.apiaryId);
     return apiary?.name ?? null;
   }
   return null;
 }
 
+function taskInsight(
+  task: WeatherTask,
+  dayForecast: DayForecast,
+  daily: DayForecast[],
+  apiaries: WeatherApiary[],
+): string | null {
+  const dayName = getDayName(dayForecast.date);
+  const apiaryName = findApiaryName(task, apiaries);
+  const suffix = apiaryName ? ` at ${apiaryName}` : "";
+  const label = task.title.toLowerCase();
+
+  if (isDayGoodForInspection(dayForecast)) {
+    const sky = dayForecast.conditions === "sunny"
+      ? "clear skies"
+      : "fair weather";
+    return (
+      `${dayName} will be ${sky} \u2014 perfect for` +
+      ` your upcoming ${label}${suffix}`
+    );
+  }
+
+  if (dayForecast.conditions !== "rainy") return null;
+
+  const betterDay = findBestDay(daily);
+  const day = dayName.toLowerCase();
+  if (betterDay) {
+    const alt = getDayName(betterDay.date).toLowerCase();
+    return (
+      `Rain expected ${day} \u2014 consider moving` +
+      ` your ${label}${suffix} to ${alt}`
+    );
+  }
+  return (
+    `Rain expected ${day} for your` +
+    ` ${label}${suffix} \u2014 plan to reschedule`
+  );
+}
+
+function extremeTempInsight(
+  day: DayForecast,
+  useFahrenheit?: boolean,
+): string | null {
+  const temp = formatTemp(day.temp_max_c, useFahrenheit);
+  if (day.temp_max_c < EXTREME_COLD_C) {
+    return (
+      `Cold temperatures today (${temp})` +
+      ` \u2014 avoid opening hives to keep the colony warm`
+    );
+  }
+  if (day.temp_max_c > EXTREME_HOT_C) {
+    return (
+      `Extreme heat today (${temp}) \u2014 ensure` +
+      ` hives have adequate ventilation and water`
+    );
+  }
+  return null;
+}
+
+function bestDayInsight(
+  daily: DayForecast[],
+  useFahrenheit?: boolean,
+): string | null {
+  const bestDay = findBestDay(daily);
+  if (!bestDay) return null;
+  const name = getDayName(bestDay.date);
+  const temp = formatTemp(bestDay.temp_max_c, useFahrenheit);
+  const sky = bestDay.conditions === "sunny" ? "sunny" : "fair";
+  return (
+    `${name} looks ideal for hive inspections` +
+    ` \u2014 ${temp} and ${sky}`
+  );
+}
+
 export function generateInsights(
   daily: DayForecast[],
-  tasks: Task[],
-  apiaries: Apiary[],
+  tasks: WeatherTask[],
+  apiaries: WeatherApiary[],
   useFahrenheit?: boolean,
 ): string[] {
   if (daily.length === 0) return [];
 
   const insights: string[] = [];
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Look at pending tasks with due dates in the forecast range
-  const pendingTasks = tasks.filter((t) => !t.completed_at && t.due_date);
+  const pendingTasks = tasks.filter(
+    (t) => !t.completedAt && t.dueDate,
+  );
 
   for (const task of pendingTasks) {
     if (insights.length >= 3) break;
-
-    const dayForecast = daily.find((d) => isSameDate(d.date, task.due_date!));
-    if (!dayForecast) continue;
-
-    const dayName = getDayName(dayForecast.date);
-    const apiaryName = findApiaryName(task, apiaries);
-    const locationSuffix = apiaryName ? ` at ${apiaryName}` : "";
-
-    if (isDayGoodForInspection(dayForecast)) {
-      insights.push(
-        `${dayName} will be ${dayForecast.conditions === "sunny" ? "clear skies" : "fair weather"} \u2014 perfect for your upcoming ${task.title.toLowerCase()}${locationSuffix}`,
-      );
-    } else if (dayForecast.conditions === "rainy") {
-      const betterDay = findBestDay(daily);
-      if (betterDay) {
-        const betterName = getDayName(betterDay.date);
-        insights.push(
-          `Rain expected ${dayName.toLowerCase()} \u2014 consider moving your ${task.title.toLowerCase()}${locationSuffix} to ${betterName.toLowerCase()}`,
-        );
-      } else {
-        insights.push(
-          `Rain expected ${dayName.toLowerCase()} for your ${task.title.toLowerCase()}${locationSuffix} \u2014 plan to reschedule`,
-        );
-      }
-    }
+    const forecast = daily.find(
+      (d) => isSameDate(d.date, task.dueDate!),
+    );
+    if (!forecast) continue;
+    const msg = taskInsight(task, forecast, daily, apiaries);
+    if (msg) insights.push(msg);
   }
 
   // If no task-specific insights, provide general weather guidance
   if (insights.length === 0) {
     const todayForecast = daily[0];
     if (todayForecast) {
-      if (todayForecast.temp_max_c < EXTREME_COLD_C) {
-        insights.push(
-          `Cold temperatures today (${formatTemp(todayForecast.temp_max_c, useFahrenheit)}) \u2014 avoid opening hives to keep the colony warm`,
-        );
-      } else if (todayForecast.temp_max_c > EXTREME_HOT_C) {
-        insights.push(
-          `Extreme heat today (${formatTemp(todayForecast.temp_max_c, useFahrenheit)}) \u2014 ensure hives have adequate ventilation and water`,
-        );
-      }
+      const tempMsg = extremeTempInsight(todayForecast, useFahrenheit);
+      if (tempMsg) insights.push(tempMsg);
     }
-
-    const bestDay = findBestDay(daily);
-    if (bestDay) {
-      const bestName = getDayName(bestDay.date);
-      insights.push(
-        `${bestName} looks ideal for hive inspections \u2014 ${formatTemp(bestDay.temp_max_c, useFahrenheit)} and ${bestDay.conditions === "sunny" ? "sunny" : "fair"}`,
-      );
-    }
+    const bestMsg = bestDayInsight(daily, useFahrenheit);
+    if (bestMsg) insights.push(bestMsg);
   }
 
   return insights.slice(0, 3);

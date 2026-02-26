@@ -7,6 +7,12 @@ interface LocationResult {
   longitude: number;
 }
 
+interface ReverseGeocodeResult {
+  city: string | null;
+  region: string | null;
+  country: string | null;
+}
+
 export type LocationPrecision = "exact" | "approximate" | "general";
 
 /** Decimal places per precision level. */
@@ -82,5 +88,23 @@ export function useLocation() {
     }
   }, []);
 
-  return { getLocation, geocodeAddress, loading, geocoding };
+  const reverseGeocode = useCallback(
+    async (lat: number, lng: number): Promise<string | null> => {
+      try {
+        const results = await Location.reverseGeocodeAsync({
+          latitude: lat,
+          longitude: lng,
+        });
+        if (results.length === 0) return null;
+        const r = results[0];
+        const parts = [r.city, r.region].filter(Boolean);
+        return parts.length > 0 ? parts.join(", ") : r.country ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { getLocation, geocodeAddress, reverseGeocode, loading, geocoding };
 }

@@ -14,12 +14,16 @@ import { EmptyState } from "../../../components/EmptyState";
 import { ErrorDisplay } from "../../../components/ErrorDisplay";
 import { HexIcon } from "../../../components/HexIcon";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
+import { WeatherForecastCard } from "../../../components/WeatherForecastCard";
 import { WeatherInsightCard } from "../../../components/WeatherInsightCard";
 import { useApiaries } from "../../../hooks/useApiaries";
 import { useHives } from "../../../hooks/useHives";
 import { useTasks } from "../../../hooks/useTasks";
+import { useUnits } from "../../../hooks/useUnits";
 import { useWeatherForecast } from "../../../hooks/useWeather";
-import type { Apiary, Hive } from "../../../services/api";
+import type Apiary from "../../../database/models/Apiary";
+import type Hive from "../../../database/models/Hive";
+import type Task from "../../../database/models/Task";
 import { generateInsights } from "../../../utils/weatherInsights";
 import {
   useStyles,
@@ -204,18 +208,21 @@ function StatCard({
   icon,
   value,
   label,
+  onPress,
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
+  onPress?: () => void;
 }) {
   const s = useStyles(createHeaderStyles);
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <View style={s.statCard}>
+    <Wrapper style={s.statCard} onPress={onPress}>
       {icon}
       <Text style={s.statValue}>{value}</Text>
       <Text style={s.statLabel}>{label}</Text>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -223,10 +230,12 @@ function StatsRow({
   apiaryCount,
   totalHives,
   pendingTasks,
+  onPendingPress,
 }: {
   apiaryCount: number;
   totalHives: number;
   pendingTasks: number;
+  onPendingPress?: () => void;
 }) {
   const s = useStyles(createHeaderStyles);
   return (
@@ -245,6 +254,7 @@ function StatsRow({
         icon={<StatHexIcon icon={ListChecks} />}
         value={pendingTasks}
         label="Pending Tasks"
+        onPress={onPendingPress}
       />
     </View>
   );
@@ -254,10 +264,12 @@ function DashboardHeader({
   apiaryCount,
   totalHives,
   pendingTasks,
+  onPendingPress,
 }: {
   apiaryCount: number;
   totalHives: number;
   pendingTasks: number;
+  onPendingPress?: () => void;
 }) {
   const s = useStyles(createHeaderStyles);
   const greeting = useMemo(() => getGreeting(), []);
@@ -277,6 +289,7 @@ function DashboardHeader({
         apiaryCount={apiaryCount}
         totalHives={totalHives}
         pendingTasks={pendingTasks}
+        onPendingPress={onPendingPress}
       />
     </View>
   );
@@ -381,9 +394,11 @@ function HiveBadge({ count }: { count: number }) {
 
 function ApiaryCard({
   apiary,
+  hiveCount,
   onPress,
 }: {
   apiary: Apiary;
+  hiveCount: number;
   onPress: () => void;
 }) {
   const s = useStyles(createApiaryCardStyles);
@@ -391,7 +406,7 @@ function ApiaryCard({
     <Pressable style={s.apiaryCard} onPress={onPress}>
       <ApiaryCardIcon />
       <ApiaryCardInfo name={apiary.name} city={apiary.city} />
-      <HiveBadge count={apiary.hive_count} />
+      <HiveBadge count={hiveCount} />
     </Pressable>
   );
 }
@@ -434,7 +449,9 @@ export default function ApiariesScreen() {
 
   // Use the first apiary with location for weather forecast
   const locatedApiary = useMemo(
-    () => (apiaries ?? []).find((a) => a.latitude != null && a.longitude != null),
+    () => (apiaries ?? []).find(
+      (a: Apiary) => a.latitude != null && a.longitude != null,
+    ),
     [apiaries],
   );
   const { data: forecast } = useWeatherForecast(
@@ -442,12 +459,19 @@ export default function ApiariesScreen() {
     locatedApiary?.longitude,
   );
 
+  const units = useUnits();
+
   const insights = useMemo(
     () =>
       forecast
-        ? generateInsights(forecast.daily, tasks ?? [], apiaries ?? [])
+        ? generateInsights(
+            forecast.daily,
+            tasks ?? [],
+            apiaries ?? [],
+            units.system === "imperial",
+          )
         : [],
-    [forecast, tasks, apiaries],
+    [forecast, tasks, apiaries, units.system],
   );
 
   if (isLoading) {
@@ -466,7 +490,9 @@ export default function ApiariesScreen() {
   const allHives = hives ?? [];
   const allApiaries = apiaries ?? [];
   const allTasks = tasks ?? [];
-  const pendingTasks = allTasks.filter((t) => !t.completed_at).length;
+  const pendingTasks = allTasks.filter(
+    (t: Task) => !t.completedAt,
+  ).length;
 
   function handleInspect(hiveId: string) {
     router.push(`/inspection/new?hive_id=${hiveId}` as any);
@@ -478,13 +504,23 @@ export default function ApiariesScreen() {
         apiaryCount={allApiaries.length}
         totalHives={allHives.length}
         pendingTasks={pendingTasks}
+        onPendingPress={() => router.push("/(tasks)" as any)}
       />
+      {forecast && (
+        <WeatherForecastCard
+          daily={forecast.daily}
+          city={locatedApiary?.city}
+        />
+      )}
       <WeatherInsightCard insights={insights} />
-      <QuickActions hives={allHives} onInspect={handleInspect} />
       {allApiaries.length > 0 && (
         <SectionHeading icon={MapPin} title="Your Apiaries" />
       )}
     </>
+  );
+
+  const footer = (
+    <QuickActions hives={allHives} onInspect={handleInspect} />
   );
 
   const empty = (
@@ -497,9 +533,13 @@ export default function ApiariesScreen() {
   );
 
   function renderApiary({ item }: { item: Apiary }) {
+    const count = allHives.filter(
+      (h: Hive) => h.apiaryId === item.id,
+    ).length;
     return (
       <ApiaryCard
         apiary={item}
+        hiveCount={count}
         onPress={() => router.push(`/apiary/${item.id}` as any)}
       />
     );
@@ -514,6 +554,7 @@ export default function ApiariesScreen() {
         ListHeaderComponent={header}
         renderItem={renderApiary}
         ListEmptyComponent={empty}
+        ListFooterComponent={footer}
       />
       <HexFab onPress={() => router.push("/apiary/new" as any)} />
     </View>

@@ -12,9 +12,11 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { database } from "../database";
 import { useSyncOnForeground } from "../database/useSyncOnForeground";
+import { useSyncOnReconnect } from "../database/useSyncOnReconnect";
 import { queryClient } from "../services/queryClient";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
+import { configureGoogleSignIn } from "../services/oauth";
 import { ThemeProvider, useTheme, typography } from "../theme";
 
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
@@ -26,6 +28,7 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
 }
 
 SplashScreen.preventAutoHideAsync();
+configureGoogleSignIn();
 
 const hiddenHeader = { headerShown: false };
 
@@ -74,7 +77,9 @@ function AppStack() {
 
 function SyncManager() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  useSyncOnForeground(Platform.OS !== "web" && isAuthenticated);
+  const syncEnabled = Platform.OS !== "web" && isAuthenticated;
+  useSyncOnForeground(syncEnabled);
+  useSyncOnReconnect(syncEnabled);
   return null;
 }
 

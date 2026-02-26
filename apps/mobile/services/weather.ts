@@ -123,6 +123,26 @@ export async function fetchCurrentWeather(
   lat: number,
   lng: number,
 ): Promise<CurrentWeather> {
-  const forecast = await fetchWeatherForecast(lat, lng, 1);
-  return forecast.current;
+  const params = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lng),
+    current: "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
+    timezone: "auto",
+  });
+
+  const response = await fetch(`${BASE_URL}?${params}`);
+  if (!response.ok) {
+    throw new Error(`Weather API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const code: number = data.current.weather_code;
+
+  return {
+    temp_c: data.current.temperature_2m,
+    humidity_percent: data.current.relative_humidity_2m,
+    wind_speed_kmh: data.current.wind_speed_10m,
+    conditions: mapWeatherCode(code),
+    weather_code: code,
+  };
 }
