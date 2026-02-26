@@ -245,6 +245,51 @@ async def initialize_hive_cadences(
     return created
 
 
+async def ensure_hive_cadences(
+    db: AsyncSession,
+    user_id: UUID,
+    hemisphere: Hemisphere = "north",
+) -> list[TaskCadence]:
+    """Ensure every non-deleted hive owned by the user has hive-scoped cadences.
+
+    This is a catch-up mechanism for hives created via WatermelonDB sync (which
+    bypasses the REST router and its initialize_hive_cadences call).
+    """
+    from app.models.apiary import Apiary  # avoid circular at module level
+    from app.models.hive import Hive
+
+    # Get all active hive IDs for the user
+    result = await db.execute(
+        select(Hive.id)
+        .join(Apiary, Hive.apiary_id == Apiary.id)
+        .where(
+            Apiary.user_id == user_id,
+            Hive.deleted_at.is_(None),
+            Apiary.deleted_at.is_(None),
+        )
+    )
+    hive_ids = [row[0] for row in result.all()]
+
+    if not hive_ids:
+        return []
+
+    # Get all existing hive-scoped cadences for the user
+    existing = await get_cadences(db, user_id)
+    hives_with_cadences: set[UUID] = set()
+    for c in existing:
+        if c.hive_id is not None:
+            hives_with_cadences.add(c.hive_id)
+
+    created: list[TaskCadence] = []
+    for hive_id in hive_ids:
+        if hive_id in hives_with_cadences:
+            continue
+        new = await initialize_hive_cadences(db, user_id, hive_id, hemisphere)
+        created.extend(new)
+
+    return created
+
+
 # ── Toggle / update cadence ───────────────────────────────────────────────────
 
 
@@ -320,20 +365,28 @@ def _advance_cadence(cadence: TaskCadence, today: date, hemisphere: Hemisphere) 
     )
 
 
+LOOKAHEAD_DAYS = 30
+
+
 async def generate_due_tasks(
     db: AsyncSession,
     user_id: UUID,
     as_of: date | None = None,
     hemisphere: Hemisphere = "north",
 ) -> list[Task]:
-    """Generate Task records for all cadences due on or before *as_of*."""
+    """Generate Task records for all cadences due within the lookahead window.
+
+    Tasks are created up to LOOKAHEAD_DAYS in advance so users can see
+    upcoming seasonal and recurring tasks before they're due.
+    """
     today = as_of or date.today()
+    horizon = today + timedelta(days=LOOKAHEAD_DAYS)
     cadences = await get_cadences(db, user_id, active_only=True)
     hive_cache: dict[UUID, tuple[str, UUID | None]] = {}
     tasks_created: list[Task] = []
 
     for cadence in cadences:
-        if cadence.next_due_date is None or cadence.next_due_date > today:
+        if cadence.next_due_date is None or cadence.next_due_date > horizon:
             continue
         tpl = get_template(cadence.cadence_key)
         if tpl is None:
@@ -349,7 +402,9 @@ async def generate_due_tasks(
         task = _build_task_from_cadence(user_id, cadence, tpl, hive_name, apiary_id)
         db.add(task)
         tasks_created.append(task)
-        _advance_cadence(cadence, today, hemisphere)
+        # Advance from the cadence's due date (not today) so next occurrence
+        # is correctly computed even when generating tasks ahead of schedule.
+        _advance_cadence(cadence, cadence.next_due_date, hemisphere)
 
     if tasks_created:
         await db.commit()

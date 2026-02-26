@@ -4,23 +4,32 @@ An open-source, AI-powered beekeeping management platform.
 
 ## Features
 
-- **Offline-first mobile app** — Record inspections in the field with no signal
-- **AI-powered insights** — Get summaries, recommendations, and trend analysis (Phase 2)
-- **Weather integration** — Location-based weather data for your apiaries
-- **Task management** — Reminders and AI-suggested tasks
+- **Offline-first mobile app** — Record inspections in the field with no signal via WatermelonDB
+- **Full beekeeping lifecycle** — Apiaries, hives, queens, inspections, treatments, harvests, events
+- **Wizard-style data entry** — Multi-step forms with experience-level templates (beginner/intermediate/advanced)
+- **Weather integration** — Current conditions, forecasts, and bee-friendly insights per apiary
+- **Smart task management** — Hemisphere-aware cadences with automatic task generation via Celery Beat
+- **Social login** — Google and Apple OAuth (native ID token verification)
+- **User management** — Email verification, password reset, GDPR account deletion with 30-day grace period
+- **Photo capture** — In-field photos with S3 presigned URL uploads
+- **Error tracking** — Sentry integration for API, Celery workers, and React Native
+- **Custom design system** — Hexagonal shape language, honey/forest palette, dark mode, WCAG AA accessible
+- **AI-powered insights** — Summaries, recommendations, and trend analysis (Phase 2 — planned)
 - **Cross-platform** — iOS, Android, and web via Expo
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Mobile | React Native (Expo) + WatermelonDB |
-| Backend | Python + FastAPI + SQLAlchemy + Celery |
-| Database | PostgreSQL |
-| Auth | Self-built JWT + OAuth2 social login (Google/Apple/Microsoft) |
+| Mobile | React Native (Expo SDK 54) + WatermelonDB + TanStack Query + Zustand |
+| Backend | Python 3.11+ + FastAPI + SQLAlchemy 2.0 async + Celery + Pydantic v2 |
+| Database | PostgreSQL 16 (UUIDs, JSONB, soft deletes) |
+| Auth | Self-built JWT + Google/Apple OAuth (JWKS ID token verification) |
 | Cache | Redis |
-| Storage | S3 (MinIO for local dev) |
-| AI | Ollama (local) / OpenAI / Anthropic / Bedrock |
+| Storage | S3-compatible (MinIO for local dev) |
+| Email | SendGrid API |
+| Monitoring | Sentry (API + Celery + React Native) |
+| AI | Ollama (local) / OpenAI / Anthropic / Bedrock (Phase 2) |
 
 ## Getting Started
 
@@ -102,39 +111,59 @@ Then restart: `docker compose restart api`
 ```
 BeeBuddy/
 ├── apps/
-│   ├── api/              # FastAPI backend
+│   ├── api/              # FastAPI backend (Python)
 │   │   ├── app/
-│   │   │   ├── routers/  # API endpoints
-│   │   │   ├── models/   # SQLAlchemy models
-│   │   │   ├── schemas/  # Pydantic schemas
-│   │   │   └── services/ # Business logic
+│   │   │   ├── auth/     # JWT + OAuth2 dependencies
+│   │   │   ├── db/       # SQLAlchemy session + Alembic migrations
+│   │   │   ├── models/   # SQLAlchemy 2.0 async models
+│   │   │   ├── routers/  # API endpoints (thin handlers)
+│   │   │   ├── schemas/  # Pydantic v2 request/response schemas
+│   │   │   ├── services/ # Business logic (service layer)
+│   │   │   ├── templates/# Email templates (Jinja2)
+│   │   │   └── utils/    # Shared helpers
 │   │   └── tests/
 │   │
-│   └── mobile/           # Expo React Native app
-│       ├── app/          # Expo Router screens
-│       ├── components/
-│       ├── services/     # API client
-│       └── stores/       # Zustand stores
+│   └── mobile/           # Expo React Native app (TypeScript)
+│       ├── app/          # Expo Router file-based routes
+│       │   ├── (auth)/   # Login, register, social login
+│       │   └── (tabs)/   # Tab navigator (home, tasks, settings)
+│       ├── components/   # Shared UI (HexIcon, CustomTabBar, GradientHeader, etc.)
+│       │   └── illustrations/ # SVG illustration components
+│       ├── database/     # WatermelonDB models + sync
+│       ├── hooks/        # TanStack Query hooks (one per resource)
+│       ├── services/     # API client + OAuth
+│       ├── stores/       # Zustand stores (auth, theme, hiveSetup)
+│       └── theme/        # Design tokens, themes, shared styles
 │
 ├── infra/
-│   ├── docker/           # Docker Compose for local dev
-│   └── terraform/        # Cloud infrastructure (planned -- provider TBD)
+│   └── docker/           # Docker Compose for local dev (Postgres, Redis, MinIO, Ollama)
 │
-├── data/
-│   └── knowledge_base/   # RAG corpus (planned -- Phase 2)
+├── docs/
+│   ├── design-language.md    # Full design system spec
+│   ├── oauth-setup.md        # Google & Apple OAuth setup guide
+│   └── RandD/                # Research docs (datasets, UI research)
 │
-└── docs/
-    └── openbeehive-plan.md  # Project plan
+└── .claude/
+    └── plans/            # Project plans and roadmaps
 ```
 
 ## Development Roadmap
 
-- **Phase 1:** Core inspection logging with offline sync
-- **Phase 2:** AI integration (RAG, chat, summaries)
-- **Phase 3:** IoT sensors + advanced features
-- **Phase 4:** Polish and launch
+### Phase 1: Foundation — NEARLY COMPLETE
+Core inspection logging with offline sync, full CRUD for all beekeeping resources, wizard-style data entry, social login, user management, weather integration, and custom design system.
 
-See [docs/openbeehive-plan.md](docs/openbeehive-plan.md) for full details.
+**Remaining:** CI/CD pipeline (GitHub Actions), cloud deployment, app store internal testing.
+
+### Phase 2: AI Integration — NEXT
+RAG knowledge base, LLM-powered chat, post-inspection AI summaries, natural language queries, AI-generated task suggestions, feedback system. Dataset research completed (see `docs/RandD/`).
+
+### Phase 3: IoT + Advanced Features
+TimescaleDB for time-series, MQTT sensor ingestion (BEEP-compatible), sensor dashboards, anomaly detection, brood pattern image analysis, community features.
+
+### Phase 4: Polish + Scale
+Harvest QR codes, PDF reports, multi-language, audio queen detection, predictive analytics, self-hosting guide, public launch.
+
+See [.claude/plans/openbeehive-plan.md](.claude/plans/openbeehive-plan.md) for the full plan with completion status.
 
 ## License
 

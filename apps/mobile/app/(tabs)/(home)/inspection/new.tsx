@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -7,14 +7,20 @@ import {
   Pressable,
   ScrollView,
   Text,
+  View,
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
 import { SegmentedControl } from "../../../../components/SegmentedControl";
+import { useApiary } from "../../../../hooks/useApiaries";
+import { useHive } from "../../../../hooks/useHives";
 import { useCreateInspection } from "../../../../hooks/useInspections";
+import { useUpdateTask } from "../../../../hooks/useTasks";
 import { useUnits } from "../../../../hooks/useUnits";
+import { useCurrentWeather } from "../../../../hooks/useWeather";
 import type { CreateInspectionInput } from "../../../../services/api";
-import { useStyles } from "../../../../theme";
+import { mapWeatherCode } from "../../../../services/weather";
+import { useStyles, typography, type ThemeColors } from "../../../../theme";
 import { getErrorMessage } from "../../../../utils/getErrorMessage";
 
 import {
@@ -24,11 +30,12 @@ import {
   TEMPLATE_OPTIONS,
   ObservationFields,
   GeneralFields,
+  ReminderFields,
   WeatherFields,
   buildObservations,
   buildWeather,
   inspectionFormStyles as createStyles,
-} from "./fields";
+} from "./_fields";
 
 function useFormState() {
   const [s, setS] = useState<FormState>({
@@ -56,6 +63,8 @@ function useFormState() {
     tempC: "",
     humidityPercent: "",
     conditions: null,
+    reminder: "",
+    reminderDate: null,
   });
 
   function set<K extends keyof FormState>(
@@ -92,6 +101,19 @@ function SubmitButton({
   );
 }
 
+const createAutoFillStyles = (c: ThemeColors) => ({
+  weatherHeader: {
+    flexDirection: "row" as const,
+    alignItems: "baseline" as const,
+    gap: 6,
+  },
+  autoFillHint: {
+    fontSize: 12,
+    fontFamily: typography.families.body,
+    color: c.honey,
+  },
+});
+
 function FormContent({
   s,
   set,
@@ -99,6 +121,7 @@ function FormContent({
   onSubmit,
   tempLabel,
   system,
+  weatherAutoFilled,
 }: {
   s: FormState;
   set: FormSetter;
@@ -106,8 +129,10 @@ function FormContent({
   onSubmit: () => void;
   tempLabel: string;
   system: string;
+  weatherAutoFilled: boolean;
 }) {
   const styles = useStyles(createStyles);
+  const autoFillStyles = useStyles(createAutoFillStyles);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <DatePickerField
@@ -125,20 +150,55 @@ function FormContent({
       <ObservationFields s={s} set={set} />
       <Text style={styles.sectionLabel}>General</Text>
       <GeneralFields s={s} set={set} />
-      <Text style={styles.sectionLabel}>Weather</Text>
+      <View style={autoFillStyles.weatherHeader}>
+        <Text style={styles.sectionLabel}>Weather</Text>
+        {weatherAutoFilled && (
+          <Text style={autoFillStyles.autoFillHint}>(auto-filled)</Text>
+        )}
+      </View>
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
+      <Text style={styles.sectionLabel}>Reminder</Text>
+      <ReminderFields s={s} set={set} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />
     </ScrollView>
   );
 }
 
 export default function CreateInspectionScreen() {
-  const { hive_id } = useLocalSearchParams<{ hive_id: string }>();
+  const { hive_id, task_id } = useLocalSearchParams<{
+    hive_id: string;
+    task_id?: string;
+  }>();
   const router = useRouter();
   const createInspection = useCreateInspection();
+  const updateTask = useUpdateTask();
   const { s, set } = useFormState();
   const units = useUnits();
   const styles = useStyles(createStyles);
+
+  // Resolve hive → apiary → location for weather auto-fill
+  const { data: hive } = useHive(hive_id!);
+  const { data: apiary } = useApiary(hive?.apiary_id ?? "");
+  const { data: weather } = useCurrentWeather(
+    apiary?.latitude,
+    apiary?.longitude,
+  );
+
+  const weatherFilled = useRef(false);
+  const [weatherAutoFilled, setWeatherAutoFilled] = useState(false);
+
+  useEffect(() => {
+    if (!weather || weatherFilled.current) return;
+    // Only prefill if user hasn't already entered values
+    if (s.tempC === "" && s.humidityPercent === "" && s.conditions === null) {
+      const displayTemp = units.toDisplayTemp(weather.temp_c);
+      set("tempC", String(Math.round(displayTemp)));
+      set("humidityPercent", String(weather.humidity_percent));
+      set("conditions", weather.conditions);
+      weatherFilled.current = true;
+      setWeatherAutoFilled(true);
+    }
+  }, [weather, s.tempC, s.humidityPercent, s.conditions, units, set]);
 
   async function handleSubmit() {
     try {
@@ -159,8 +219,18 @@ export default function CreateInspectionScreen() {
         attention: s.attention,
         duration_minutes: s.durationMinutes ?? undefined,
         notes: s.notes.trim() || undefined,
+        reminder: s.reminder.trim() || undefined,
+        reminder_date: s.reminderDate
+          ? s.reminderDate.toISOString().split("T")[0]
+          : undefined,
       };
       const result = await createInspection.mutateAsync(input);
+      if (task_id) {
+        updateTask.mutate({
+          id: task_id,
+          data: { completed_at: new Date().toISOString() },
+        });
+      }
       router.replace(`/inspection/${result.id}` as any);
     } catch (err: unknown) {
       Alert.alert("Error", getErrorMessage(err));
@@ -179,6 +249,7 @@ export default function CreateInspectionScreen() {
         onSubmit={handleSubmit}
         tempLabel={units.tempLabel}
         system={units.system}
+        weatherAutoFilled={weatherAutoFilled}
       />
     </KeyboardAvoidingView>
   );

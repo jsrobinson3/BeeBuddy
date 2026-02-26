@@ -5,18 +5,11 @@ import logging
 import redis.asyncio as aioredis
 
 from app.config import get_settings
+from app.redis_utils import redis_kwargs as _redis_kwargs
 
 logger = logging.getLogger(__name__)
 
 _PREFIX = "blocklist:"
-
-
-def _redis_kwargs() -> dict:
-    """Extra kwargs for Redis connections (e.g. SSL cert settings)."""
-    settings = get_settings()
-    if settings.redis_url.startswith("rediss://"):
-        return {"ssl_cert_reqs": "none"}
-    return {}
 
 
 async def block_token(jti: str, ttl_seconds: int) -> None:

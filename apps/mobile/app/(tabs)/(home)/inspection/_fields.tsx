@@ -1,10 +1,11 @@
 import { BooleanToggle } from "../../../../components/BooleanToggle";
+import { DatePickerField } from "../../../../components/DatePickerField";
 import { FormInput } from "../../../../components/FormInput";
 import { MultiSelect } from "../../../../components/MultiSelect";
 import { NumberInput } from "../../../../components/NumberInput";
 import { PickerField } from "../../../../components/PickerField";
+import type WMInspection from "../../../../database/models/Inspection";
 import type {
-  Inspection,
   InspectionObservations,
   WeatherSnapshot,
 } from "../../../../services/api";
@@ -76,6 +77,8 @@ export interface FormState {
   tempC: string;
   humidityPercent: string;
   conditions: string | null;
+  reminder: string;
+  reminderDate: Date | null;
 }
 
 export type FormSetter = <K extends keyof FormState>(
@@ -265,6 +268,30 @@ export function WeatherFields({
   );
 }
 
+const reminderNotesStyle = { textAlignVertical: "top" as const, minHeight: 80 };
+
+export function ReminderFields({ s, set }: SectionProps) {
+  return (
+    <>
+      <DatePickerField
+        label="Reminder Date"
+        value={s.reminderDate}
+        onChange={(v) => set("reminderDate", v)}
+        placeholder="No reminder set"
+      />
+      <FormInput
+        label="Reminder Note"
+        value={s.reminder}
+        onChangeText={(v) => set("reminder", v)}
+        placeholder="What to check or follow up on..."
+        multiline
+        numberOfLines={3}
+        style={reminderNotesStyle}
+      />
+    </>
+  );
+}
+
 export function buildObservations(s: FormState): InspectionObservations {
   const isInt =
     s.template === "Intermediate" || s.template === "Advanced";
@@ -372,14 +399,14 @@ function capitalize(s: string): FormState["template"] {
   return (s.charAt(0).toUpperCase() + s.slice(1)) as FormState["template"];
 }
 
-export function inspectionToFormState(inspection: Inspection): FormState {
+export function inspectionToFormState(inspection: WMInspection): FormState {
   const obs = inspection.observations ?? {};
   const weather = inspection.weather ?? {};
 
   return {
-    template: capitalize(inspection.experience_template),
-    inspectedAt: inspection.inspected_at
-      ? new Date(inspection.inspected_at + "T00:00:00")
+    template: capitalize(inspection.experienceTemplate ?? "beginner"),
+    inspectedAt: inspection.inspectedAt instanceof Date
+      ? inspection.inspectedAt
       : null,
     queenSeen: obs.queen_seen ?? false,
     eggsSeen: obs.eggs_seen ?? false,
@@ -398,7 +425,7 @@ export function inspectionToFormState(inspection: Inspection): FormState {
     varroaCount: obs.varroa_count ?? null,
     impression: inspection.impression ?? null,
     attention: inspection.attention ?? false,
-    durationMinutes: inspection.duration_minutes ?? null,
+    durationMinutes: inspection.durationMinutes ?? null,
     notes: inspection.notes ?? "",
     tempC: weather.temp_c != null ? String(weather.temp_c) : "",
     humidityPercent:
@@ -406,5 +433,9 @@ export function inspectionToFormState(inspection: Inspection): FormState {
         ? String(weather.humidity_percent)
         : "",
     conditions: weather.conditions ?? null,
+    reminder: inspection.reminder ?? "",
+    reminderDate: inspection.reminderDate
+      ? new Date(inspection.reminderDate)
+      : null,
   };
 }

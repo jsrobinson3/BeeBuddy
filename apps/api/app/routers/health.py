@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.session import get_db
+from app.redis_utils import redis_kwargs
 
 router = APIRouter()
 
@@ -44,10 +45,7 @@ async def _check_postgres(db: AsyncSession) -> str:
 async def _check_redis() -> str:
     try:
         settings = get_settings()
-        kwargs = {}
-        if settings.redis_url.startswith("rediss://"):
-            kwargs["ssl_cert_reqs"] = "none"
-        async with aioredis.from_url(settings.redis_url, **kwargs) as client:
+        async with aioredis.from_url(settings.redis_url, **redis_kwargs()) as client:
             await client.ping()
         return "ok"
     except Exception:
@@ -57,10 +55,7 @@ async def _check_redis() -> str:
 async def _check_worker() -> str:
     try:
         settings = get_settings()
-        kwargs = {}
-        if settings.redis_url.startswith("rediss://"):
-            kwargs["ssl_cert_reqs"] = "none"
-        async with aioredis.from_url(settings.redis_url, **kwargs) as client:
+        async with aioredis.from_url(settings.redis_url, **redis_kwargs()) as client:
             val = await client.get("worker:heartbeat")
         return "ok" if val else "no_heartbeat"
     except Exception:

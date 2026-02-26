@@ -9,6 +9,8 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config import get_settings
 from app.middleware.csrf import CSRFMiddleware
+from app.monitoring import init_sentry
+from app.rate_limit import limiter
 from app.routers import (
     apiaries,
     auth,
@@ -20,6 +22,7 @@ from app.routers import (
     inspections,
     photos,
     queens,
+    sync,
     tasks,
     treatments,
     users,
@@ -27,6 +30,7 @@ from app.routers import (
 from app.services import s3_service
 
 settings = get_settings()
+init_sentry()
 
 
 @asynccontextmanager
@@ -59,6 +63,7 @@ app.add_middleware(
 )
 
 # Rate-limit exceeded handler (slowapi)
+app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include routers
@@ -75,3 +80,4 @@ app.include_router(harvests.router, prefix=settings.api_v1_prefix, tags=["harves
 app.include_router(events.router, prefix=settings.api_v1_prefix, tags=["events"])
 app.include_router(tasks.router, prefix=settings.api_v1_prefix, tags=["tasks"])
 app.include_router(cadences.router, prefix=settings.api_v1_prefix, tags=["cadences"])
+app.include_router(sync.router, prefix=settings.api_v1_prefix, tags=["sync"])

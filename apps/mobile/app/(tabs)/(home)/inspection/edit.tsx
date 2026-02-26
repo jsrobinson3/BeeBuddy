@@ -28,12 +28,13 @@ import {
   TEMPLATE_OPTIONS,
   ObservationFields,
   GeneralFields,
+  ReminderFields,
   WeatherFields,
   buildObservations,
   buildWeather,
   inspectionToFormState,
   inspectionFormStyles as createStyles,
-} from "./fields";
+} from "./_fields";
 
 function SubmitButton({
   isPending,
@@ -100,6 +101,8 @@ function FormContent({
       <FormHeader s={s} set={set} />
       <Text style={styles.sectionLabel}>Weather</Text>
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
+      <Text style={styles.sectionLabel}>Reminder</Text>
+      <ReminderFields s={s} set={set} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />
     </ScrollView>
   );
@@ -150,6 +153,10 @@ export default function EditInspectionScreen() {
         attention: s.attention,
         duration_minutes: s.durationMinutes ?? undefined,
         notes: s.notes.trim() || undefined,
+        reminder: s.reminder.trim() || undefined,
+        reminder_date: s.reminderDate
+          ? s.reminderDate.toISOString().split("T")[0]
+          : undefined,
       };
       await updateInspection.mutateAsync({ id: id!, data: input });
       router.back();

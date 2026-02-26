@@ -52,6 +52,9 @@ export type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  SyncRecord,
+  SyncTableChanges,
+  SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
 } from "./api.types";
@@ -92,6 +95,7 @@ import type {
   CadenceTemplate,
   Cadence,
   UpdateCadenceInput,
+  SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
 } from "./api.types";
@@ -569,6 +573,34 @@ class ApiClient {
   async deleteInspectionPhoto(inspectionId: string, photoId: string) {
     return this.request<void>(`/inspections/${inspectionId}/photos/${photoId}`, {
       method: "DELETE",
+    });
+  }
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+
+  async syncPull(lastPulledAt: number | null) {
+    return this.request<{
+      changes: SyncChangesMap;
+      timestamp: number;
+    }>("/sync/pull", {
+      method: "POST",
+      body: JSON.stringify({
+        last_pulled_at: lastPulledAt,
+        schema_version: 1,
+      }),
+    });
+  }
+
+  async syncPush(
+    changes: SyncChangesMap,
+    lastPulledAt: number,
+  ) {
+    return this.request<{ ok: boolean }>("/sync/push", {
+      method: "POST",
+      body: JSON.stringify({
+        changes,
+        last_pulled_at: lastPulledAt,
+      }),
     });
   }
 }

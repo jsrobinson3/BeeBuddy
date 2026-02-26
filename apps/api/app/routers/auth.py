@@ -6,18 +6,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from jose import JWTError
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.cookies import clear_auth_cookies, set_auth_cookies
 from app.auth.jwt import decode_token
 from app.auth.token_blocklist import block_token
 from app.db.session import get_db
+from app.rate_limit import limiter
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
-    OAuthCallback,
+    OAuthTokenRequest,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -28,12 +27,11 @@ from app.schemas.verification import (
     ResetPasswordRequest,
     VerifyEmailRequest,
 )
-from app.services import auth_service
+from app.services import auth_service, cadence_service, oauth_service
 from app.tasks import send_email_task
 
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth")
 
 
@@ -50,6 +48,9 @@ async def register(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = await auth_service.register(db, data.model_dump())
+    # Seed default cadences so tasks auto-generate without manual setup
+    hemisphere = await cadence_service.resolve_hemisphere(db, user)
+    await cadence_service.initialize_cadences(db, user_id=user.id, hemisphere=hemisphere)
     # Enqueue verification email
     verify_token = auth_service.create_email_verification_token(user.id, user.email)
     send_email_task.delay(
@@ -227,9 +228,45 @@ async def reset_password(
     return {"detail": "Password has been reset"}
 
 
-@router.post("/oauth/{provider}", response_model=TokenResponse, status_code=501)
-async def oauth_callback(
-    provider: str, data: OAuthCallback, db: AsyncSession = Depends(get_db)
+@router.post("/oauth/{provider}", response_model=TokenResponse)
+@limiter.limit("10/minute")
+async def oauth_login(
+    request: Request,
+    provider: str,
+    data: OAuthTokenRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
 ):
-    """OAuth callback stub — not yet implemented."""
-    raise HTTPException(status_code=501, detail="OAuth not implemented")
+    """Authenticate via native OAuth ID token (Google or Apple)."""
+    if provider not in ("google", "apple"):
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+
+    try:
+        if provider == "google":
+            payload = await oauth_service.verify_google_id_token(data.id_token)
+            email = payload["email"]
+            name = payload.get("name") or data.name
+        else:
+            payload = await oauth_service.verify_apple_id_token(data.id_token)
+            email = payload.get("email") or data.email
+            name = data.name
+        oauth_sub = payload["sub"]
+    except ValueError as e:
+        logger.warning("OAuth %s token verification failed: %s", provider, e)
+        raise HTTPException(status_code=401, detail="Authentication failed")
+
+    try:
+        user = await oauth_service.resolve_oauth_user(
+            db, provider, oauth_sub, email, name
+        )
+    except ValueError as e:
+        logger.warning("OAuth %s user resolution failed: %s", provider, e)
+        raise HTTPException(status_code=409, detail="Account conflict")
+
+    # Seed default cadences (idempotent — no-op for returning users)
+    hemisphere = await cadence_service.resolve_hemisphere(db, user)
+    await cadence_service.initialize_cadences(db, user_id=user.id, hemisphere=hemisphere)
+
+    access, refresh = auth_service.issue_tokens(user.id)
+    set_auth_cookies(response, access, refresh)
+    return TokenResponse(access_token=access, refresh_token=refresh)

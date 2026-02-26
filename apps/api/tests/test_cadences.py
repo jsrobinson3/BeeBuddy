@@ -337,12 +337,17 @@ class TestCustomCadenceScheduling:
 
     async def _get_cadence_by_key(self, client, headers, key: str) -> dict:
         cadences = (await client.get(f"{PREFIX}/cadences", headers=headers)).json()
-        return next(c for c in cadences if c["cadence_key"] == key)
+        try:
+            return next(c for c in cadences if c["cadence_key"] == key)
+        except StopIteration:
+            raise AssertionError(
+                f"Cadence '{key}' not found in {[c['cadence_key'] for c in cadences]}"
+            )
 
     async def test_custom_interval_days_persisted(self, client: AsyncClient):
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
 
         resp = await client.patch(
             f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
@@ -354,7 +359,7 @@ class TestCustomCadenceScheduling:
     async def test_custom_interval_recalculates_next_due(self, client: AsyncClient):
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
         original_due = cadence["next_due_date"]
 
         resp = await client.patch(
@@ -384,7 +389,7 @@ class TestCustomCadenceScheduling:
     async def test_reset_custom_to_null_reverts_to_catalog(self, client: AsyncClient):
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
 
         # Set custom, then clear it
         await client.patch(
@@ -413,7 +418,7 @@ class TestCustomCadenceScheduling:
         """Toggling is_active alone should not change next_due_date."""
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        cadence = await self._get_cadence_by_key(client, headers, "regular_inspection")
+        cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
         original_due = cadence["next_due_date"]
 
         resp = await client.patch(

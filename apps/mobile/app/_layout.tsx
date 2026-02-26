@@ -1,18 +1,34 @@
+import * as Sentry from "@sentry/react-native";
 import { ThemeProvider as NavigationThemeProvider } from "@react-navigation/native";
+import { DatabaseProvider } from "@nozbe/watermelondb/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo } from "react";
+import { Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { database } from "../database";
+import { useSyncOnForeground } from "../database/useSyncOnForeground";
+import { useSyncOnReconnect } from "../database/useSyncOnReconnect";
 import { queryClient } from "../services/queryClient";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
+import { configureGoogleSignIn } from "../services/oauth";
 import { ThemeProvider, useTheme, typography } from "../theme";
 
+if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+    tracesSampleRate: 0.2,
+    environment: __DEV__ ? "development" : "production",
+  });
+}
+
 SplashScreen.preventAutoHideAsync();
+configureGoogleSignIn();
 
 const hiddenHeader = { headerShown: false };
 
@@ -59,6 +75,14 @@ function AppStack() {
   );
 }
 
+function SyncManager() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const syncEnabled = Platform.OS !== "web" && isAuthenticated;
+  useSyncOnForeground(syncEnabled);
+  useSyncOnReconnect(syncEnabled);
+  return null;
+}
+
 function RootNav() {
   const { isDark } = useTheme();
   const hydrateAuth = useAuthStore((s) => s.hydrate);
@@ -99,25 +123,35 @@ function RootNav() {
   return (
     <>
       <StatusBar style={isDark ? "light" : "dark"} />
+      <SyncManager />
       <AppStack />
     </>
   );
 }
 
 function Providers({ children }: { children: React.ReactNode }) {
-  return (
+  const inner = (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <ThemeProvider>{children}</ThemeProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
   );
+
+  // WatermelonDB only works on native platforms
+  if (Platform.OS === "web") {
+    return inner;
+  }
+
+  return <DatabaseProvider database={database}>{inner}</DatabaseProvider>;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <Providers>
       <RootNav />
     </Providers>
   );
 }
+
+export default Sentry.wrap(RootLayout);

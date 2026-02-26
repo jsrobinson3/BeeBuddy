@@ -1,53 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../services/api";
-import type { CreateTaskInput, UpdateTaskInput } from "../services/api";
+import { Platform } from "react-native";
 
-export function useTasks(filters?: {
-  hive_id?: string;
-  apiary_id?: string;
-}) {
-  return useQuery({
-    queryKey: ["tasks", filters],
-    queryFn: () => api.getTasks(filters),
-  });
-}
+const impl =
+  Platform.OS === "web"
+    ? require("./useTasks.legacy")
+    : require("./db/useTasks");
 
-export function useTask(id: string) {
-  return useQuery({
-    queryKey: ["tasks", id],
-    queryFn: () => api.getTask(id),
-    enabled: !!id,
-  });
-}
-
-export function useCreateTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: CreateTaskInput) => api.createTask(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-}
-
-export function useUpdateTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateTaskInput }) =>
-      api.updateTask(id, data),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["tasks", variables.id] });
-    },
-  });
-}
-
-export function useDeleteTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.deleteTask(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-}
+export const useTasks = impl.useTasks;
+export const useTask = impl.useTask;
+export const useCreateTask = impl.useCreateTask;
+export const useUpdateTask = impl.useUpdateTask;
+export const useDeleteTask = impl.useDeleteTask;

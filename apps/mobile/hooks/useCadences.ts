@@ -1,49 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../services/api";
-import type { UpdateCadenceInput } from "../services/api";
+import { Platform } from "react-native";
 
-export function useCadenceCatalog() {
-  return useQuery({
-    queryKey: ["cadences", "catalog"],
-    queryFn: () => api.getCadenceCatalog(),
-  });
-}
+const impl =
+  Platform.OS === "web"
+    ? require("./useCadences.legacy")
+    : require("./db/useCadences");
 
-export function useCadences(hiveId?: string) {
-  return useQuery({
-    queryKey: ["cadences", { hiveId }],
-    queryFn: () => api.getCadences(hiveId),
-  });
-}
-
-export function useInitializeCadences() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.initializeCadences(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cadences"] });
-    },
-  });
-}
-
-export function useUpdateCadence() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateCadenceInput }) =>
-      api.updateCadence(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cadences"] });
-    },
-  });
-}
-
-export function useGenerateCadenceTasks() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.generateCadenceTasks(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["cadences"] });
-    },
-  });
-}
+export const useCadenceCatalog = impl.useCadenceCatalog;
+export const useCadences = impl.useCadences;
+export const useInitializeCadences = impl.useInitializeCadences;
+export const useUpdateCadence = impl.useUpdateCadence;
+export const useGenerateCadenceTasks = impl.useGenerateCadenceTasks;

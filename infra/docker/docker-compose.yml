@@ -164,7 +164,7 @@ services:
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_BUCKET=beebuddy-photos
       - EMAIL_SUPPRESS=true
-      - EMAIL_FROM_ADDRESS=noreply@beebuddy.app
+      - EMAIL_FROM_ADDRESS=noreply@beebuddyai.com
       - SENDGRID_API_KEY=${SENDGRID_API_KEY:-}
     depends_on:
       postgres:

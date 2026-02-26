@@ -1,5 +1,5 @@
 import { Text, TextInput, View } from "react-native";
-import type { TextInputProps } from "react-native";
+import type { StyleProp, TextInputProps, ViewStyle } from "react-native";
 
 import { useStyles, typography, useTheme, type ThemeColors } from "../theme";
 
@@ -8,6 +8,7 @@ interface FormInputProps extends Omit<TextInputProps, "value" | "onChangeText"> 
   error?: string;
   value: string;
   onChangeText: (text: string) => void;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
 const createStyles = (c: ThemeColors) => ({
@@ -46,12 +47,13 @@ export function FormInput({
   value,
   onChangeText,
   style,
+  containerStyle,
   ...rest
 }: FormInputProps) {
   const styles = useStyles(createStyles);
   const { colors } = useTheme();
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={[styles.input, error && styles.inputError, style]}

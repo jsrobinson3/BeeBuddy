@@ -20,7 +20,6 @@ class UserUpdate(BaseModel):
 
     name: str | None = None
     email: str | None = None
-    password: str | None = None
     experience_level: str | None = None
     locale: str | None = None
     timezone: str | None = None

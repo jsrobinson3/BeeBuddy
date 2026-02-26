@@ -14,6 +14,7 @@ from starlette.responses import StreamingResponse
 
 from app.auth.dependencies import get_current_user
 from app.auth.jwt import decode_token
+from app.auth.token_blocklist import is_blocked
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.photo import PhotoResponse
@@ -102,7 +103,7 @@ async def list_photos(
 @router.get("/photos/{photo_id}/file")
 async def download_photo(
     photo_id: UUID,
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Download a photo file.
@@ -126,6 +127,9 @@ async def download_photo(
         token_type: str | None = payload.get("type")
         if user_id_str is None or token_type != "access":
             raise HTTPException(status_code=401, detail="Invalid token")
+        jti = payload.get("jti")
+        if jti and await is_blocked(jti):
+            raise HTTPException(status_code=401, detail="Token revoked")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 

@@ -2,23 +2,24 @@
 
 import logging
 import socket
-import ssl
 
 from celery import Celery
 
 from app.config import get_settings
+from app.monitoring import init_sentry
+from app.redis_utils import celery_broker_ssl, redis_kwargs
 
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
+init_sentry()
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
 celery_app.conf.broker_connection_retry_on_startup = True
 
-if settings.redis_url.startswith("rediss://"):
-    celery_app.conf.broker_use_ssl = {
-        "ssl_cert_reqs": ssl.CERT_NONE,
-    }
+_broker_ssl = celery_broker_ssl()
+if _broker_ssl is not None:
+    celery_app.conf.broker_use_ssl = _broker_ssl
 
 # Keep connections alive to prevent managed Valkey/Redis services (e.g.
 # DigitalOcean) from closing idle connections.  TCP keepalive probes start
@@ -195,10 +196,26 @@ async def _generate_cadence_tasks_async() -> None:
 async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
     """Generate cadence tasks for a single user."""
     from app.db.session import AsyncSessionLocal
+    from app.models.user import User
 
     try:
         async with AsyncSessionLocal() as db:
-            tasks_created = await cadence_service.generate_due_tasks(db, user_id=uid)
+            user = await db.get(User, uid)
+            if user is None:
+                return
+            hemisphere = await cadence_service.resolve_hemisphere(db, user)
+            # Ensure user-level cadences exist (e.g. if user registered
+            # before cadences were seeded, or created hives via sync only)
+            await cadence_service.initialize_cadences(
+                db, user_id=uid, hemisphere=hemisphere,
+            )
+            # Ensure hives created via sync have their cadences
+            await cadence_service.ensure_hive_cadences(
+                db, user_id=uid, hemisphere=hemisphere,
+            )
+            tasks_created = await cadence_service.generate_due_tasks(
+                db, user_id=uid, hemisphere=hemisphere,
+            )
     except Exception:
         logger.exception("Failed to generate cadence tasks for user %s", uid)
         return
@@ -224,10 +241,7 @@ def celery_worker_heartbeat():
     import redis
 
     settings = get_settings()
-    kwargs = {}
-    if settings.redis_url.startswith("rediss://"):
-        kwargs["ssl_cert_reqs"] = "none"
-    r = redis.from_url(settings.redis_url, **kwargs)
+    r = redis.from_url(settings.redis_url, **redis_kwargs())
     r.set("worker:heartbeat", "1", ex=120)
     r.close()
 
