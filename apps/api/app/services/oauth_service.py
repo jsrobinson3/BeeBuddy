@@ -6,7 +6,7 @@ import time
 import httpx
 from jose import JWTError
 from jose import jwt as jose_jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -175,8 +175,8 @@ async def _find_by_oauth(
 
 
 async def _find_by_email(db: AsyncSession, email: str) -> User | None:
-    """Find a non-deleted user by email."""
-    stmt = select(User).where(User.email == email, User.deleted_at.is_(None))
+    """Find a non-deleted user by email (case-insensitive)."""
+    stmt = select(User).where(func.lower(User.email) == email.lower(), User.deleted_at.is_(None))
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -232,7 +232,7 @@ async def resolve_oauth_user(
         raise ValueError("Email required for first-time OAuth registration")
 
     new_user = User(
-        email=email,
+        email=email.lower(),
         name=name,
         oauth_provider=provider,
         oauth_sub=oauth_sub,

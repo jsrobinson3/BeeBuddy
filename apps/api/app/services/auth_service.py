@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.jwt import ALGORITHM, create_access_token, create_refresh_token, decode_token
@@ -14,8 +14,8 @@ from app.models.user import User
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    """Lookup a non-deleted user by email."""
-    stmt = select(User).where(User.email == email, User.deleted_at.is_(None))
+    """Lookup a non-deleted user by email (case-insensitive)."""
+    stmt = select(User).where(func.lower(User.email) == email.lower(), User.deleted_at.is_(None))
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -30,7 +30,7 @@ async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
 async def register(db: AsyncSession, data: dict) -> User:
     """Create a new user with a hashed password and return the user."""
     user = User(
-        email=data["email"],
+        email=data["email"].lower(),
         password_hash=hash_password(data["password"]),
         name=data.get("name"),
     )
