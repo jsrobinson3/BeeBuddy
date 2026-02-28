@@ -100,8 +100,33 @@ def _render_template(template_name: str, context: dict) -> str:
 
 
 def render_and_build_html(template_name: str, context: dict) -> str:
-    """Render a template — public helper used by the Celery task."""
-    return _render_template(template_name, context)
+    """Render a template — public helper used by the Celery task.
+
+    Automatically injects ``frontend_url`` and ``app_name`` into the context
+    and builds action URLs from a raw ``token`` when the template-specific URL
+    key is missing (e.g. ``verify_url`` for ``verify_email.html``).
+    """
+    settings = get_settings()
+    enriched = {
+        "app_name": settings.app_name,
+        "frontend_url": settings.frontend_url,
+        **context,
+    }
+
+    # Build the action URL from token if the template-specific key is absent.
+    token = enriched.get("token")
+    if token:
+        _URL_TEMPLATES: dict[str, tuple[str, str]] = {
+            "verify_email.html": ("verify_url", "/verify-email?token="),
+            "password_reset.html": ("reset_url", "/reset-password?token="),
+            "account_deletion.html": ("cancel_url", "/cancel-deletion?token="),
+        }
+        mapping = _URL_TEMPLATES.get(template_name)
+        if mapping and mapping[0] not in enriched:
+            key, path = mapping
+            enriched[key] = f"{settings.frontend_url}{path}{token}"
+
+    return _render_template(template_name, enriched)
 
 
 async def send_verification_email(to: str, token: str) -> None:
