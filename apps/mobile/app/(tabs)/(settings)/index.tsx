@@ -10,6 +10,7 @@ import {
 } from "../../../hooks/useUser";
 import { useAuthStore } from "../../../stores/auth";
 import { useThemeStore } from "../../../stores/theme";
+import { ResponsiveContainer } from "../../../components/ResponsiveContainer";
 import { useStyles, typography, type ThemeColors } from "../../../theme";
 
 const EXPERIENCE_LEVELS = ["Beginner", "Intermediate", "Advanced"];
@@ -286,6 +287,7 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={layout.container}>
+      <ResponsiveContainer maxWidth={600}>
       <AppearanceSection />
       <AccountSection />
 
@@ -326,6 +328,7 @@ export default function SettingsScreen() {
       <Pressable style={logoutPressStyle} onPress={logout}>
         <Text style={layout.logoutText}>Sign Out</Text>
       </Pressable>
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

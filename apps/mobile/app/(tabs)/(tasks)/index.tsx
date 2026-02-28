@@ -12,6 +12,7 @@ import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { SegmentedControl } from "../../../components/SegmentedControl";
 import { useTasks, useCreateTask, useUpdateTask } from "../../../hooks/useTasks";
 import type TaskModel from "../../../database/models/Task";
+import { ResponsiveContainer } from "../../../components/ResponsiveContainer";
 import {
   useStyles,
   useTheme,
@@ -323,23 +324,25 @@ export default function TasksScreen() {
 
   return (
     <View style={s.container}>
-      <FlatList
-        data={sorted}
-        keyExtractor={(item: TaskModel) => item.id}
-        contentContainerStyle={s.list}
-        ListHeaderComponent={<CadencesLink />}
-        renderItem={({ item }: { item: TaskModel }) => (
-          <TaskCard
-            task={item}
-            onToggleComplete={() => handleToggle(item)}
-            onPress={() => handlePress(item)}
-          />
-        )}
-        ListEmptyComponent={
-          <EmptyState title="No tasks"
-            subtitle="Tap + to create one, or set up cadences for recurring tasks." />
-        }
-      />
+      <ResponsiveContainer fill>
+        <FlatList
+          data={sorted}
+          keyExtractor={(item: TaskModel) => item.id}
+          contentContainerStyle={s.list}
+          ListHeaderComponent={<CadencesLink />}
+          renderItem={({ item }: { item: TaskModel }) => (
+            <TaskCard
+              task={item}
+              onToggleComplete={() => handleToggle(item)}
+              onPress={() => handlePress(item)}
+            />
+          )}
+          ListEmptyComponent={
+            <EmptyState title="No tasks"
+              subtitle="Tap + to create one, or set up cadences for recurring tasks." />
+          }
+        />
+      </ResponsiveContainer>
       <HexFab onPress={() => setModalVisible(true)} />
       <CreateTaskModal visible={modalVisible} onClose={() => setModalVisible(false)} />
     </View>

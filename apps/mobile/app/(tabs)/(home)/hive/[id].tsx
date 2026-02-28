@@ -24,6 +24,7 @@ import type {
   HiveEvent,
   Harvest,
 } from "../../../../services/api";
+import { ResponsiveContainer } from "../../../../components/ResponsiveContainer";
 import {
   useStyles,
   typography,
@@ -346,6 +347,7 @@ export default function HiveDetailScreen() {
       style={layout.container}
       contentContainerStyle={layout.content}
     >
+      <ResponsiveContainer>
       <Pressable
         style={layout.editButton}
         onPress={() => router.push(`/hive/edit?id=${id}` as any)}
@@ -483,6 +485,7 @@ export default function HiveDetailScreen() {
           <Text style={info.noData}>No events recorded</Text>
         )}
       </Card>
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

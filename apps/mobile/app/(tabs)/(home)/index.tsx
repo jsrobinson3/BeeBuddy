@@ -25,6 +25,7 @@ import type Apiary from "../../../database/models/Apiary";
 import type Hive from "../../../database/models/Hive";
 import type Task from "../../../database/models/Task";
 import { generateInsights } from "../../../utils/weatherInsights";
+import { ResponsiveContainer } from "../../../components/ResponsiveContainer";
 import {
   useStyles,
   useTheme,
@@ -547,15 +548,17 @@ export default function ApiariesScreen() {
 
   return (
     <View style={s.container}>
-      <FlatList
-        data={allApiaries}
-        keyExtractor={(item: Apiary) => item.id}
-        contentContainerStyle={s.list}
-        ListHeaderComponent={header}
-        renderItem={renderApiary}
-        ListEmptyComponent={empty}
-        ListFooterComponent={footer}
-      />
+      <ResponsiveContainer fill>
+        <FlatList
+          data={allApiaries}
+          keyExtractor={(item: Apiary) => item.id}
+          contentContainerStyle={s.list}
+          ListHeaderComponent={header}
+          renderItem={renderApiary}
+          ListEmptyComponent={empty}
+          ListFooterComponent={footer}
+        />
+      </ResponsiveContainer>
       <HexFab onPress={() => router.push("/apiary/new" as any)} />
     </View>
   );

@@ -12,6 +12,7 @@ import { useApiary } from "../../../../hooks/useApiaries";
 import { useHives } from "../../../../hooks/useHives";
 import { useWeatherForecast } from "../../../../hooks/useWeather";
 import type { Hive } from "../../../../services/api";
+import { ResponsiveContainer } from "../../../../components/ResponsiveContainer";
 import { useStyles, useTheme, typography, spacing, type ThemeColors } from "../../../../theme";
 
 const createHeaderStyles = (c: ThemeColors) => ({
@@ -207,28 +208,30 @@ export default function ApiaryDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ApiaryHeader
-        name={apiary?.name}
-        hexColor={apiary?.hex_color}
-        city={apiary?.city}
-        hiveCount={hiveCount}
-      />
-      {weatherCard && (
-        <View style={styles.weatherSection}>{weatherCard}</View>
-      )}
-      <Pressable
-        style={styles.editButton}
-        onPress={() => router.push(`/apiary/edit?id=${id}` as any)}
-      >
-        <Text style={styles.editButtonText}>Edit Apiary</Text>
-      </Pressable>
-      <FlatList
-        data={hives ?? []}
-        keyExtractor={(item: Hive) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={renderHive}
-        ListEmptyComponent={emptyState}
-      />
+      <ResponsiveContainer fill>
+        <ApiaryHeader
+          name={apiary?.name}
+          hexColor={apiary?.hex_color}
+          city={apiary?.city}
+          hiveCount={hiveCount}
+        />
+        {weatherCard && (
+          <View style={styles.weatherSection}>{weatherCard}</View>
+        )}
+        <Pressable
+          style={styles.editButton}
+          onPress={() => router.push(`/apiary/edit?id=${id}` as any)}
+        >
+          <Text style={styles.editButtonText}>Edit Apiary</Text>
+        </Pressable>
+        <FlatList
+          data={hives ?? []}
+          keyExtractor={(item: Hive) => item.id}
+          contentContainerStyle={styles.list}
+          renderItem={renderHive}
+          ListEmptyComponent={emptyState}
+        />
+      </ResponsiveContainer>
       <AddHiveFab onPress={() => router.push(`/hive/new?apiary_id=${id}` as any)} />
     </View>
   );

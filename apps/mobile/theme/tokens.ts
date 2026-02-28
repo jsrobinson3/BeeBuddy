@@ -67,3 +67,11 @@ export const shadows = {
     elevation: 5,
   },
 } as const;
+
+export const breakpoints = {
+  tablet: 768,
+  desktop: 1024,
+  maxContentWidth: 720,
+  maxDesktopWidth: 1200,
+  sidebarWidth: 260,
+} as const;
