@@ -28,7 +28,9 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
 }
 
 SplashScreen.preventAutoHideAsync();
-configureGoogleSignIn();
+if (Platform.OS !== "web") {
+  configureGoogleSignIn();
+}
 
 const hiddenHeader = { headerShown: false };
 
@@ -70,6 +72,9 @@ function AppStack() {
       <Stack screenOptions={screenOptions}>
         <Stack.Screen name="(auth)" options={hiddenHeader} />
         <Stack.Screen name="(tabs)" options={hiddenHeader} />
+        <Stack.Screen name="verify-email" options={hiddenHeader} />
+        <Stack.Screen name="reset-password" options={hiddenHeader} />
+        <Stack.Screen name="cancel-deletion" options={hiddenHeader} />
       </Stack>
     </NavigationThemeProvider>
   );

@@ -195,7 +195,7 @@ interface ButtonStackProps {
 
 function SocialButtonStack(p: ButtonStackProps) {
   const s = useStyles(createSocialStyles);
-  const appleButton = Platform.OS === "ios" ? (
+  const appleButton = Platform.OS === "ios" || Platform.OS === "web" ? (
     <AppleButton
       loading={p.appleLoading}
       disabled={p.allDisabled}

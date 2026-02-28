@@ -3,12 +3,13 @@
 {% block title %}Account deletion scheduled - {{ app_name }}{% endblock %}
 
 {% block content %}
-<p>Your {{ app_name }} account has been scheduled for deletion.</p>
-<p>Your data will be permanently removed after the grace period. If this was a mistake, you can cancel the deletion by clicking the button below:</p>
+<p class="greeting">Account scheduled for deletion</p>
+<p>Your {{ app_name }} account has been scheduled for deletion. Your data will be permanently removed after the grace period.</p>
+<p>If this was a mistake, you can cancel the deletion:</p>
 <p style="text-align: center; margin: 28px 0;">
   <a href="{{ cancel_url }}" class="btn btn-danger">Cancel Deletion</a>
 </p>
-<p>If the button doesn't work, copy and paste this link into your browser:</p>
-<p style="word-break: break-all; font-size: 13px; color: #666666;">{{ cancel_url }}</p>
-<p>If you intended to delete your account, no further action is needed.</p>
+<p class="subtext">If the button doesn't work, copy and paste this link into your browser:</p>
+<p class="link-fallback">{{ cancel_url }}</p>
+<p class="subtext" style="margin-top: 20px;">If you intended to delete your account, no further action is needed.</p>
 {% endblock %}
