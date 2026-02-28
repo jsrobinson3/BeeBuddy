@@ -33,6 +33,7 @@ import {
   spacing,
   radii,
   shadows,
+  webPointer,
   type ThemeColors,
 } from "../../../theme";
 
@@ -70,6 +71,7 @@ const createLayoutStyles = (c: ThemeColors) => ({
     position: "absolute" as const,
     right: 20,
     bottom: 20,
+    ...webPointer,
   },
 });
 
@@ -142,6 +144,7 @@ const createQuickInspectStyles = (c: ThemeColors) => ({
     paddingVertical: spacing.sm - 2,
     borderRadius: radii.pill,
     backgroundColor: c.honey,
+    ...webPointer,
   },
   inspectButtonText: {
     ...typography.sizes.caption,
@@ -159,6 +162,7 @@ const createApiaryCardStyles = (c: ThemeColors) => ({
     flexDirection: "row" as const,
     alignItems: "center" as const,
     ...shadows.card,
+    ...webPointer,
   },
   apiaryInfo: {
     flex: 1,

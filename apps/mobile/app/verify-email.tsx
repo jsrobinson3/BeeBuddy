@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 
 import { GradientHeader } from "../components/GradientHeader";
+import { ResponsiveContainer } from "../components/ResponsiveContainer";
 import { API_BASE_URL } from "../services/config";
 import { getErrorMessage } from "../utils/getErrorMessage";
 import { useStyles, typography, spacing, radii, shadows, type ThemeColors } from "../theme";
@@ -223,12 +224,14 @@ export default function VerifyEmailScreen() {
 
   return (
     <ScrollView contentContainerStyle={layout.scrollContent} bounces={false}>
-      <GradientHeader height={200} />
-      <View style={layout.container}>
-        {status === "loading" && <LoadingCard />}
-        {status === "success" && <SuccessCard verifiedEmail={verifiedEmail} onNavigate={navigateToLogin} />}
-        {status === "error" && <ErrorCard message={errorMessage} onNavigate={navigateToLogin} />}
-      </View>
+      <ResponsiveContainer maxWidth={480}>
+        <GradientHeader height={200} />
+        <View style={layout.container}>
+          {status === "loading" && <LoadingCard />}
+          {status === "success" && <SuccessCard verifiedEmail={verifiedEmail} onNavigate={navigateToLogin} />}
+          {status === "error" && <ErrorCard message={errorMessage} onNavigate={navigateToLogin} />}
+        </View>
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

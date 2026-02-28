@@ -5,6 +5,7 @@ export { spacing, radii, typography, shadows, breakpoints } from "./tokens";
 export type { ThemeColors } from "./themes";
 export { lightTheme, darkTheme } from "./themes";
 export {
+  webPointer,
   pickerStyles,
   formSubmitStyles,
   formDeleteStyles,

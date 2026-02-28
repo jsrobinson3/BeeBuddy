@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { GradientHeader } from "../../components/GradientHeader";
+import { ResponsiveContainer } from "../../components/ResponsiveContainer";
 import {
   AuthHeader,
   AuthInput,
@@ -122,20 +123,22 @@ export default function LoginScreen() {
       keyboardShouldPersistTaps="handled"
       bounces={false}
     >
-      <GradientHeader height={260}>
-        <AuthHeader subtitle="Your beekeeping companion" />
-      </GradientHeader>
-      <LoginForm
-        error={error}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
-        loading={loading}
-        onSubmit={handleLogin}
-        onSocialError={setError}
-        onNavigate={() => router.replace("/(auth)/register" as any)}
-      />
+      <ResponsiveContainer maxWidth={480}>
+        <GradientHeader height={260}>
+          <AuthHeader subtitle="Your beekeeping companion" />
+        </GradientHeader>
+        <LoginForm
+          error={error}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          loading={loading}
+          onSubmit={handleLogin}
+          onSocialError={setError}
+          onNavigate={() => router.replace("/(auth)/register" as any)}
+        />
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

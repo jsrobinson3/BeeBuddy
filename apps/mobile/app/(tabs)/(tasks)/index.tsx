@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRouter } from "expo-router";
-import { Modal, Pressable, FlatList, Text, View } from "react-native";
+import { Modal, Platform, Pressable, FlatList, Text, View } from "react-native";
 import { Check, Plus } from "lucide-react-native";
 
 import { DatePickerField } from "../../../components/DatePickerField";
@@ -20,6 +20,7 @@ import {
   spacing,
   radii,
   shadows,
+  webPointer,
   formSubmitStyles,
   type ThemeColors,
 } from "../../../theme";
@@ -29,7 +30,7 @@ import {
 const createLayoutStyles = (c: ThemeColors) => ({
   container: { flex: 1, backgroundColor: c.bgPrimary },
   list: { padding: 16 },
-  fab: { position: "absolute" as const, right: 20, bottom: 20 },
+  fab: { position: "absolute" as const, right: 20, bottom: 20, ...webPointer },
   ...formSubmitStyles(c),
 });
 
@@ -39,6 +40,7 @@ const createCardStyles = (c: ThemeColors) => ({
     borderRadius: 12, padding: 16, marginBottom: 12,
     shadowColor: c.shadowColor, shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1, shadowRadius: 4, elevation: 3,
+    ...webPointer,
   },
   cardLeft: { marginRight: 12, paddingTop: 2 },
   checkbox: {
@@ -67,18 +69,32 @@ const createCardStyles = (c: ThemeColors) => ({
     borderRadius: 12, padding: 14, marginBottom: 16,
     shadowColor: c.shadowColor, shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08, shadowRadius: 3, elevation: 2,
+    ...webPointer,
   },
   cadencesButtonText: {
     fontSize: 14, fontFamily: typography.families.bodySemiBold, color: c.honey,
   },
 });
 
+const isWeb = Platform.OS === "web";
+
+const webOverlay = isWeb
+  ? { justifyContent: "center" as const, alignItems: "center" as const }
+  : { justifyContent: "flex-end" as const };
+
+const webSheet = isWeb
+  ? { borderBottomLeftRadius: radii.xl, borderBottomRightRadius: radii.xl, maxWidth: 480, width: "100%" as const }
+  : {};
+
 const createModalStyles = (c: ThemeColors) => ({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" as const },
+  overlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.4)", ...webOverlay,
+  },
   sheet: {
-    backgroundColor: c.bgElevated, borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl, padding: spacing.md,
-    paddingBottom: spacing.xl, ...shadows.card,
+    backgroundColor: c.bgElevated,
+    borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl,
+    ...webSheet,
+    padding: spacing.md, paddingBottom: spacing.xl, ...shadows.card,
   },
   sheetTitle: {
     ...typography.sizes.h3, fontFamily: typography.families.displaySemiBold,

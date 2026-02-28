@@ -1,5 +1,6 @@
 import { FormInput } from "../../../../components/FormInput";
 import { FormActionButton } from "../../../../components/FormActionButton";
+import { ResponsiveFormRow } from "../../../../components/ResponsiveFormRow";
 import type { LocationPrecision } from "../../../../hooks/useLocation";
 import {
   useStyles,
@@ -59,16 +60,18 @@ export function CreateApiaryForm(props: CreateApiaryFormProps) {
         geocoding={props.geocoding}
       />
       <GPSButton onPress={props.onUseGPS} locating={props.locating} />
-      <LatLngRow
-        latitude={props.latitude}
-        setLatitude={props.setLatitude}
-        longitude={props.longitude}
-        setLongitude={props.setLongitude}
-      />
-      <PrecisionPicker
-        precision={props.precision}
-        setPrecision={props.setPrecision}
-      />
+      <ResponsiveFormRow>
+        <LatLngRow
+          latitude={props.latitude}
+          setLatitude={props.setLatitude}
+          longitude={props.longitude}
+          setLongitude={props.setLongitude}
+        />
+        <PrecisionPicker
+          precision={props.precision}
+          setPrecision={props.setPrecision}
+        />
+      </ResponsiveFormRow>
       <FormInput
         label="Notes"
         value={props.notes}

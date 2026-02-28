@@ -4,6 +4,7 @@ import { FormInput } from "../../../../components/FormInput";
 import { MultiSelect } from "../../../../components/MultiSelect";
 import { NumberInput } from "../../../../components/NumberInput";
 import { PickerField } from "../../../../components/PickerField";
+import { ResponsiveFormRow } from "../../../../components/ResponsiveFormRow";
 import type WMInspection from "../../../../database/models/Inspection";
 import type {
   InspectionObservations,
@@ -94,28 +95,32 @@ interface SectionProps {
 export function BeginnerFields({ s, set }: SectionProps) {
   return (
     <>
-      <BooleanToggle
-        label="Queen Spotted"
-        value={s.queenSeen}
-        onValueChange={(v) => set("queenSeen", v)}
-      />
-      <BooleanToggle
-        label="Eggs Spotted"
-        value={s.eggsSeen}
-        onValueChange={(v) => set("eggsSeen", v)}
-      />
-      <PickerField
-        label="Population"
-        options={POPULATION_OPTIONS}
-        selected={s.populationEstimate}
-        onSelect={(v) => set("populationEstimate", v)}
-      />
-      <PickerField
-        label="Honey Stores"
-        options={HONEY_OPTIONS}
-        selected={s.honeyStores}
-        onSelect={(v) => set("honeyStores", v)}
-      />
+      <ResponsiveFormRow>
+        <BooleanToggle
+          label="Queen Spotted"
+          value={s.queenSeen}
+          onValueChange={(v) => set("queenSeen", v)}
+        />
+        <BooleanToggle
+          label="Eggs Spotted"
+          value={s.eggsSeen}
+          onValueChange={(v) => set("eggsSeen", v)}
+        />
+      </ResponsiveFormRow>
+      <ResponsiveFormRow>
+        <PickerField
+          label="Population"
+          options={POPULATION_OPTIONS}
+          selected={s.populationEstimate}
+          onSelect={(v) => set("populationEstimate", v)}
+        />
+        <PickerField
+          label="Honey Stores"
+          options={HONEY_OPTIONS}
+          selected={s.honeyStores}
+          onSelect={(v) => set("honeyStores", v)}
+        />
+      </ResponsiveFormRow>
       <PickerField
         label="Temperament"
         options={TEMPERAMENT_OPTIONS}
@@ -129,41 +134,47 @@ export function BeginnerFields({ s, set }: SectionProps) {
 export function IntermediateFields({ s, set }: SectionProps) {
   return (
     <>
-      <BooleanToggle
-        label="Larvae Spotted"
-        value={s.larvaeSeen}
-        onValueChange={(v) => set("larvaeSeen", v)}
-      />
-      <BooleanToggle
-        label="Capped Brood"
-        value={s.cappedBrood}
-        onValueChange={(v) => set("cappedBrood", v)}
-      />
-      <NumberInput
-        label="Brood Pattern (1-5)"
-        value={s.broodPatternScore}
-        onChange={(v) => set("broodPatternScore", v)}
-        min={1}
-        max={5}
-      />
-      <NumberInput
-        label="Frames of Bees"
-        value={s.framesOfBees}
-        onChange={(v) => set("framesOfBees", v)}
-        min={0}
-      />
-      <NumberInput
-        label="Frames of Brood"
-        value={s.framesOfBrood}
-        onChange={(v) => set("framesOfBrood", v)}
-        min={0}
-      />
-      <PickerField
-        label="Pollen Stores"
-        options={POLLEN_OPTIONS}
-        selected={s.pollenStores}
-        onSelect={(v) => set("pollenStores", v)}
-      />
+      <ResponsiveFormRow>
+        <BooleanToggle
+          label="Larvae Spotted"
+          value={s.larvaeSeen}
+          onValueChange={(v) => set("larvaeSeen", v)}
+        />
+        <BooleanToggle
+          label="Capped Brood"
+          value={s.cappedBrood}
+          onValueChange={(v) => set("cappedBrood", v)}
+        />
+      </ResponsiveFormRow>
+      <ResponsiveFormRow>
+        <NumberInput
+          label="Brood Pattern (1-5)"
+          value={s.broodPatternScore}
+          onChange={(v) => set("broodPatternScore", v)}
+          min={1}
+          max={5}
+        />
+        <NumberInput
+          label="Frames of Bees"
+          value={s.framesOfBees}
+          onChange={(v) => set("framesOfBees", v)}
+          min={0}
+        />
+      </ResponsiveFormRow>
+      <ResponsiveFormRow>
+        <NumberInput
+          label="Frames of Brood"
+          value={s.framesOfBrood}
+          onChange={(v) => set("framesOfBrood", v)}
+          min={0}
+        />
+        <PickerField
+          label="Pollen Stores"
+          options={POLLEN_OPTIONS}
+          selected={s.pollenStores}
+          onSelect={(v) => set("pollenStores", v)}
+        />
+      </ResponsiveFormRow>
       <MultiSelect
         label="Pest Signs"
         options={PEST_OPTIONS}
@@ -204,18 +215,20 @@ const notesStyle = { textAlignVertical: "top" as const, minHeight: 100 };
 export function GeneralFields({ s, set }: SectionProps) {
   return (
     <>
-      <NumberInput
-        label="Impression (1-5)"
-        value={s.impression}
-        onChange={(v) => set("impression", v)}
-        min={1}
-        max={5}
-      />
-      <BooleanToggle
-        label="Needs Attention"
-        value={s.attention}
-        onValueChange={(v) => set("attention", v)}
-      />
+      <ResponsiveFormRow>
+        <NumberInput
+          label="Impression (1-5)"
+          value={s.impression}
+          onChange={(v) => set("impression", v)}
+          min={1}
+          max={5}
+        />
+        <BooleanToggle
+          label="Needs Attention"
+          value={s.attention}
+          onValueChange={(v) => set("attention", v)}
+        />
+      </ResponsiveFormRow>
       <NumberInput
         label="Duration (minutes)"
         value={s.durationMinutes}
@@ -244,20 +257,22 @@ export function WeatherFields({
   const tempPlaceholder = system === "imperial" ? "e.g. 72" : "e.g. 22";
   return (
     <>
-      <FormInput
-        label={`Temperature (${tempLabel})`}
-        value={s.tempC}
-        onChangeText={(v) => set("tempC", v)}
-        keyboardType="numeric"
-        placeholder={tempPlaceholder}
-      />
-      <FormInput
-        label="Humidity (%)"
-        value={s.humidityPercent}
-        onChangeText={(v) => set("humidityPercent", v)}
-        keyboardType="numeric"
-        placeholder="e.g. 65"
-      />
+      <ResponsiveFormRow>
+        <FormInput
+          label={`Temperature (${tempLabel})`}
+          value={s.tempC}
+          onChangeText={(v) => set("tempC", v)}
+          keyboardType="numeric"
+          placeholder={tempPlaceholder}
+        />
+        <FormInput
+          label="Humidity (%)"
+          value={s.humidityPercent}
+          onChangeText={(v) => set("humidityPercent", v)}
+          keyboardType="numeric"
+          placeholder="e.g. 65"
+        />
+      </ResponsiveFormRow>
       <PickerField
         label="Conditions"
         options={CONDITIONS_OPTIONS}

@@ -1,7 +1,7 @@
 import { Pressable, ViewStyle } from "react-native";
 import type { ReactNode } from "react";
 
-import { useStyles, type ThemeColors } from "../theme";
+import { useStyles, webPointer, type ThemeColors } from "../theme";
 
 interface CardProps {
   children: ReactNode;
@@ -20,6 +20,7 @@ const createStyles = (c: ThemeColors) => ({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    ...webPointer,
   },
 });
 
