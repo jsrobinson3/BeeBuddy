@@ -78,13 +78,28 @@ services:
         value: "true"
       - key: CORS_ORIGINS
         scope: RUN_TIME
-        value: '["https://beebuddy.app"]'
+        value: '["https://beebuddy.app","https://app.beebuddyai.com"]'
       - key: DB_POOL_SIZE
         scope: RUN_TIME
         value: "3"
       - key: DB_MAX_OVERFLOW
         scope: RUN_TIME
         value: "2"
+      - key: FRONTEND_URL
+        scope: RUN_TIME
+        value: "https://app.beebuddyai.com"
+      - key: COOKIE_DOMAIN
+        scope: RUN_TIME
+        value: ".beebuddyai.com"
+      - key: GOOGLE_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: APPLE_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: APPLE_WEB_CLIENT_ID
+        scope: RUN_TIME
+        type: SECRET
 
 workers:
   - name: celery-worker
@@ -97,3 +112,30 @@ workers:
     instance_count: 1
     instance_size_slug: professional-xs
     run_command: uv run celery -A app.tasks worker --loglevel=info --concurrency=2 -B
+
+static_sites:
+  - name: web
+    github:
+      repo: jsrobinson3/BeeBuddy
+      branch: main
+      deploy_on_push: true
+    source_dir: apps/mobile
+    build_command: npx expo export --platform web
+    output_dir: dist
+    environment_slug: node-js
+    catchall_document: index.html
+    routes:
+      - path: /
+    envs:
+      - key: EXPO_PUBLIC_API_URL
+        scope: BUILD_TIME
+        value: "https://api.beebuddyai.com"
+      - key: EXPO_PUBLIC_GOOGLE_CLIENT_ID
+        scope: BUILD_TIME
+        type: SECRET
+      - key: EXPO_PUBLIC_APPLE_WEB_CLIENT_ID
+        scope: BUILD_TIME
+        type: SECRET
+      - key: EXPO_PUBLIC_APPLE_REDIRECT_URI
+        scope: BUILD_TIME
+        value: "https://app.beebuddyai.com"

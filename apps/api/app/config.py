@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     apple_client_id: str | None = None
+    apple_web_client_id: str | None = None
     apple_team_id: str | None = None
     apple_key_id: str | None = None
     apple_private_key: str | None = None

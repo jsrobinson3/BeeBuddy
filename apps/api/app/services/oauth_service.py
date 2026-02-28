@@ -136,24 +136,30 @@ async def verify_apple_id_token(id_token: str) -> dict:
     Raises ValueError on any verification failure.
     """
     settings = get_settings()
-    if not settings.apple_client_id:
+    valid_audiences = [a for a in [settings.apple_client_id, settings.apple_web_client_id] if a]
+    if not valid_audiences:
         raise ValueError("Apple OAuth is not configured")
 
     kid = _extract_kid(id_token, "Apple")
     rsa_key = await _resolve_signing_key(APPLE_JWKS_URL, kid, "Apple")
 
-    try:
-        payload = jose_jwt.decode(
-            id_token,
-            rsa_key,
-            algorithms=["RS256"],
-            audience=settings.apple_client_id,
-            issuer=APPLE_ISSUER,
-        )
-    except JWTError as e:
-        raise ValueError(f"Apple ID token verification failed: {e}")
+    # python-jose only accepts a single audience string, so try each valid
+    # audience and accept the first that succeeds.
+    last_error: JWTError | None = None
+    for aud in valid_audiences:
+        try:
+            payload = jose_jwt.decode(
+                id_token,
+                rsa_key,
+                algorithms=["RS256"],
+                audience=aud,
+                issuer=APPLE_ISSUER,
+            )
+            return payload
+        except JWTError as e:
+            last_error = e
 
-    return payload
+    raise ValueError(f"Apple ID token verification failed: {last_error}")
 
 
 # ---------------------------------------------------------------------------
