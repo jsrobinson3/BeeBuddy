@@ -9,7 +9,7 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Home, ClipboardList, Settings } from "lucide-react-native";
+import { Home, ClipboardList, MessageCircle, Settings } from "lucide-react-native";
 
 import { HexIcon } from "./HexIcon";
 import { useStyles, useTheme, typography, type ThemeColors } from "../theme";
@@ -24,9 +24,10 @@ type TabMeta = {
 };
 
 const TAB_META: Record<string, TabMeta> = {
-  "(home)": { label: "Apiaries", icon: Home },
-  "(tasks)": { label: "Tasks", icon: ClipboardList },
-  "(settings)": { label: "Settings", icon: Settings },
+  home: { label: "Apiaries", icon: Home },
+  tasks: { label: "Tasks", icon: ClipboardList },
+  chat: { label: "Buddy", icon: MessageCircle },
+  settings: { label: "Settings", icon: Settings },
 };
 
 const HEX_SIZE = 34;
@@ -75,7 +76,10 @@ function TabItem({
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
-function useTabItems(state: BottomTabBarProps["state"], navigation: BottomTabBarProps["navigation"]) {
+function useTabItems(
+  state: BottomTabBarProps["state"],
+  navigation: BottomTabBarProps["navigation"],
+) {
   return state.routes.map((route, index) => {
     const meta = TAB_META[route.name];
     if (!meta) return null;

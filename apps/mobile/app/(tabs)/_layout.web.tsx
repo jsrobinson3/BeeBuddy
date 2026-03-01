@@ -1,6 +1,6 @@
-import { Redirect, Tabs, Slot, usePathname, useRouter } from "expo-router";
+import { Redirect, Tabs, Slot, useSegments, useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
-import { Home, ClipboardList, Settings } from "lucide-react-native";
+import { Home, ClipboardList, MessageCircle, Settings } from "lucide-react-native";
 
 import { useAuthStore } from "../../stores/auth";
 import { CustomTabBar } from "../../components/CustomTabBar";
@@ -30,12 +30,18 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Apiaries", route: "(home)", href: "/", icon: Home },
-  { label: "Tasks", route: "(tasks)", href: "/(tasks)", icon: ClipboardList },
+  { label: "Apiaries", route: "home", href: "/home", icon: Home },
+  { label: "Tasks", route: "tasks", href: "/tasks", icon: ClipboardList },
+  {
+    label: "Buddy",
+    route: "chat",
+    href: "/chat",
+    icon: MessageCircle,
+  },
   {
     label: "Settings",
-    route: "(settings)",
-    href: "/(settings)",
+    route: "settings",
+    href: "/settings",
     icon: Settings,
   },
 ];
@@ -43,23 +49,10 @@ const NAV_ITEMS: NavItem[] = [
 const HEX_SIZE = 34;
 const ICON_SIZE = 18;
 
-const HOME_PREFIXES = [
-  "/apiary", "/hive", "/inspection",
-  "/treatment", "/harvest", "/event", "/queen",
-];
-
-function isRouteActive(route: string, pathname: string): boolean {
-  if (route === "(home)") {
-    return pathname === "/"
-      || HOME_PREFIXES.some((p) => pathname.startsWith(p));
-  }
-  if (route === "(tasks)") {
-    return pathname.startsWith("/tasks") || pathname === "/cadences";
-  }
-  if (route === "(settings)") {
-    return pathname.startsWith("/settings") || pathname === "/licenses";
-  }
-  return false;
+// useSegments() returns route segments, e.g. ["(tabs)", "tasks", "cadences"].
+// This reliably identifies the active tab.
+function isRouteActive(route: string, segments: string[]): boolean {
+  return segments.includes(route);
 }
 
 /* ------------------------------------------------------------------ */
@@ -74,7 +67,7 @@ const createLayoutStyles = (c: ThemeColors) => ({
   },
   sidebar: {
     width: breakpoints.sidebarWidth,
-    backgroundColor: c.bgElevated,
+    backgroundColor: c.bgSurface,
     borderRightWidth: 1,
     borderRightColor: c.borderLight,
     paddingTop: 24,
@@ -89,6 +82,7 @@ const createLayoutStyles = (c: ThemeColors) => ({
   },
   content: {
     flex: 1,
+    position: "relative" as const,
   },
 });
 
@@ -158,17 +152,17 @@ function SidebarNavItem({ item, isActive, onPress }: SidebarNavItemProps) {
 
 function buildNavItem(
   item: NavItem,
-  pathname: string,
+  segments: string[],
   router: ReturnType<typeof useRouter>,
 ) {
-  const active = isRouteActive(item.route, pathname);
-  const go = () => router.push(item.href as any);
+  const active = isRouteActive(item.route, segments);
+  const go = () => router.replace(item.href as any);
   return <SidebarNavItem key={item.route} item={item} isActive={active} onPress={go} />;
 }
 
-function SidebarNav({ pathname }: { pathname: string }) {
+function SidebarNav({ segments }: { segments: string[] }) {
   const router = useRouter();
-  const items = NAV_ITEMS.map((i) => buildNavItem(i, pathname, router));
+  const items = NAV_ITEMS.map((i) => buildNavItem(i, segments, router));
   return <>{items}</>;
 }
 
@@ -178,13 +172,13 @@ function SidebarNav({ pathname }: { pathname: string }) {
 
 function DesktopLayout() {
   const s = useStyles(createLayoutStyles);
-  const pathname = usePathname();
+  const segments = useSegments();
 
   return (
     <View style={s.wrapper}>
       <View style={s.sidebar}>
         <Text style={s.logo}>BeeBuddy</Text>
-        <SidebarNav pathname={pathname} />
+        <SidebarNav segments={segments} />
       </View>
       <View style={s.content}>
         <Slot />
@@ -205,9 +199,11 @@ function TabLayout() {
       screenOptions={tabScreenOptions}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
-      <Tabs.Screen name="(home)" options={{ title: "Apiaries" }} />
-      <Tabs.Screen name="(tasks)" options={{ title: "Tasks" }} />
-      <Tabs.Screen name="(settings)" options={{ title: "Settings" }} />
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="home" options={{ title: "Apiaries" }} />
+      <Tabs.Screen name="tasks" options={{ title: "Tasks" }} />
+      <Tabs.Screen name="chat" options={{ title: "Buddy" }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
     </Tabs>
   );
 }

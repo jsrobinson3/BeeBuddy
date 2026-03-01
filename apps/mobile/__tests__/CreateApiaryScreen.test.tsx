@@ -98,7 +98,7 @@ jest.mock("../theme", () => ({
 
 jest.spyOn(Alert, "alert").mockImplementation(() => {});
 
-import CreateApiaryScreen from "../app/(tabs)/(home)/apiary/new";
+import CreateApiaryScreen from "../app/(tabs)/home/apiary/new";
 
 beforeEach(() => {
   jest.clearAllMocks();

@@ -339,7 +339,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
       // For new chats, navigate to the created conversation using the
       // server-assigned ID (no more guessing from the conversation list)
       if (isNewChat && streamConvId) {
-        router.replace(`/(chat)/${streamConvId}`);
+        router.replace(`/chat/${streamConvId}`);
       }
     }
   }, [streamingState, streamingContent, reset, isNewChat, streamConvId, router]);
