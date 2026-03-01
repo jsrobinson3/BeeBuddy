@@ -23,7 +23,7 @@ export function useCreateQueen() {
     mutationFn: (data: CreateQueenInput) => api.createQueen(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["queens"] });
-      queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+      queryClient.invalidateQueries({ queryKey: ["hives", variables.hiveId] });
     },
   });
 }

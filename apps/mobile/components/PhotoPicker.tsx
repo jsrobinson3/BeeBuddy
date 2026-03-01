@@ -274,7 +274,7 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
           style={styles.thumbnailScroll}
           contentContainerStyle={styles.thumbnailScrollContent}
         >
-          {photos.map((photo) => (
+          {photos.map((photo: InspectionPhoto) => (
             <Thumbnail
               key={photo.id}
               photo={photo}

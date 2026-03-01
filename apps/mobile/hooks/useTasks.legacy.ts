@@ -3,8 +3,8 @@ import { api } from "../services/api";
 import type { CreateTaskInput, UpdateTaskInput } from "../services/api";
 
 export function useTasks(filters?: {
-  hive_id?: string;
-  apiary_id?: string;
+  hiveId?: string;
+  apiaryId?: string;
 }) {
   return useQuery({
     queryKey: ["tasks", filters],

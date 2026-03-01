@@ -57,6 +57,11 @@ export type {
   SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
+  ChatRole,
+  ChatMessage,
+  Conversation,
+  ConversationDetail,
+  ChatRequest,
 } from "./api.types";
 
 import type {
@@ -98,6 +103,9 @@ import type {
   SyncChangesMap,
   DeleteAccountInput,
   DeleteAccountResponse,
+  ChatRequest,
+  Conversation,
+  ConversationDetail,
 } from "./api.types";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -459,10 +467,10 @@ class ApiClient {
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
 
-  async getTasks(filters?: { hive_id?: string; apiary_id?: string }) {
+  async getTasks(filters?: { hiveId?: string; apiaryId?: string }) {
     const params = new URLSearchParams();
-    if (filters?.hive_id) params.set("hive_id", filters.hive_id);
-    if (filters?.apiary_id) params.set("apiary_id", filters.apiary_id);
+    if (filters?.hiveId) params.set("hive_id", filters.hiveId);
+    if (filters?.apiaryId) params.set("apiary_id", filters.apiaryId);
     const query = params.toString() ? `?${params.toString()}` : "";
     return this.request<Task[]>(`/tasks${query}`);
   }
@@ -548,13 +556,17 @@ class ApiClient {
     const filename = fileUri.split("/").pop() || "photo.jpg";
     const ext = filename.split(".").pop()?.toLowerCase() || "jpg";
     const mimeType = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
-    formData.append("file", { uri: fileUri, name: filename, type: mimeType } as any);
+    const blob = await fetch(fileUri).then((r) => r.blob());
+    formData.append("file", new File([blob], filename, { type: mimeType }));
     if (caption) formData.append("caption", caption);
+
+    const headers: Record<string, string> = { "X-Requested-With": "BeeBuddy" };
+    if (this.config.token) headers["Authorization"] = `Bearer ${this.config.token}`;
 
     const response = await fetch(url, {
       method: "POST",
       body: formData,
-      headers: { "X-Requested-With": "BeeBuddy" },
+      headers,
       credentials: "include" as RequestCredentials,
     });
 
@@ -576,6 +588,38 @@ class ApiClient {
     });
   }
 
+  // ── AI Chat ─────────────────────────────────────────────────────────────
+
+  async getConversations() {
+    return this.request<Conversation[]>("/ai/conversations");
+  }
+
+  async getConversation(id: string) {
+    return this.request<ConversationDetail>(`/ai/conversations/${id}`);
+  }
+
+  async deleteConversation(id: string) {
+    return this.request<void>(`/ai/conversations/${id}`, { method: "DELETE" });
+  }
+
+  async chatStream(data: ChatRequest): Promise<Response> {
+    const url = `${this.config.baseUrl}/api/v1/ai/chat`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (isWeb) {
+      headers["X-Requested-With"] = "BeeBuddy";
+    } else if (this.config.token) {
+      headers["Authorization"] = `Bearer ${this.config.token}`;
+    }
+    return fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(data),
+      ...(isWeb && { credentials: "include" as RequestCredentials }),
+    });
+  }
+
   // ── Sync ──────────────────────────────────────────────────────────────────
 
   async syncPull(lastPulledAt: number | null) {
@@ -585,8 +629,8 @@ class ApiClient {
     }>("/sync/pull", {
       method: "POST",
       body: JSON.stringify({
-        last_pulled_at: lastPulledAt,
-        schema_version: 1,
+        lastPulledAt,
+        schemaVersion: 1,
       }),
     });
   }
@@ -599,7 +643,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({
         changes,
-        last_pulled_at: lastPulledAt,
+        lastPulledAt,
       }),
     });
   }
@@ -615,14 +659,14 @@ export const api = new ApiClient({ baseUrl: API_BASE_URL });
  * changes don't bust the disk cache.
  */
 export function getPhotoSource(
-  photo: { id: string; s3_key: string; url: string | null },
+  photo: { id: string; s3Key: string; url: string | null },
   token?: string,
 ): { uri: string; cacheKey: string; headers?: Record<string, string> } {
   if (photo.url) {
-    return { uri: photo.url, cacheKey: photo.s3_key };
+    return { uri: photo.url, cacheKey: photo.s3Key };
   }
   const uri = `${API_BASE_URL}/api/v1/photos/${photo.id}/file`;
   return token
-    ? { uri, cacheKey: photo.s3_key, headers: { Authorization: `Bearer ${token}` } }
-    : { uri, cacheKey: photo.s3_key };
+    ? { uri, cacheKey: photo.s3Key, headers: { Authorization: `Bearer ${token}` } }
+    : { uri, cacheKey: photo.s3Key };
 }

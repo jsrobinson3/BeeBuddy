@@ -6,6 +6,19 @@ import type { CreateHarvestInput, UpdateHarvestInput } from "../../services/api.
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface HarvestRaw extends RawRecord {
+  hive_id: string;
+  harvested_at: number | null;
+  weight_kg: number | null;
+  moisture_percent: number | null;
+  honey_type: string | null;
+  flavor_notes: string | null;
+  color: string | null;
+  frames_harvested: number | null;
+  notes: string | null;
+}
 
 const harvestsCollection = database.get<Harvest>("harvests");
 
@@ -32,18 +45,19 @@ export function useCreateHarvest() {
   const fn = useCallback(async (data: CreateHarvestInput) => {
     await database.write(async () => {
       await harvestsCollection.create((record) => {
-        record._raw.hive_id = data.hive_id;
-        if (data.harvested_at)
-          record._raw.harvested_at = new Date(data.harvested_at).getTime();
-        if (data.weight_kg != null) record._raw.weight_kg = data.weight_kg;
-        if (data.moisture_percent != null)
-          record._raw.moisture_percent = data.moisture_percent;
-        if (data.honey_type) record._raw.honey_type = data.honey_type;
-        if (data.flavor_notes) record._raw.flavor_notes = data.flavor_notes;
-        if (data.color) record._raw.color = data.color;
-        if (data.frames_harvested != null)
-          record._raw.frames_harvested = data.frames_harvested;
-        if (data.notes) record._raw.notes = data.notes;
+        const raw = record._raw as HarvestRaw;
+        raw.hive_id = data.hiveId;
+        if (data.harvestedAt)
+          raw.harvested_at = new Date(data.harvestedAt).getTime();
+        if (data.weightKg != null) raw.weight_kg = data.weightKg;
+        if (data.moisturePercent != null)
+          raw.moisture_percent = data.moisturePercent;
+        if (data.honeyType) raw.honey_type = data.honeyType;
+        if (data.flavorNotes) raw.flavor_notes = data.flavorNotes;
+        if (data.color) raw.color = data.color;
+        if (data.framesHarvested != null)
+          raw.frames_harvested = data.framesHarvested;
+        if (data.notes) raw.notes = data.notes;
       });
     });
     syncAfterWrite();
@@ -57,21 +71,22 @@ export function useUpdateHarvest() {
       const record = await harvestsCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
-          if (data.harvested_at !== undefined)
-            r._raw.harvested_at = data.harvested_at
-              ? new Date(data.harvested_at).getTime()
+          const raw = r._raw as HarvestRaw;
+          if (data.harvestedAt !== undefined)
+            raw.harvested_at = data.harvestedAt
+              ? new Date(data.harvestedAt).getTime()
               : null;
-          if (data.weight_kg !== undefined) r._raw.weight_kg = data.weight_kg ?? null;
-          if (data.moisture_percent !== undefined)
-            r._raw.moisture_percent = data.moisture_percent ?? null;
-          if (data.honey_type !== undefined)
-            r._raw.honey_type = data.honey_type ?? null;
-          if (data.flavor_notes !== undefined)
-            r._raw.flavor_notes = data.flavor_notes ?? null;
-          if (data.color !== undefined) r._raw.color = data.color ?? null;
-          if (data.frames_harvested !== undefined)
-            r._raw.frames_harvested = data.frames_harvested ?? null;
-          if (data.notes !== undefined) r._raw.notes = data.notes ?? null;
+          if (data.weightKg !== undefined) raw.weight_kg = data.weightKg ?? null;
+          if (data.moisturePercent !== undefined)
+            raw.moisture_percent = data.moisturePercent ?? null;
+          if (data.honeyType !== undefined)
+            raw.honey_type = data.honeyType ?? null;
+          if (data.flavorNotes !== undefined)
+            raw.flavor_notes = data.flavorNotes ?? null;
+          if (data.color !== undefined) raw.color = data.color ?? null;
+          if (data.framesHarvested !== undefined)
+            raw.frames_harvested = data.framesHarvested ?? null;
+          if (data.notes !== undefined) raw.notes = data.notes ?? null;
         });
       });
       syncAfterWrite();

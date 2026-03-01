@@ -21,14 +21,17 @@ const createInputStyles = (c: ThemeColors) => ({
   },
 });
 
-export function AuthInput(props: React.ComponentProps<typeof TextInput>) {
-  const s = useStyles(createInputStyles);
-  const { colors } = useTheme();
-  return (
-    <TextInput
-      style={s.input}
-      placeholderTextColor={colors.placeholder}
-      {...props}
-    />
-  );
-}
+export const AuthInput = React.forwardRef<TextInput, React.ComponentProps<typeof TextInput>>(
+  (props, ref) => {
+    const s = useStyles(createInputStyles);
+    const { colors } = useTheme();
+    return (
+      <TextInput
+        ref={ref}
+        style={s.input}
+        placeholderTextColor={colors.placeholder}
+        {...props}
+      />
+    );
+  },
+);

@@ -1,7 +1,7 @@
 import { Model, type Query } from "@nozbe/watermelondb";
 import { text, field, date, children, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
-import type { Relation } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb";
 import type { InspectionObservations, WeatherSnapshot } from "../../services/api.types";
 import type Hive from "./Hive";
 import type InspectionPhoto from "./InspectionPhoto";

@@ -117,12 +117,12 @@ export const lightTheme: ThemeColors = {
   switchTrackTrue: palette.honey.DEFAULT,
   switchThumb: palette.white,
 
-  tabBarBg: palette.white,
+  tabBarBg: palette.comb.cream,
   tabBarActiveTint: palette.honey.DEFAULT,
   tabBarInactiveTint: palette.forest.light,
-  headerBackground: palette.forest.DEFAULT,
-  headerTint: palette.comb.white,
-  statusBarStyle: "light",
+  headerBackground: palette.comb.cream,
+  headerTint: palette.forest.DEFAULT,
+  statusBarStyle: "dark",
 };
 
 export const darkTheme: ThemeColors = {

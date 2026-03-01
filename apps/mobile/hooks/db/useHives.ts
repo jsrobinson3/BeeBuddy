@@ -7,6 +7,18 @@ import { syncDatabase } from "../../database/sync";
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface HiveRaw extends RawRecord {
+  apiary_id: string;
+  hive_type: string;
+  status: string;
+  source: string | null;
+  installation_date: string | null;
+  color: string | null;
+  position_order: number | null;
+  notes: string | null;
+}
 
 const hivesCollection = database.get<Hive>("hives");
 
@@ -33,13 +45,14 @@ export function useCreateHive() {
   const fn = useCallback(async (data: CreateHiveInput) => {
     await database.write(async () => {
       await hivesCollection.create((record) => {
-        record._raw.apiary_id = data.apiary_id;
+        const raw = record._raw as HiveRaw;
+        raw.apiary_id = data.apiaryId;
         record.name = data.name;
-        record._raw.hive_type = data.hive_type ?? "langstroth";
-        record._raw.status = "active";
-        if (data.source) record._raw.source = data.source;
-        if (data.installation_date) record._raw.installation_date = data.installation_date;
-        if (data.notes) record._raw.notes = data.notes;
+        raw.hive_type = data.hiveType ?? "langstroth";
+        raw.status = "active";
+        if (data.source) raw.source = data.source;
+        if (data.installationDate) raw.installation_date = data.installationDate;
+        if (data.notes) raw.notes = data.notes;
       });
     });
     syncAfterWrite();
@@ -57,15 +70,16 @@ export function useUpdateHive() {
       const record = await hivesCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
+          const raw = r._raw as HiveRaw;
           if (data.name !== undefined) r.name = data.name;
-          if (data.hive_type !== undefined) r._raw.hive_type = data.hive_type;
-          if (data.status !== undefined) r._raw.status = data.status;
-          if (data.source !== undefined) r._raw.source = data.source ?? null;
-          if (data.installation_date !== undefined)
-            r._raw.installation_date = data.installation_date ?? null;
-          if (data.color !== undefined) r._raw.color = data.color ?? null;
-          if (data.order !== undefined) r._raw.position_order = data.order ?? null;
-          if (data.notes !== undefined) r._raw.notes = data.notes ?? null;
+          if (data.hiveType !== undefined) raw.hive_type = data.hiveType;
+          if (data.status !== undefined) raw.status = data.status;
+          if (data.source !== undefined) raw.source = data.source ?? null;
+          if (data.installationDate !== undefined)
+            raw.installation_date = data.installationDate ?? null;
+          if (data.color !== undefined) raw.color = data.color ?? null;
+          if (data.order !== undefined) raw.position_order = data.order ?? null;
+          if (data.notes !== undefined) raw.notes = data.notes ?? null;
         });
       });
       syncAfterWrite();

@@ -6,6 +6,19 @@ import type { CreateTreatmentInput, UpdateTreatmentInput } from "../../services/
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface TreatmentRaw extends RawRecord {
+  hive_id: string;
+  treatment_type: string;
+  product_name: string | null;
+  method: string | null;
+  started_at: number | null;
+  ended_at: number | null;
+  dosage: string | null;
+  effectiveness_notes: string | null;
+  follow_up_date: string | null;
+}
 
 const treatmentsCollection = database.get<Treatment>("treatments");
 
@@ -32,18 +45,19 @@ export function useCreateTreatment() {
   const fn = useCallback(async (data: CreateTreatmentInput) => {
     await database.write(async () => {
       await treatmentsCollection.create((record) => {
-        record._raw.hive_id = data.hive_id;
-        record._raw.treatment_type = data.treatment_type;
-        if (data.product_name) record._raw.product_name = data.product_name;
-        if (data.method) record._raw.method = data.method;
-        if (data.started_at)
-          record._raw.started_at = new Date(data.started_at).getTime();
-        if (data.ended_at)
-          record._raw.ended_at = new Date(data.ended_at).getTime();
-        if (data.dosage) record._raw.dosage = data.dosage;
-        if (data.effectiveness_notes)
-          record._raw.effectiveness_notes = data.effectiveness_notes;
-        if (data.follow_up_date) record._raw.follow_up_date = data.follow_up_date;
+        const raw = record._raw as TreatmentRaw;
+        raw.hive_id = data.hiveId;
+        raw.treatment_type = data.treatmentType;
+        if (data.productName) raw.product_name = data.productName;
+        if (data.method) raw.method = data.method;
+        if (data.startedAt)
+          raw.started_at = new Date(data.startedAt).getTime();
+        if (data.endedAt)
+          raw.ended_at = new Date(data.endedAt).getTime();
+        if (data.dosage) raw.dosage = data.dosage;
+        if (data.effectivenessNotes)
+          raw.effectiveness_notes = data.effectivenessNotes;
+        if (data.followUpDate) raw.follow_up_date = data.followUpDate;
       });
     });
     syncAfterWrite();
@@ -57,24 +71,25 @@ export function useUpdateTreatment() {
       const record = await treatmentsCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
-          if (data.treatment_type !== undefined)
-            r._raw.treatment_type = data.treatment_type;
-          if (data.product_name !== undefined)
-            r._raw.product_name = data.product_name ?? null;
-          if (data.method !== undefined) r._raw.method = data.method ?? null;
-          if (data.started_at !== undefined)
-            r._raw.started_at = data.started_at
-              ? new Date(data.started_at).getTime()
+          const raw = r._raw as TreatmentRaw;
+          if (data.treatmentType !== undefined)
+            raw.treatment_type = data.treatmentType;
+          if (data.productName !== undefined)
+            raw.product_name = data.productName ?? null;
+          if (data.method !== undefined) raw.method = data.method ?? null;
+          if (data.startedAt !== undefined)
+            raw.started_at = data.startedAt
+              ? new Date(data.startedAt).getTime()
               : null;
-          if (data.ended_at !== undefined)
-            r._raw.ended_at = data.ended_at
-              ? new Date(data.ended_at).getTime()
+          if (data.endedAt !== undefined)
+            raw.ended_at = data.endedAt
+              ? new Date(data.endedAt).getTime()
               : null;
-          if (data.dosage !== undefined) r._raw.dosage = data.dosage ?? null;
-          if (data.effectiveness_notes !== undefined)
-            r._raw.effectiveness_notes = data.effectiveness_notes ?? null;
-          if (data.follow_up_date !== undefined)
-            r._raw.follow_up_date = data.follow_up_date ?? null;
+          if (data.dosage !== undefined) raw.dosage = data.dosage ?? null;
+          if (data.effectivenessNotes !== undefined)
+            raw.effectiveness_notes = data.effectivenessNotes ?? null;
+          if (data.followUpDate !== undefined)
+            raw.follow_up_date = data.followUpDate ?? null;
         });
       });
       syncAfterWrite();

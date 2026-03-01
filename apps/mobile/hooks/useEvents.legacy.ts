@@ -23,7 +23,7 @@ export function useCreateEvent() {
     mutationFn: (data: CreateEventInput) => api.createEvent(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+      queryClient.invalidateQueries({ queryKey: ["hives", variables.hiveId] });
     },
   });
 }

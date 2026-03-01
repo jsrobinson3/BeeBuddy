@@ -83,7 +83,7 @@ export function HexIcon({
   return (
     <View style={containerStyle}>
       <HexBackground size={size} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-      {children}
+      <View style={{ position: "relative" as const, zIndex: 1 }}>{children}</View>
     </View>
   );
 }

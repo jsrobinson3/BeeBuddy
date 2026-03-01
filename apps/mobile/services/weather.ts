@@ -8,19 +8,19 @@ const BASE_URL = "https://api.open-meteo.com/v1/forecast";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface CurrentWeather {
-  temp_c: number;
-  humidity_percent: number;
-  wind_speed_kmh: number;
+  tempC: number;
+  humidityPercent: number;
+  windSpeedKmh: number;
   conditions: string;
-  weather_code: number;
+  weatherCode: number;
 }
 
 export interface DayForecast {
   date: string; // "YYYY-MM-DD"
-  weather_code: number;
+  weatherCode: number;
   conditions: string;
-  temp_max_c: number;
-  temp_min_c: number;
+  tempMaxC: number;
+  tempMinC: number;
 }
 
 export interface WeatherForecast {
@@ -96,11 +96,11 @@ export async function fetchWeatherForecast(
   const currentCode: number = data.current.weather_code;
 
   const current: CurrentWeather = {
-    temp_c: data.current.temperature_2m,
-    humidity_percent: data.current.relative_humidity_2m,
-    wind_speed_kmh: data.current.wind_speed_10m,
+    tempC: data.current.temperature_2m,
+    humidityPercent: data.current.relative_humidity_2m,
+    windSpeedKmh: data.current.wind_speed_10m,
     conditions: mapWeatherCode(currentCode),
-    weather_code: currentCode,
+    weatherCode: currentCode,
   };
 
   const daily: DayForecast[] = (data.daily.time as string[]).map(
@@ -108,10 +108,10 @@ export async function fetchWeatherForecast(
       const code: number = data.daily.weather_code[i];
       return {
         date,
-        weather_code: code,
+        weatherCode: code,
         conditions: mapWeatherCode(code),
-        temp_max_c: data.daily.temperature_2m_max[i],
-        temp_min_c: data.daily.temperature_2m_min[i],
+        tempMaxC: data.daily.temperature_2m_max[i],
+        tempMinC: data.daily.temperature_2m_min[i],
       };
     },
   );
@@ -139,10 +139,10 @@ export async function fetchCurrentWeather(
   const code: number = data.current.weather_code;
 
   return {
-    temp_c: data.current.temperature_2m,
-    humidity_percent: data.current.relative_humidity_2m,
-    wind_speed_kmh: data.current.wind_speed_10m,
+    tempC: data.current.temperature_2m,
+    humidityPercent: data.current.relative_humidity_2m,
+    windSpeedKmh: data.current.wind_speed_10m,
     conditions: mapWeatherCode(code),
-    weather_code: code,
+    weatherCode: code,
   };
 }

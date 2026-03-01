@@ -9,6 +9,14 @@ import { syncDatabase } from "../../database/sync";
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface TaskCadenceRaw extends RawRecord {
+  is_active: boolean;
+  custom_interval_days: number | null;
+  custom_season_month: number | null;
+  custom_season_day: number | null;
+}
 
 const cadencesCollection = database.get<TaskCadence>("task_cadences");
 
@@ -52,13 +60,14 @@ export function useUpdateCadence() {
       const record = await cadencesCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
-          if (data.is_active !== undefined) r._raw.is_active = data.is_active;
-          if (data.custom_interval_days !== undefined)
-            r._raw.custom_interval_days = data.custom_interval_days ?? null;
-          if (data.custom_season_month !== undefined)
-            r._raw.custom_season_month = data.custom_season_month ?? null;
-          if (data.custom_season_day !== undefined)
-            r._raw.custom_season_day = data.custom_season_day ?? null;
+          const raw = r._raw as TaskCadenceRaw;
+          if (data.isActive !== undefined) raw.is_active = data.isActive;
+          if (data.customIntervalDays !== undefined)
+            raw.custom_interval_days = data.customIntervalDays ?? null;
+          if (data.customSeasonMonth !== undefined)
+            raw.custom_season_month = data.customSeasonMonth ?? null;
+          if (data.customSeasonDay !== undefined)
+            raw.custom_season_day = data.customSeasonDay ?? null;
         });
       });
       syncAfterWrite();

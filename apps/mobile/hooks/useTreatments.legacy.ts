@@ -23,7 +23,7 @@ export function useCreateTreatment() {
     mutationFn: (data: CreateTreatmentInput) => api.createTreatment(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["treatments"] });
-      queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+      queryClient.invalidateQueries({ queryKey: ["hives", variables.hiveId] });
     },
   });
 }

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { ScrollView, Text, TextInput, View } from "react-native";
 
 import { GradientHeader } from "../../components/GradientHeader";
 import { ResponsiveContainer } from "../../components/ResponsiveContainer";
@@ -53,6 +53,7 @@ interface FormProps {
 
 function LoginForm(p: FormProps) {
   const s = useStyles(createFormStyles);
+  const passwordRef = useRef<TextInput>(null);
   return (
     <View style={s.formArea}>
       {p.error ? <Text style={s.error}>{p.error}</Text> : null}
@@ -63,13 +64,18 @@ function LoginForm(p: FormProps) {
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
         editable={!p.loading}
       />
       <AuthInput
+        ref={passwordRef}
         placeholder="Password"
         value={p.password}
         onChangeText={p.setPassword}
         secureTextEntry
+        returnKeyType="go"
+        onSubmitEditing={p.onSubmit}
         editable={!p.loading}
       />
       <AuthSubmitButton
