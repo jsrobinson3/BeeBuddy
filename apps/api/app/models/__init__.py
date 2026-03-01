@@ -7,6 +7,8 @@ from app.models.harvest import Harvest
 from app.models.hive import Hive, HiveSource, HiveStatus, HiveType
 from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
+from app.models.oauth2_client import OAuth2Client
+from app.models.oauth2_code import OAuth2Code
 from app.models.queen import Queen, QueenOrigin, QueenStatus
 from app.models.task import Task, TaskSource
 from app.models.task_cadence import TaskCadence
@@ -27,6 +29,8 @@ __all__ = [
     "QueenStatus",
     "Inspection",
     "InspectionPhoto",
+    "OAuth2Client",
+    "OAuth2Code",
     "Treatment",
     "Harvest",
     "Event",
