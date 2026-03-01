@@ -25,6 +25,6 @@ async def auth_client(client: AsyncClient) -> tuple[AsyncClient, dict]:
         "password": "secret123",
     })
     assert resp.status_code == 201, f"Setup failed: {resp.text}"
-    token = resp.json()["access_token"]
+    token = resp.json()["accessToken"]
     headers = {"Authorization": f"Bearer {token}"}
     return client, headers

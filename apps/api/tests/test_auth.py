@@ -29,7 +29,7 @@ async def get_tokens(client: AsyncClient, email: str | None = None):
     email = email or unique_email()
     resp = await register(client, email)
     body = resp.json()
-    return body["access_token"], body["refresh_token"], email
+    return body["accessToken"], body["refreshToken"], email
 
 
 def auth(token: str) -> dict:
@@ -44,9 +44,9 @@ class TestRegister:
         resp = await register(client)
         assert resp.status_code == 201
         body = resp.json()
-        assert "access_token" in body
-        assert "refresh_token" in body
-        assert body["token_type"] == "bearer"
+        assert "accessToken" in body
+        assert "refreshToken" in body
+        assert body["tokenType"] == "bearer"
 
     async def test_duplicate_email_returns_409(self, client: AsyncClient):
         email = unique_email()
@@ -75,7 +75,7 @@ class TestLogin:
             "password": "secret123",
         })
         assert resp.status_code == 200
-        assert "access_token" in resp.json()
+        assert "accessToken" in resp.json()
 
     async def test_wrong_password_returns_401(self, client: AsyncClient):
         email = unique_email()
@@ -108,8 +108,8 @@ class TestRefresh:
         })
         assert resp.status_code == 200
         body = resp.json()
-        assert "access_token" in body
-        assert "refresh_token" in body
+        assert "accessToken" in body
+        assert "refreshToken" in body
 
     async def test_access_token_rejected_as_refresh(self, client: AsyncClient):
         access, _, _ = await get_tokens(client)
@@ -187,7 +187,7 @@ class TestUserEndpoints:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["experience_level"] == "intermediate"
+        assert body["experienceLevel"] == "intermediate"
         assert body["locale"] == "en-US"
 
 
@@ -289,8 +289,8 @@ class TestCookieAuth:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert "access_token" in body
-        assert "refresh_token" in body
+        assert "accessToken" in body
+        assert "refreshToken" in body
 
     async def test_logout_clears_cookies(self, client: AsyncClient):
         email = unique_email()
@@ -427,7 +427,7 @@ class TestLogoutInvalidation:
         })
         assert resp.status_code == 200
         body = resp.json()
-        refresh = body["refresh_token"]
+        refresh = body["refreshToken"]
         access_cookie = resp.cookies.get("access_token")
         refresh_cookie = resp.cookies.get("refresh_token")
 
@@ -459,8 +459,8 @@ class TestLogoutInvalidation:
         })
         assert resp.status_code == 200
         body = resp.json()
-        access = body["access_token"]
-        refresh = body["refresh_token"]
+        access = body["accessToken"]
+        refresh = body["refreshToken"]
 
         # Logout via body (native-style, no cookies)
         resp = await client.post(
@@ -493,7 +493,7 @@ class TestLogoutInvalidation:
             "password": "secret123",
         })
         assert resp.status_code == 200
-        access = resp.json()["access_token"]
+        access = resp.json()["accessToken"]
         access_cookie = resp.cookies.get("access_token")
         refresh_cookie = resp.cookies.get("refresh_token")
 
@@ -512,7 +512,7 @@ class TestLogoutInvalidation:
         assert resp.status_code == 401
 
     async def test_login_works_after_logout(self, client: AsyncClient):
-        """Full cycle: login → logout → login again with a different account."""
+        """Full cycle: login -> logout -> login again with a different account."""
         email_a = unique_email()
         email_b = unique_email()
         await register(client, email_a)
@@ -540,4 +540,4 @@ class TestLogoutInvalidation:
             json={"email": email_b, "password": "secret123"},
         )
         assert resp.status_code == 200
-        assert "access_token" in resp.json()
+        assert "accessToken" in resp.json()

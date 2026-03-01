@@ -3,10 +3,10 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
-class CadenceTemplateResponse(BaseModel):
+class CadenceTemplateResponse(BaseResponse):
     """A single cadence template from the catalog (read-only)."""
 
     key: str
@@ -21,10 +21,8 @@ class CadenceTemplateResponse(BaseModel):
     scope: str = "user"
 
 
-class CadenceResponse(BaseModel):
+class CadenceResponse(BaseResponse):
     """Response model for a user's cadence subscription."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID
@@ -39,7 +37,7 @@ class CadenceResponse(BaseModel):
     created_at: datetime
 
 
-class CadenceUpdate(BaseModel):
+class CadenceUpdate(CamelBase):
     """Request model for toggling or updating a cadence.
 
     Users can override scheduling by setting custom_interval_days (for recurring)

@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
 class QueenOrigin(StrEnum):
@@ -24,7 +24,7 @@ class QueenStatus(StrEnum):
     FAILED = "failed"
 
 
-class QueenCreate(BaseModel):
+class QueenCreate(CamelBase):
     """Request model for creating a queen record."""
 
     hive_id: UUID
@@ -41,7 +41,7 @@ class QueenCreate(BaseModel):
     notes: str | None = None
 
 
-class QueenUpdate(BaseModel):
+class QueenUpdate(CamelBase):
     """Request model for updating a queen record. All fields optional."""
 
     hive_id: UUID | None = None
@@ -59,10 +59,8 @@ class QueenUpdate(BaseModel):
     notes: str | None = None
 
 
-class QueenResponse(BaseModel):
+class QueenResponse(BaseResponse):
     """Response model for a queen record."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     hive_id: UUID

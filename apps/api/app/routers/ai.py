@@ -44,6 +44,9 @@ async def list_conversations(
     return await ai_service.get_conversations(db, current_user.id)
 
 
+MAX_DISPLAY_MESSAGES = 50
+
+
 @router.get(
     "/conversations/{conversation_id}",
     response_model=ConversationDetailResponse,
@@ -53,10 +56,18 @@ async def get_conversation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a specific conversation with full message history."""
+    """Get a conversation with recent message history.
+
+    Returns the last MAX_DISPLAY_MESSAGES messages for UI performance.
+    The full history is kept in the DB for LLM context.
+    """
     conv = await ai_service.get_conversation(db, conversation_id, current_user.id)
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Cap messages sent to the client — full history stays in DB for LLM context
+    if len(conv.messages) > MAX_DISPLAY_MESSAGES:
+        db.expunge(conv)
+        conv.messages = conv.messages[-MAX_DISPLAY_MESSAGES:]
     return conv
 
 

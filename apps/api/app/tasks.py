@@ -36,10 +36,40 @@ celery_app.conf.broker_transport_options = {
 }
 
 
-@celery_app.task
-def generate_inspection_summary(inspection_id: str):
-    """Generate AI summary for an inspection. Placeholder for Phase 2."""
-    pass
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
+def generate_inspection_summary(self, inspection_id: str):
+    """Generate AI summary for an inspection using the configured LLM."""
+    import asyncio
+
+    try:
+        asyncio.run(_generate_inspection_summary_async(inspection_id))
+    except Exception as exc:
+        logger.exception("generate_inspection_summary failed for %s", inspection_id)
+        raise self.retry(exc=exc)
+
+
+async def _generate_inspection_summary_async(inspection_id: str) -> None:
+    """Async implementation of inspection summary generation."""
+    from uuid import UUID
+
+    from app.db.session import AsyncSessionLocal
+    from app.models.inspection import Inspection
+    from app.services import ai_service
+
+    async with AsyncSessionLocal() as db:
+        inspection = await db.get(Inspection, UUID(inspection_id))
+        if not inspection:
+            logger.warning("Inspection %s not found for summary", inspection_id)
+            return
+
+        summary = await ai_service.generate_summary(
+            observations=inspection.observations,
+            weather=inspection.weather,
+            notes=inspection.notes,
+        )
+        inspection.ai_summary = summary
+        await db.commit()
+        logger.info("Generated AI summary for inspection %s", inspection_id)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)

@@ -1,27 +1,29 @@
 """Email verification and password reset schemas."""
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import EmailStr, Field
+
+from app.schemas.common import CamelBase
 
 
-class ResendVerificationRequest(BaseModel):
+class ResendVerificationRequest(CamelBase):
     """Request to resend the verification email."""
 
     email: EmailStr
 
 
-class VerifyEmailRequest(BaseModel):
+class VerifyEmailRequest(CamelBase):
     """Request to verify an email via token."""
 
     token: str
 
 
-class ForgotPasswordRequest(BaseModel):
+class ForgotPasswordRequest(CamelBase):
     """Request to start the password reset flow."""
 
     email: EmailStr
 
 
-class ResetPasswordRequest(BaseModel):
+class ResetPasswordRequest(CamelBase):
     """Request to reset password with a token."""
 
     token: str

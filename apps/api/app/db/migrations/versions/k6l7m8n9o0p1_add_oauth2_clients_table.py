@@ -6,6 +6,7 @@ Create Date: 2026-03-01 00:00:00.000000
 
 """
 
+import uuid
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -20,7 +21,7 @@ depends_on: str | Sequence[str] | None = None
 
 SEED_CLIENTS = [
     {
-        "id": sa.text("gen_random_uuid()"),
+        "id": uuid.uuid4(),
         "client_id": "claude-desktop",
         "name": "Claude Desktop",
         "redirect_uris": '["http://localhost/callback"]',

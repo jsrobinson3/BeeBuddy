@@ -3,10 +3,12 @@
 import math
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+
+from app.schemas.common import CamelBase
 
 
-class TableChanges(BaseModel):
+class TableChanges(CamelBase):
     """Changes for a single table in WatermelonDB sync format."""
 
     created: list[dict[str, Any]] = Field(default_factory=list)
@@ -14,7 +16,7 @@ class TableChanges(BaseModel):
     deleted: list[str] = Field(default_factory=list)
 
 
-class SyncPullRequest(BaseModel):
+class SyncPullRequest(CamelBase):
     """Request body for the pull endpoint."""
 
     last_pulled_at: float | None = Field(
@@ -35,14 +37,14 @@ class SyncPullRequest(BaseModel):
         return v
 
 
-class SyncPullResponse(BaseModel):
+class SyncPullResponse(CamelBase):
     """Response body for the pull endpoint."""
 
     changes: dict[str, TableChanges]
     timestamp: float = Field(description="Server timestamp (ms) for next pull")
 
 
-class SyncPushRequest(BaseModel):
+class SyncPushRequest(CamelBase):
     """Request body for the push endpoint."""
 
     changes: dict[str, TableChanges]

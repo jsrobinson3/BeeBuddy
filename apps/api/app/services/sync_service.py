@@ -257,8 +257,9 @@ async def _pull_table(
             updated.append(_serialize_record(table_name, record))
     else:
         # Subsequent sync: return records changed since last_pulled_at
+        # Use >= to avoid missing records created at exactly the pull timestamp
         stmt = select(model).where(
-            model.updated_at > last_pulled_at,
+            model.updated_at >= last_pulled_at,
             ownership_filter,
         )
         result = await db.execute(stmt)
@@ -627,6 +628,7 @@ def _handle_create(
         return None
 
     data["id"] = record_id
+    data["updated_at"] = datetime.now(UTC)  # Always use server time for sync correctness
     if table_name in ("apiaries", "tasks", "task_cadences"):
         data["user_id"] = user_id
     new_record = model(**data)

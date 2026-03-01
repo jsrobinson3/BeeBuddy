@@ -34,7 +34,7 @@ async def get_tokens(client: AsyncClient, email: str | None = None):
     email = email or unique_email()
     resp = await register(client, email)
     body = resp.json()
-    return body["access_token"], body["refresh_token"], email
+    return body["accessToken"], body["refreshToken"], email
 
 
 def auth(token: str) -> dict:
@@ -93,8 +93,8 @@ class TestUploadPhoto:
         _, _, inspection_id = await setup_inspection(client, headers)
 
         body = await upload_photo(client, headers, inspection_id, caption="Frame 3")
-        assert body["inspection_id"] == inspection_id
-        assert body["s3_key"].endswith(".png")
+        assert body["inspectionId"] == inspection_id
+        assert body["s3Key"].endswith(".png")
         assert body["caption"] == "Frame 3"
         assert "id" in body
         assert body["url"] is not None
@@ -160,14 +160,14 @@ class TestListAndDownloadPhotos:
         assert resp.content == TINY_PNG
 
     async def test_download_photo_rejects_token_query_param(self, client: AsyncClient):
-        """?token= query param is no longer accepted — clients must use presigned URLs."""
+        """?token= query param is no longer accepted -- clients must use presigned URLs."""
         token, _, _ = await get_tokens(client)
         headers = auth(token)
         _, _, inspection_id = await setup_inspection(client, headers)
 
         photo = await upload_photo(client, headers, inspection_id)
 
-        # No auth header, only ?token= query param — should be rejected.
+        # No auth header, only ?token= query param -- should be rejected.
         # Clear cookies so the client doesn't inadvertently send the
         # access_token cookie that was set during registration.
         client.cookies.clear()

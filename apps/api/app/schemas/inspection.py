@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
 class ExperienceLevel(StrEnum):
@@ -15,7 +15,7 @@ class ExperienceLevel(StrEnum):
     ADVANCED = "advanced"
 
 
-class InspectionObservations(BaseModel):
+class InspectionObservations(CamelBase):
     """Flexible observation data captured during inspection."""
 
     # Population
@@ -44,7 +44,7 @@ class InspectionObservations(BaseModel):
     frames_of_brood: int | None = None
 
 
-class WeatherSnapshot(BaseModel):
+class WeatherSnapshot(CamelBase):
     """Weather conditions during inspection."""
 
     temp_c: float | None = None
@@ -53,7 +53,7 @@ class WeatherSnapshot(BaseModel):
     conditions: str | None = None  # sunny/cloudy/overcast/rainy
 
 
-class InspectionCreate(BaseModel):
+class InspectionCreate(CamelBase):
     """Request model for creating an inspection."""
 
     hive_id: UUID
@@ -69,7 +69,7 @@ class InspectionCreate(BaseModel):
     notes: str | None = None
 
 
-class InspectionUpdate(BaseModel):
+class InspectionUpdate(CamelBase):
     """Request model for updating an inspection. All fields optional."""
 
     hive_id: UUID | None = None
@@ -85,10 +85,8 @@ class InspectionUpdate(BaseModel):
     notes: str | None = None
 
 
-class InspectionResponse(BaseModel):
+class InspectionResponse(BaseResponse):
     """Response model for an inspection."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     hive_id: UUID

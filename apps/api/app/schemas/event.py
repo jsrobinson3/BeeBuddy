@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
 class EventType(StrEnum):
@@ -18,7 +18,7 @@ class EventType(StrEnum):
     WINTER_PREP = "winter_prep"
 
 
-class EventCreate(BaseModel):
+class EventCreate(CamelBase):
     """Request model for creating a hive event."""
 
     hive_id: UUID
@@ -28,7 +28,7 @@ class EventCreate(BaseModel):
     notes: str | None = None
 
 
-class EventUpdate(BaseModel):
+class EventUpdate(CamelBase):
     """Request model for updating a hive event. All fields optional."""
 
     hive_id: UUID | None = None
@@ -38,10 +38,8 @@ class EventUpdate(BaseModel):
     notes: str | None = None
 
 
-class EventResponse(BaseModel):
+class EventResponse(BaseResponse):
     """Response model for a hive event."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     hive_id: UUID

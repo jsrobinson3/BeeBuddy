@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
 class HiveType(StrEnum):
@@ -36,7 +36,7 @@ class HiveSource(StrEnum):
     PURCHASED = "purchased"
 
 
-class HiveCreate(BaseModel):
+class HiveCreate(CamelBase):
     """Request model for creating a hive."""
 
     apiary_id: UUID
@@ -49,7 +49,7 @@ class HiveCreate(BaseModel):
     notes: str | None = None
 
 
-class HiveUpdate(BaseModel):
+class HiveUpdate(CamelBase):
     """Request model for updating a hive. All fields optional."""
 
     apiary_id: UUID | None = None
@@ -63,10 +63,8 @@ class HiveUpdate(BaseModel):
     notes: str | None = None
 
 
-class HiveResponse(BaseModel):
+class HiveResponse(BaseResponse):
     """Response model for a hive."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     apiary_id: UUID
