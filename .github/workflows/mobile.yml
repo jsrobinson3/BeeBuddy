@@ -1,0 +1,118 @@
+name: Mobile CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/mobile/**"
+      - ".github/workflows/mobile.yml"
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  test:
+    name: Jest Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+      - run: npx jest --ci --coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-coverage
+          path: apps/mobile/coverage/
+
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    needs: [typecheck, test]
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android (preview)
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+  build-ios:
+    name: Build iOS
+    runs-on: ubuntu-latest
+    needs: [typecheck, test]
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - run: npm ci
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build iOS (preview)
+        run: eas build --platform ios --profile preview --non-interactive --no-wait
