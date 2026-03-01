@@ -20,7 +20,7 @@ export type User = {
   id: string;
   name: string | null;
   email: string;
-  experience_level: string | null;
+  experienceLevel: string | null;
 };
 
 type AuthState = {
@@ -54,7 +54,7 @@ function parseUser(data: Record<string, unknown>): User {
     id: data.id,
     email: data.email,
     name: (data.name as string) ?? null,
-    experience_level: (data.experience_level as string) ?? null,
+    experienceLevel: (data.experienceLevel as string) ?? null,
   };
 }
 
@@ -102,7 +102,7 @@ async function invalidateAndClearTokens(
 ): Promise<void> {
   await authFetch("/api/v1/auth/logout", {
     method: "POST",
-    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+    body: JSON.stringify({ accessToken, refreshToken }),
   }).catch(() => {});
   await clearTokens();
 }
@@ -113,30 +113,6 @@ async function loadTokens(): Promise<{ token: string; refreshToken: string } | n
   const refreshToken = await SecureStore!.getItemAsync(REFRESH_TOKEN_KEY);
   if (token && refreshToken) return { token, refreshToken };
   return null;
-}
-
-/** Probe the /users/me endpoint (web only, cookies provide auth). */
-async function probeSession(): Promise<User | null> {
-  const res = await authFetch("/api/v1/users/me");
-  if (!res.ok) return null;
-  return parseUser(await res.json());
-}
-
-/** Fetch user profile with a Bearer token (native only). */
-async function fetchUserWithToken(token: string): Promise<{ user: User | null; unauthorized: boolean }> {
-  const res = await authFetch("/api/v1/users/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  if (!res.ok) return { user: null, unauthorized: res.status === 401 };
-  return { user: parseUser(await res.json()), unauthorized: false };
-}
-
-/** Fetch user profile via cookies (web only). */
-async function fetchUserWithCookie(): Promise<{ user: User | null; unauthorized: boolean }> {
-  const res = await authFetch("/api/v1/users/me");
-  if (!res.ok) return { user: null, unauthorized: res.status === 401 };
-  return { user: parseUser(await res.json()), unauthorized: false };
 }
 
 /** Throw a typed error from a failed auth response. */
@@ -173,9 +149,9 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     if (!isWeb) {
       const data = await res.json();
-      await saveTokens(data.access_token, data.refresh_token);
-      api.setToken(data.access_token);
-      set({ token: data.access_token, refreshToken: data.refresh_token });
+      await saveTokens(data.accessToken, data.refreshToken);
+      api.setToken(data.accessToken);
+      set({ token: data.accessToken, refreshToken: data.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -193,9 +169,9 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     if (!isWeb) {
       const data = await res.json();
-      await saveTokens(data.access_token, data.refresh_token);
-      api.setToken(data.access_token);
-      set({ token: data.access_token, refreshToken: data.refresh_token });
+      await saveTokens(data.accessToken, data.refreshToken);
+      api.setToken(data.accessToken);
+      set({ token: data.accessToken, refreshToken: data.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -206,16 +182,16 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
   loginWithGoogle: async (idToken, name) => {
     const res = await authFetch("/api/v1/auth/oauth/google", {
       method: "POST",
-      body: JSON.stringify({ id_token: idToken, name: name || undefined }),
+      body: JSON.stringify({ idToken, name: name || undefined }),
     });
 
     if (!res.ok) await throwAuthError(res, "Google sign-in failed");
 
     if (!isWeb) {
       const data = await res.json();
-      await saveTokens(data.access_token, data.refresh_token);
-      api.setToken(data.access_token);
-      set({ token: data.access_token, refreshToken: data.refresh_token });
+      await saveTokens(data.accessToken, data.refreshToken);
+      api.setToken(data.accessToken);
+      set({ token: data.accessToken, refreshToken: data.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -227,7 +203,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     const res = await authFetch("/api/v1/auth/oauth/apple", {
       method: "POST",
       body: JSON.stringify({
-        id_token: idToken,
+        idToken,
         name: name || undefined,
         email: email || undefined,
       }),
@@ -237,9 +213,9 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     if (!isWeb) {
       const data = await res.json();
-      await saveTokens(data.access_token, data.refresh_token);
-      api.setToken(data.access_token);
-      set({ token: data.access_token, refreshToken: data.refresh_token });
+      await saveTokens(data.accessToken, data.refreshToken);
+      api.setToken(data.accessToken);
+      set({ token: data.accessToken, refreshToken: data.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -282,22 +258,22 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     const res = await authFetch("/api/v1/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refresh_token: currentRefreshToken }),
+      body: JSON.stringify({ refreshToken: currentRefreshToken }),
     });
 
     if (!res.ok) { await get().logout(); throw new Error("Token refresh failed"); }
 
     const data = await res.json();
-    await saveTokens(data.access_token, data.refresh_token);
-    api.setToken(data.access_token);
-    set({ token: data.access_token, refreshToken: data.refresh_token });
+    await saveTokens(data.accessToken, data.refreshToken);
+    api.setToken(data.accessToken);
+    set({ token: data.accessToken, refreshToken: data.refreshToken });
   },
 
   hydrate: async () => {
     try {
       if (isWeb) {
-        const user = await probeSession();
-        if (user) set({ isAuthenticated: true, user });
+        await get().fetchUser();
+        if (get().user) set({ isAuthenticated: true });
         return;
       }
 
@@ -314,11 +290,10 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
   },
 
   fetchUser: async () => {
-    const result = isWeb
-      ? await fetchUserWithCookie()
-      : await fetchUserWithToken(get().token ?? "");
-
-    if (result.unauthorized) { await get().logout(); return; }
-    if (result.user) set({ user: result.user });
+    // api.getMe() handles 401 → refresh → retry; logout already triggered on failure
+    const data = await api.getMe().catch(() => null);
+    if (!data) return;
+    const user = parseUser(data as unknown as Record<string, unknown>);
+    set({ user });
   },
 };});
