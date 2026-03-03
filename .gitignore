@@ -104,5 +104,8 @@ temp/
 .grepai/
 docs/RandD
 
+# Deploy scripts (contain endpoint-specific config)
+scripts/deploy_hf_endpoint.py
+
 #Training Data
 training/

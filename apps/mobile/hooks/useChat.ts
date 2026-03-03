@@ -34,6 +34,7 @@ interface StreamHandlers {
   setContent: React.Dispatch<React.SetStateAction<string>>;
   setState: React.Dispatch<React.SetStateAction<StreamingState>>;
   setError: React.Dispatch<React.SetStateAction<Error | null>>;
+  setErrorCode: React.Dispatch<React.SetStateAction<string | null>>;
   setConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   addPendingAction: (action: PendingAction) => void;
   onComplete: () => void;
@@ -54,11 +55,8 @@ async function fetchAndStream(
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `HTTP ${response.status}`);
   }
-  if (!response.body) {
-    throw new Error("No response body");
-  }
   await parseSSEStream(
-    response.body,
+    response.body ?? null,
     {
       onChunk: (content) => handlers.setContent((prev) => prev + content),
       onStatus: (status) => {
@@ -67,6 +65,11 @@ async function fetchAndStream(
       },
       onMeta: (meta) => handlers.setConversationId(meta.conversationId),
       onPendingAction: (action) => handlers.addPendingAction(action as PendingAction),
+      onServerError: (err) => {
+        handlers.setError(new Error(err.message));
+        handlers.setErrorCode(err.error);
+        handlers.setState("error");
+      },
       onDone: () => { handlers.setState("idle"); handlers.onComplete(); },
       onError: (err) => { handlers.setError(err); handlers.setState("error"); },
     },
@@ -79,6 +82,7 @@ export function useChatStream() {
   const [streamingContent, setStreamingContent] = useState("");
   const [streamingState, setStreamingState] = useState<StreamingState>("idle");
   const [error, setError] = useState<Error | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -87,6 +91,7 @@ export function useChatStream() {
     setContent: setStreamingContent,
     setState: setStreamingState,
     setError,
+    setErrorCode,
     setConversationId,
     addPendingAction: (action: PendingAction) => setPendingActions((prev) => [...prev, action]),
     onComplete: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
@@ -100,6 +105,7 @@ export function useChatStream() {
       setStreamingContent("");
       setStreamingState("streaming");
       setError(null);
+      setErrorCode(null);
 
       try {
         await fetchAndStream(messages, convId, hiveId, handlers);
@@ -139,11 +145,12 @@ export function useChatStream() {
     setStreamingContent("");
     setStreamingState("idle");
     setError(null);
+    setErrorCode(null);
     setPendingActions([]);
   }, []);
 
   return {
-    sendMessage, streamingContent, streamingState, error, reset,
+    sendMessage, streamingContent, streamingState, error, errorCode, reset,
     conversationId, pendingActions, confirmAction, rejectAction,
   };
 }

@@ -20,6 +20,7 @@ interface SSECallbacks {
     payload: Record<string, unknown>;
     expiresAt: string;
   }) => void;
+  onServerError?: (error: { error: string; message: string }) => void;
 }
 
 function processSSELine(
@@ -28,13 +29,15 @@ function processSSELine(
   onStatus?: (status: string) => void,
   onMeta?: (meta: { conversationId: string }) => void,
   onPendingAction?: SSECallbacks["onPendingAction"],
+  onServerError?: SSECallbacks["onServerError"],
 ): boolean {
   if (!line.startsWith("data: ")) return false;
   const payload = line.slice(6);
   if (payload === "[DONE]") return true;
   try {
     const parsed = JSON.parse(payload);
-    if (parsed.pending_action) onPendingAction?.(parsed.pending_action);
+    if (parsed.error && parsed.message) onServerError?.({ error: parsed.error, message: parsed.message });
+    else if (parsed.pending_action) onPendingAction?.(parsed.pending_action);
     else if (parsed.conversation_id) onMeta?.({ conversationId: parsed.conversation_id });
     else if (parsed.status) onStatus?.(parsed.status);
     else if (parsed.content) onChunk(parsed.content);
@@ -51,17 +54,18 @@ function processParts(
   onStatus?: (status: string) => void,
   onMeta?: (meta: { conversationId: string }) => void,
   onPendingAction?: SSECallbacks["onPendingAction"],
+  onServerError?: SSECallbacks["onServerError"],
 ): boolean {
   for (const part of parts) {
     const trimmed = part.trim();
-    if (trimmed && processSSELine(trimmed, onChunk, onStatus, onMeta, onPendingAction)) return true;
+    if (trimmed && processSSELine(trimmed, onChunk, onStatus, onMeta, onPendingAction, onServerError)) return true;
   }
   return false;
 }
 
 async function parseViaStream(
   body: ReadableStream<Uint8Array>,
-  { onChunk, onDone, onError, onStatus, onMeta, onPendingAction }: SSECallbacks,
+  { onChunk, onDone, onError, onStatus, onMeta, onPendingAction, onServerError }: SSECallbacks,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -76,9 +80,9 @@ async function parseViaStream(
       const parts = buffer.split("\n\n");
       buffer = parts.pop() ?? "";
 
-      if (processParts(parts, onChunk, onStatus, onMeta, onPendingAction)) { onDone(); return; }
+      if (processParts(parts, onChunk, onStatus, onMeta, onPendingAction, onServerError)) { onDone(); return; }
     }
-    if (buffer.trim()) processSSELine(buffer.trim(), onChunk, onStatus, onMeta, onPendingAction);
+    if (buffer.trim()) processSSELine(buffer.trim(), onChunk, onStatus, onMeta, onPendingAction, onServerError);
     onDone();
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
@@ -89,12 +93,12 @@ async function parseViaStream(
 
 async function parseViaText(
   response: Response,
-  { onChunk, onDone, onError, onStatus, onMeta, onPendingAction }: SSECallbacks,
+  { onChunk, onDone, onError, onStatus, onMeta, onPendingAction, onServerError }: SSECallbacks,
 ): Promise<void> {
   try {
     const text = await response.text();
     const parts = text.split("\n\n");
-    processParts(parts, onChunk, onStatus, onMeta, onPendingAction);
+    processParts(parts, onChunk, onStatus, onMeta, onPendingAction, onServerError);
     onDone();
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));

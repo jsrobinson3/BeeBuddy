@@ -1,0 +1,14 @@
+# HF Inference Endpoint testing override.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.hf.yml up api
+#
+# Points BOTH the primary LLM and tool-calling LLM at the HF endpoint.
+# The endpoint must be running (not scaled-to-zero) for instant responses,
+# or the cold-start retry logic will kick in (~2 min wake time).
+services:
+  api:
+    environment:
+      - LLM_PROVIDER=huggingface
+      - LLM_MODEL=tgi
+      - LLM_TOOL_PROVIDER=huggingface
+      - LLM_TOOL_MODEL=tgi
+      - HF_INFERENCE_ENDPOINT_URL=https://lr8spxw2hnznfcxf.us-east-1.aws.endpoints.huggingface.cloud

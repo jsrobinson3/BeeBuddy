@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.user import User
+from app.models.user_oauth_link import UserOAuthLink
 
 logger = logging.getLogger(__name__)
 
@@ -170,11 +171,15 @@ async def verify_apple_id_token(id_token: str) -> dict:
 async def _find_by_oauth(
     db: AsyncSession, provider: str, oauth_sub: str
 ) -> User | None:
-    """Find a non-deleted user by OAuth identity."""
-    stmt = select(User).where(
-        User.oauth_provider == provider,
-        User.oauth_sub == oauth_sub,
-        User.deleted_at.is_(None),
+    """Find a non-deleted user by OAuth identity via the join table."""
+    stmt = (
+        select(User)
+        .join(UserOAuthLink, User.id == UserOAuthLink.user_id)
+        .where(
+            UserOAuthLink.provider == provider,
+            UserOAuthLink.provider_sub == oauth_sub,
+            User.deleted_at.is_(None),
+        )
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
@@ -194,13 +199,15 @@ async def _link_oauth_to_existing(
     oauth_sub: str,
     name: str | None,
 ) -> User:
-    """Link an OAuth identity to an existing email/password user."""
-    if existing.oauth_provider is not None and existing.oauth_provider != provider:
-        raise ValueError(
-            f"Email already associated with {existing.oauth_provider} login"
-        )
-    existing.oauth_provider = provider
-    existing.oauth_sub = oauth_sub
+    """Link an OAuth identity to an existing user, adding a new provider link."""
+    # Check if this exact link already exists (defensive)
+    dup_stmt = select(UserOAuthLink).where(
+        UserOAuthLink.provider == provider,
+        UserOAuthLink.provider_sub == oauth_sub,
+    )
+    dup = (await db.execute(dup_stmt)).scalar_one_or_none()
+    if dup is None:
+        db.add(UserOAuthLink(user_id=existing.id, provider=provider, provider_sub=oauth_sub))
     existing.email_verified = True
     if name and not existing.name:
         existing.name = name
@@ -240,12 +247,12 @@ async def resolve_oauth_user(
     new_user = User(
         email=email.lower(),
         name=name,
-        oauth_provider=provider,
-        oauth_sub=oauth_sub,
         email_verified=True,
         password_hash=None,
     )
     db.add(new_user)
+    await db.flush()  # Assigns new_user.id for the FK
+    db.add(UserOAuthLink(user_id=new_user.id, provider=provider, provider_sub=oauth_sub))
     await db.commit()
     await db.refresh(new_user)
     return new_user

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.apiary import Apiary
     from app.models.task import Task
     from app.models.task_cadence import TaskCadence
+    from app.models.user_oauth_link import UserOAuthLink
 
 
 class ExperienceLevel(enum.StrEnum):
@@ -31,8 +32,6 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
-    oauth_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    oauth_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
     locale: Mapped[str | None] = mapped_column(String(10), nullable=True)
     experience_level: Mapped[ExperienceLevel] = mapped_column(
         SAEnum(ExperienceLevel, name="experience_level"),
@@ -55,4 +54,7 @@ class User(Base):
     )
     cadences: Mapped[list[TaskCadence]] = relationship(
         "TaskCadence", back_populates="user", cascade="all, delete-orphan"
+    )
+    oauth_links: Mapped[list[UserOAuthLink]] = relationship(
+        "UserOAuthLink", cascade="all, delete-orphan", passive_deletes=True
     )

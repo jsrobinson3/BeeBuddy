@@ -130,13 +130,16 @@ async def _anonymize_user(db, user, user_id_str: str) -> None:
     """Scrub PII from a user record but keep the row."""
     from uuid import uuid4
 
+    from sqlalchemy import delete
+
+    from app.models.user_oauth_link import UserOAuthLink
+
     user.name = None
     user.email = f"deleted_{uuid4().hex}@anon.beebuddy.app"
     user.password_hash = None
-    user.oauth_provider = None
-    user.oauth_sub = None
     user.preferences = None
     user.locale = None
+    await db.execute(delete(UserOAuthLink).where(UserOAuthLink.user_id == user.id))
     await db.commit()
     logger.info("hard_delete_user: anonymised user %s", user_id_str)
 
