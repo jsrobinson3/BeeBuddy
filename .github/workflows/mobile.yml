@@ -87,8 +87,8 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build Android (preview)
-        run: eas build --platform android --profile preview --non-interactive --no-wait
+      - name: Build Android (production)
+        run: eas build --platform android --profile production --non-interactive --no-wait
 
   build-ios:
     name: Build iOS
@@ -114,5 +114,5 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Build iOS (preview)
-        run: eas build --platform ios --profile preview --non-interactive --no-wait
+      - name: Build iOS (production)
+        run: eas build --platform ios --profile production --non-interactive --no-wait
