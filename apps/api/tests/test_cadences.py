@@ -58,12 +58,13 @@ class TestCadenceCatalog:
 
 
 class TestCadenceInitialization:
-    """POST /cadences/initialize -- seeds cadences for a user."""
+    """Cadence initialization — registration auto-seeds cadences."""
 
-    async def test_initialize_creates_cadences(self, client: AsyncClient):
+    async def test_registration_seeds_cadences(self, client: AsyncClient):
+        """Registration auto-initializes user-level cadences."""
         headers, _ = await register(client)
-        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        assert resp.status_code == 201
+        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
+        assert resp.status_code == 200
         cadences = resp.json()
         assert isinstance(cadences, list)
         assert len(cadences) > 0
@@ -71,35 +72,34 @@ class TestCadenceInitialization:
     async def test_initialize_is_idempotent(self, client: AsyncClient):
         headers, _ = await register(client)
 
+        # Registration already created cadences; explicit init is a no-op
         resp1 = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         assert resp1.status_code == 201
-        count1 = len(resp1.json())
+        assert len(resp1.json()) == 0
 
-        # Second call should return empty list (no new cadences)
+        # Second call also returns empty
         resp2 = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         assert resp2.status_code == 201
-        count2 = len(resp2.json())
-        assert count2 == 0
+        assert len(resp2.json()) == 0
 
-        # Total cadences should match the first batch
+        # Total cadences unchanged (from registration)
         resp3 = await client.get(f"{PREFIX}/cadences", headers=headers)
-        assert len(resp3.json()) == count1
+        assert len(resp3.json()) > 0
 
     async def test_initialize_requires_auth(self, client: AsyncClient):
         resp = await client.post(f"{PREFIX}/cadences/initialize")
         assert resp.status_code == 401
 
-    async def test_initialized_cadences_have_next_due_date(self, client: AsyncClient):
+    async def test_cadences_have_next_due_date(self, client: AsyncClient):
         headers, _ = await register(client)
-        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         cadences = resp.json()
-        # Every initialized cadence should have a non-null next_due_date
         for c in cadences:
             assert c["nextDueDate"] is not None, f"Cadence {c['cadenceKey']} missing due date"
 
-    async def test_initialized_cadences_are_active(self, client: AsyncClient):
+    async def test_cadences_are_active(self, client: AsyncClient):
         headers, _ = await register(client)
-        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
+        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         for c in resp.json():
             assert c["isActive"] is True
 
@@ -107,15 +107,9 @@ class TestCadenceInitialization:
 class TestCadenceList:
     """GET /cadences -- list user's cadence subscriptions."""
 
-    async def test_list_empty_before_init(self, client: AsyncClient):
+    async def test_list_populated_after_registration(self, client: AsyncClient):
+        """Registration seeds cadences automatically."""
         headers, _ = await register(client)
-        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    async def test_list_after_init(self, client: AsyncClient):
-        headers, _ = await register(client)
-        await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         assert resp.status_code == 200
         assert len(resp.json()) > 0
@@ -127,11 +121,16 @@ class TestCadenceList:
     async def test_cadences_scoped_to_user(self, client: AsyncClient):
         """User A's cadences are not visible to User B."""
         headers_a, _ = await register(client)
-        await client.post(f"{PREFIX}/cadences/initialize", headers=headers_a)
+        cadences_a = (await client.get(f"{PREFIX}/cadences", headers=headers_a)).json()
+        ids_a = {c["id"] for c in cadences_a}
 
         headers_b, _ = await register(client)
-        resp = await client.get(f"{PREFIX}/cadences", headers=headers_b)
-        assert resp.json() == []
+        cadences_b = (await client.get(f"{PREFIX}/cadences", headers=headers_b)).json()
+        ids_b = {c["id"] for c in cadences_b}
+
+        # Each user has their own cadences with no overlap
+        assert len(cadences_b) > 0
+        assert ids_a.isdisjoint(ids_b)
 
     async def test_cadence_response_shape(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -298,18 +297,20 @@ class TestHemisphereIntegration:
         assert resp.json()["latitude"] == -33.87
 
     async def test_initialize_with_southern_apiary(self, client: AsyncClient):
-        """When user has a southern-hemisphere apiary, cadences should initialize."""
+        """When user has a southern-hemisphere apiary, cadences should exist."""
         headers, _ = await register(client)
-        # Create a southern-hemisphere apiary first
+        # Create a southern-hemisphere apiary
         await client.post(
             f"{PREFIX}/apiaries", headers=headers,
             json={"name": "Melbourne Apiary", "latitude": -37.81, "longitude": 144.96},
         )
+        # Explicit init is idempotent (registration already seeded)
         resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         assert resp.status_code == 201
+        # Verify cadences exist (from registration) and all have due dates
+        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         cadences = resp.json()
         assert len(cadences) > 0
-        # All cadences should have due dates set
         for c in cadences:
             assert c["nextDueDate"] is not None
 
@@ -326,9 +327,8 @@ class TestHemisphereIntegration:
             f"{PREFIX}/users/me/preferences", headers=headers,
             json={"hemisphere": "north"},
         )
-        # Initialize cadences -- should use north despite southern apiary
-        resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
-        assert resp.status_code == 201
+        # Cadences exist from registration; verify they're present
+        resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         assert len(resp.json()) > 0
 
 

@@ -4,6 +4,7 @@ Converts MCP tool schemas to provider-specific formats, runs non-streaming
 LLM calls with tools attached, and executes tool calls in a loop (max rounds).
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -171,8 +172,15 @@ async def _call_llm_with_tools(
     return await _call_openai_compat(messages, tools)
 
 
+_COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
+
+
 async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
-    """Non-streaming call to OpenAI-compatible endpoint with tools."""
+    """Non-streaming call to OpenAI-compatible endpoint with tools.
+
+    Retries on 503 (scale-to-zero cold start) using the same delay
+    schedule as the streaming path in ai_service.py.
+    """
     body: dict = {
         "model": settings.effective_tool_model,
         "messages": messages,
@@ -182,10 +190,18 @@ async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
     headers = {"Authorization": f"Bearer {settings.llm_tool_api_key}"}
     url = f"{settings.llm_tool_base_url}/chat/completions"
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(url, json=body, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
+    for attempt in range(len(_COLD_START_DELAYS) + 1):
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(url, json=body, headers=headers)
+            if resp.status_code != 503:
+                resp.raise_for_status()
+                return resp.json()
+        if attempt >= len(_COLD_START_DELAYS):
+            resp.raise_for_status()  # raise the 503
+        delay = _COLD_START_DELAYS[attempt]
+        logger.info("Tool endpoint cold-starting, retry %d in %ds", attempt + 1, delay)
+        await asyncio.sleep(delay)
+    return {}  # unreachable
 
 
 async def _call_anthropic(messages: list[dict], tools: list[dict]) -> dict:

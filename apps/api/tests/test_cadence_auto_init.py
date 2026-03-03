@@ -62,26 +62,27 @@ async def create_hive(
 class TestCadenceAutoInit:
     """POST /hives -- first hive triggers cadence auto-initialization."""
 
-    async def test_first_hive_auto_initializes_cadences(
+    async def test_first_hive_adds_hive_cadences(
         self, client: AsyncClient,
     ):
-        """Creating the first hive should auto-initialize cadences."""
+        """Creating the first hive should add hive-scoped cadences."""
         headers, _ = await register(client)
         apiary_id = await create_apiary(client, headers)
 
-        # No cadences before first hive
+        # Registration already seeds user-level cadences
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         assert resp.status_code == 200
-        assert resp.json() == []
+        user_cadences = resp.json()
+        assert len(user_cadences) > 0
 
-        # Create the first hive
+        # Create the first hive — adds hive-scoped cadences
         await create_hive(client, headers, apiary_id)
 
-        # Cadences should now be initialized (user-level + hive-scoped)
+        # Should now have user-level + hive-scoped cadences
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         assert resp.status_code == 200
-        cadences = resp.json()
-        assert len(cadences) > 0
+        all_cadences = resp.json()
+        assert len(all_cadences) > len(user_cadences)
 
     async def test_second_hive_adds_its_own_hive_cadences(
         self, client: AsyncClient,
