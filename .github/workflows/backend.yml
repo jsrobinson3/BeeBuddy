@@ -70,6 +70,15 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: testing
+          MINIO_ROOT_PASSWORD: testing1
+          MINIO_DEFAULT_BUCKETS: test-bucket
+        ports:
+          - 9000:9000
+
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/beebuddy
       REDIS_URL: redis://localhost:6379/0
@@ -78,7 +87,7 @@ jobs:
       EMAIL_SUPPRESS: "true"
       EMAIL_FROM_ADDRESS: noreply@test.beebuddy.app
       AWS_ACCESS_KEY_ID: testing
-      AWS_SECRET_ACCESS_KEY: testing
+      AWS_SECRET_ACCESS_KEY: testing1
       S3_BUCKET: test-bucket
       S3_ENDPOINT_URL: http://localhost:9000
       S3_PUBLIC_URL: http://localhost:9000

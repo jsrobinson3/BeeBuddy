@@ -24,7 +24,7 @@ SEED_CLIENTS = [
         "id": uuid.uuid4(),
         "client_id": "claude-desktop",
         "name": "Claude Desktop",
-        "redirect_uris": '["http://localhost/callback"]',
+        "redirect_uris": ["http://localhost/callback"],
         "is_active": True,
     },
 ]
