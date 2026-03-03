@@ -16,6 +16,7 @@ from app.models.task import Task, TaskSource
 from app.models.task_cadence import TaskCadence
 from app.models.treatment import Treatment
 from app.models.user import ExperienceLevel, User
+from app.models.user_oauth_link import UserOAuthLink
 
 __all__ = [
     "AIConversation",
@@ -43,4 +44,5 @@ __all__ = [
     "TaskCadence",
     "ActionStatus",
     "PendingAction",
+    "UserOAuthLink",
 ]
