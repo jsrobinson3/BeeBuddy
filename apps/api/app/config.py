@@ -12,6 +12,7 @@ class LLMProvider(StrEnum):
     OLLAMA = "ollama"
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    HUGGINGFACE = "huggingface"
     BEDROCK = "bedrock"
 
 
@@ -108,6 +109,12 @@ class Settings(BaseSettings):
     llm_provider: LLMProvider = LLMProvider.OLLAMA
     llm_model: str = "llama3.2:3b"
 
+    # Tool-calling LLM — defaults to primary LLM when None
+    llm_tool_provider: LLMProvider | None = None
+    llm_tool_model: str | None = None
+    llm_tool_base_url_override: str | None = None  # Any OpenAI-compatible endpoint
+    llm_tool_api_key_override: str | None = None  # API key for the override URL
+
     # Ollama (local development)
     ollama_base_url: str = "http://localhost:11434"
 
@@ -116,6 +123,13 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str | None = None
+
+    # Hugging Face Inference Endpoints
+    hf_token: str | None = None
+    hf_inference_endpoint_url: str | None = None  # e.g. https://<id>.endpoints.huggingface.cloud
+
+    # Agricultural data APIs
+    usda_nass_api_key: str | None = None
 
     # Rate limiting
     rate_limit_enabled: bool = True
@@ -133,26 +147,68 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8081", "http://localhost:19006"]
 
     @property
+    def effective_tool_provider(self) -> "LLMProvider":
+        """Provider for tool-calling LLM (defaults to primary)."""
+        return self.llm_tool_provider or self.llm_provider
+
+    @property
+    def effective_tool_model(self) -> str:
+        """Model for tool-calling LLM (defaults to primary)."""
+        return self.llm_tool_model or self.llm_model
+
+    @property
+    def llm_tool_base_url(self) -> str:
+        """Base URL for the tool-calling LLM provider."""
+        if self.llm_tool_base_url_override:
+            return self.llm_tool_base_url_override.rstrip("/")
+        provider = self.effective_tool_provider
+        if provider == LLMProvider.OPENAI:
+            return "https://api.openai.com/v1"
+        if provider == LLMProvider.ANTHROPIC:
+            return "https://api.anthropic.com/v1"
+        if provider == LLMProvider.HUGGINGFACE:
+            return f"{self.hf_inference_endpoint_url.rstrip('/')}/v1"
+        return f"{self.ollama_base_url}/v1"
+
+    @property
+    def llm_tool_api_key(self) -> str | None:
+        """API key for the tool-calling LLM provider."""
+        if self.llm_tool_api_key_override:
+            return self.llm_tool_api_key_override
+        provider = self.effective_tool_provider
+        if provider == LLMProvider.OPENAI:
+            return self.openai_api_key
+        if provider == LLMProvider.ANTHROPIC:
+            return self.anthropic_api_key
+        if provider == LLMProvider.HUGGINGFACE:
+            return self.hf_token
+        return "ollama"
+
+    @property
     def llm_base_url(self) -> str:
         """Get the base URL for the configured LLM provider."""
-        if self.llm_provider == LLMProvider.OLLAMA:
-            return f"{self.ollama_base_url}/v1"
-        elif self.llm_provider == LLMProvider.OPENAI:
+        if self.llm_provider == LLMProvider.OPENAI:
             return "https://api.openai.com/v1"
-        elif self.llm_provider == LLMProvider.ANTHROPIC:
+        if self.llm_provider == LLMProvider.ANTHROPIC:
             return "https://api.anthropic.com/v1"
-        else:
-            return self.ollama_base_url
+        if self.llm_provider == LLMProvider.HUGGINGFACE and not self.hf_inference_endpoint_url:
+            raise ValueError(
+                "HF_INFERENCE_ENDPOINT_URL required when LLM_PROVIDER=huggingface"
+            )
+        if self.llm_provider == LLMProvider.HUGGINGFACE:
+            return f"{self.hf_inference_endpoint_url.rstrip('/')}/v1"
+        return f"{self.ollama_base_url}/v1"
 
     @property
     def llm_api_key(self) -> str | None:
         """Get the API key for the configured LLM provider."""
         if self.llm_provider == LLMProvider.OPENAI:
             return self.openai_api_key
-        elif self.llm_provider == LLMProvider.ANTHROPIC:
+        if self.llm_provider == LLMProvider.ANTHROPIC:
             return self.anthropic_api_key
-        else:
-            return "ollama"  # Ollama doesn't need a real key
+        if self.llm_provider == LLMProvider.HUGGINGFACE:
+            return self.hf_token
+        return "ollama"  # Ollama doesn't need a real key
 
 
 @lru_cache

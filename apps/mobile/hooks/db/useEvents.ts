@@ -6,6 +6,15 @@ import type { CreateEventInput, UpdateEventInput } from "../../services/api.type
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface EventRaw extends RawRecord {
+  hive_id: string;
+  event_type: string;
+  occurred_at: number;
+  details_json: string | null;
+  notes: string | null;
+}
 
 const eventsCollection = database.get<Event>("events");
 
@@ -32,14 +41,15 @@ export function useCreateEvent() {
   const fn = useCallback(async (data: CreateEventInput) => {
     await database.write(async () => {
       await eventsCollection.create((record) => {
-        record._raw.hive_id = data.hive_id;
-        record._raw.event_type = data.event_type;
-        record._raw.occurred_at = data.occurred_at
-          ? new Date(data.occurred_at).getTime()
+        const raw = record._raw as EventRaw;
+        raw.hive_id = data.hiveId;
+        raw.event_type = data.eventType;
+        raw.occurred_at = data.occurredAt
+          ? new Date(data.occurredAt).getTime()
           : Date.now();
         if (data.details)
-          record._raw.details_json = JSON.stringify(data.details);
-        if (data.notes) record._raw.notes = data.notes;
+          raw.details_json = JSON.stringify(data.details);
+        if (data.notes) raw.notes = data.notes;
       });
     });
     syncAfterWrite();
@@ -53,15 +63,16 @@ export function useUpdateEvent() {
       const record = await eventsCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
-          if (data.event_type !== undefined)
-            r._raw.event_type = data.event_type;
-          if (data.occurred_at !== undefined)
-            r._raw.occurred_at = new Date(data.occurred_at).getTime();
+          const raw = r._raw as EventRaw;
+          if (data.eventType !== undefined)
+            raw.event_type = data.eventType;
+          if (data.occurredAt !== undefined)
+            raw.occurred_at = new Date(data.occurredAt).getTime();
           if (data.details !== undefined)
-            r._raw.details_json = data.details
+            raw.details_json = data.details
               ? JSON.stringify(data.details)
               : null;
-          if (data.notes !== undefined) r._raw.notes = data.notes ?? null;
+          if (data.notes !== undefined) raw.notes = data.notes ?? null;
         });
       });
       syncAfterWrite();

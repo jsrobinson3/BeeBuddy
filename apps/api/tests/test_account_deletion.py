@@ -30,7 +30,7 @@ class TestDeleteAccount:
     async def test_delete_with_correct_password(self, client: AsyncClient):
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",
@@ -44,7 +44,7 @@ class TestDeleteAccount:
     async def test_delete_with_wrong_password(self, client: AsyncClient):
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",
@@ -57,7 +57,7 @@ class TestDeleteAccount:
     async def test_token_rejected_after_deletion(self, client: AsyncClient):
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         await client.request(
             "DELETE",
@@ -75,7 +75,7 @@ class TestCancelDeletion:
     async def test_cancel_with_valid_token(self, client: AsyncClient):
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
         me = await client.get(f"{PREFIX}/users/me", headers=auth(token))
         uid = me.json()["id"]
 
@@ -147,7 +147,7 @@ class TestDeleteDataFlag:
         """Default delete_data flag should be false in preferences."""
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",
@@ -161,7 +161,7 @@ class TestDeleteDataFlag:
         """Explicit delete_data=true should be accepted."""
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",
@@ -176,7 +176,7 @@ class TestDeleteDataFlag:
         """Omitting delete_data field should work (backward-compatible)."""
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",
@@ -190,7 +190,7 @@ class TestDeleteDataFlag:
         """Wrong password should be rejected with 403."""
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         resp = await client.request(
             "DELETE",

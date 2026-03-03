@@ -23,14 +23,14 @@ async def register(client: AsyncClient) -> tuple[dict, str]:
         "password": "secret123",
     })
     assert resp.status_code == 201
-    token = resp.json()["access_token"]
+    token = resp.json()["accessToken"]
     headers = {"Authorization": f"Bearer {token}"}
     me = await client.get(f"{PREFIX}/users/me", headers=headers)
     return headers, me.json()["id"]
 
 
 class TestCadenceCatalog:
-    """GET /cadences/catalog — public endpoint."""
+    """GET /cadences/catalog -- public endpoint."""
 
     async def test_returns_catalog(self, client: AsyncClient):
         resp = await client.get(f"{PREFIX}/cadences/catalog")
@@ -52,13 +52,13 @@ class TestCadenceCatalog:
         assert "seasonal" in categories
 
     async def test_catalog_no_auth_required(self, client: AsyncClient):
-        """Catalog is public — no Authorization header needed."""
+        """Catalog is public -- no Authorization header needed."""
         resp = await client.get(f"{PREFIX}/cadences/catalog")
         assert resp.status_code == 200
 
 
 class TestCadenceInitialization:
-    """POST /cadences/initialize — seeds cadences for a user."""
+    """POST /cadences/initialize -- seeds cadences for a user."""
 
     async def test_initialize_creates_cadences(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -95,17 +95,17 @@ class TestCadenceInitialization:
         cadences = resp.json()
         # Every initialized cadence should have a non-null next_due_date
         for c in cadences:
-            assert c["next_due_date"] is not None, f"Cadence {c['cadence_key']} missing due date"
+            assert c["nextDueDate"] is not None, f"Cadence {c['cadenceKey']} missing due date"
 
     async def test_initialized_cadences_are_active(self, client: AsyncClient):
         headers, _ = await register(client)
         resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         for c in resp.json():
-            assert c["is_active"] is True
+            assert c["isActive"] is True
 
 
 class TestCadenceList:
-    """GET /cadences — list user's cadence subscriptions."""
+    """GET /cadences -- list user's cadence subscriptions."""
 
     async def test_list_empty_before_init(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -138,12 +138,12 @@ class TestCadenceList:
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         cadence = resp.json()[0]
-        for field in ("id", "user_id", "cadence_key", "is_active", "next_due_date", "created_at"):
+        for field in ("id", "userId", "cadenceKey", "isActive", "nextDueDate", "createdAt"):
             assert field in cadence, f"Missing field: {field}"
 
 
 class TestCadenceUpdate:
-    """PATCH /cadences/{id} — toggle or update a cadence."""
+    """PATCH /cadences/{id} -- toggle or update a cadence."""
 
     async def test_toggle_active_off(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -156,7 +156,7 @@ class TestCadenceUpdate:
             json={"is_active": False},
         )
         assert resp.status_code == 200
-        assert resp.json()["is_active"] is False
+        assert resp.json()["isActive"] is False
 
     async def test_toggle_active_on(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -174,7 +174,7 @@ class TestCadenceUpdate:
             json={"is_active": True},
         )
         assert resp.status_code == 200
-        assert resp.json()["is_active"] is True
+        assert resp.json()["isActive"] is True
 
     async def test_update_nonexistent_returns_404(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -208,7 +208,7 @@ class TestCadenceUpdate:
 
 
 class TestCadenceTaskGeneration:
-    """POST /cadences/generate — manually trigger task generation."""
+    """POST /cadences/generate -- manually trigger task generation."""
 
     async def test_generate_requires_auth(self, client: AsyncClient):
         resp = await client.post(f"{PREFIX}/cadences/generate")
@@ -241,7 +241,7 @@ class TestCadenceTaskGeneration:
             assert task["source"] == "system"
 
     async def test_generate_twice_does_not_duplicate(self, client: AsyncClient):
-        """After generating, cadence due dates advance — second call shouldn't re-create."""
+        """After generating, cadence due dates advance -- second call shouldn't re-create."""
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         resp1 = await client.post(f"{PREFIX}/cadences/generate", headers=headers)
@@ -311,7 +311,7 @@ class TestHemisphereIntegration:
         assert len(cadences) > 0
         # All cadences should have due dates set
         for c in cadences:
-            assert c["next_due_date"] is not None
+            assert c["nextDueDate"] is not None
 
     async def test_hemisphere_preference_overrides_apiary(self, client: AsyncClient):
         """Explicit hemisphere preference takes precedence over apiary latitude."""
@@ -326,22 +326,22 @@ class TestHemisphereIntegration:
             f"{PREFIX}/users/me/preferences", headers=headers,
             json={"hemisphere": "north"},
         )
-        # Initialize cadences — should use north despite southern apiary
+        # Initialize cadences -- should use north despite southern apiary
         resp = await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         assert resp.status_code == 201
         assert len(resp.json()) > 0
 
 
 class TestCustomCadenceScheduling:
-    """PATCH /cadences/{id} — custom interval and season overrides."""
+    """PATCH /cadences/{id} -- custom interval and season overrides."""
 
     async def _get_cadence_by_key(self, client, headers, key: str) -> dict:
         cadences = (await client.get(f"{PREFIX}/cadences", headers=headers)).json()
         try:
-            return next(c for c in cadences if c["cadence_key"] == key)
+            return next(c for c in cadences if c["cadenceKey"] == key)
         except StopIteration:
             raise AssertionError(
-                f"Cadence '{key}' not found in {[c['cadence_key'] for c in cadences]}"
+                f"Cadence '{key}' not found in {[c['cadenceKey'] for c in cadences]}"
             )
 
     async def test_custom_interval_days_persisted(self, client: AsyncClient):
@@ -354,20 +354,20 @@ class TestCustomCadenceScheduling:
             json={"custom_interval_days": 10},
         )
         assert resp.status_code == 200
-        assert resp.json()["custom_interval_days"] == 10
+        assert resp.json()["customIntervalDays"] == 10
 
     async def test_custom_interval_recalculates_next_due(self, client: AsyncClient):
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
-        original_due = cadence["next_due_date"]
+        original_due = cadence["nextDueDate"]
 
         resp = await client.patch(
             f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
             json={"custom_interval_days": 7},
         )
         assert resp.status_code == 200
-        new_due = resp.json()["next_due_date"]
+        new_due = resp.json()["nextDueDate"]
         # next_due_date should have been recalculated
         assert new_due is not None
         assert new_due != original_due
@@ -383,8 +383,8 @@ class TestCustomCadenceScheduling:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["custom_season_month"] == 4
-        assert body["custom_season_day"] == 1
+        assert body["customSeasonMonth"] == 4
+        assert body["customSeasonDay"] == 1
 
     async def test_reset_custom_to_null_reverts_to_catalog(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -401,7 +401,7 @@ class TestCustomCadenceScheduling:
             json={"custom_interval_days": None},
         )
         assert resp.status_code == 200
-        assert resp.json()["custom_interval_days"] is None
+        assert resp.json()["customIntervalDays"] is None
 
     async def test_custom_fields_in_response(self, client: AsyncClient):
         """CadenceResponse includes the custom override fields."""
@@ -410,20 +410,20 @@ class TestCustomCadenceScheduling:
         cadences = (await client.get(f"{PREFIX}/cadences", headers=headers)).json()
         # All cadences should have the new fields (defaulting to null)
         for c in cadences:
-            assert "custom_interval_days" in c
-            assert "custom_season_month" in c
-            assert "custom_season_day" in c
+            assert "customIntervalDays" in c
+            assert "customSeasonMonth" in c
+            assert "customSeasonDay" in c
 
     async def test_toggle_active_does_not_recalculate_due_date(self, client: AsyncClient):
         """Toggling is_active alone should not change next_due_date."""
         headers, _ = await register(client)
         await client.post(f"{PREFIX}/cadences/initialize", headers=headers)
         cadence = await self._get_cadence_by_key(client, headers, "equipment_check")
-        original_due = cadence["next_due_date"]
+        original_due = cadence["nextDueDate"]
 
         resp = await client.patch(
             f"{PREFIX}/cadences/{cadence['id']}", headers=headers,
             json={"is_active": False},
         )
         assert resp.status_code == 200
-        assert resp.json()["next_due_date"] == original_due
+        assert resp.json()["nextDueDate"] == original_due

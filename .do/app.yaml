@@ -42,7 +42,22 @@ envs:
     value: atl1
   - key: LLM_PROVIDER
     scope: RUN_TIME
+    value: huggingface
+  - key: LLM_MODEL
+    scope: RUN_TIME
+    value: beebuddy-bee
+  - key: HF_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: HF_INFERENCE_ENDPOINT_URL
+    scope: RUN_TIME
+    type: SECRET
+  - key: LLM_TOOL_PROVIDER
+    scope: RUN_TIME
     value: anthropic
+  - key: LLM_TOOL_MODEL
+    scope: RUN_TIME
+    value: claude-haiku-4-5-20251001
   - key: ANTHROPIC_API_KEY
     scope: RUN_TIME
     type: SECRET
@@ -113,6 +128,31 @@ workers:
     instance_size_slug: professional-xs
     run_command: uv run celery -A app.tasks worker --loglevel=info --concurrency=2 -B
 
+ingress:
+  rules:
+    - match:
+        authority:
+          exact: api.beebuddyai.com
+        path:
+          prefix: /
+      component:
+        name: api
+    - match:
+        authority:
+          exact: app.beebuddyai.com
+        path:
+          prefix: /
+      component:
+        name: web
+
+domains:
+  - domain: api.beebuddyai.com
+    type: PRIMARY
+    zone: beebuddyai.com
+  - domain: app.beebuddyai.com
+    type: PRIMARY
+    zone: beebuddyai.com
+
 static_sites:
   - name: web
     github:
@@ -124,8 +164,6 @@ static_sites:
     output_dir: dist
     environment_slug: node-js
     catchall_document: index.html
-    routes:
-      - path: /
     envs:
       - key: EXPO_PUBLIC_API_URL
         scope: BUILD_TIME

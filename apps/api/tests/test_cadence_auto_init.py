@@ -28,7 +28,7 @@ async def register(client: AsyncClient) -> tuple[dict, str]:
         "password": "secret123",
     })
     assert resp.status_code == 201
-    token = resp.json()["access_token"]
+    token = resp.json()["accessToken"]
     headers = {"Authorization": f"Bearer {token}"}
     me = await client.get(f"{PREFIX}/users/me", headers=headers)
     return headers, me.json()["id"]
@@ -60,7 +60,7 @@ async def create_hive(
 
 
 class TestCadenceAutoInit:
-    """POST /hives — first hive triggers cadence auto-initialization."""
+    """POST /hives -- first hive triggers cadence auto-initialization."""
 
     async def test_first_hive_auto_initializes_cadences(
         self, client: AsyncClient,
@@ -90,14 +90,14 @@ class TestCadenceAutoInit:
         headers, _ = await register(client)
         apiary_id = await create_apiary(client, headers)
 
-        # Create first hive — triggers user-level + hive-scoped init
+        # Create first hive -- triggers user-level + hive-scoped init
         hive1 = await create_hive(client, headers, apiary_id, name="Hive 1")
 
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
         cadences_after_first = resp.json()
         count_after_first = len(cadences_after_first)
 
-        # Create second hive — should add exactly HIVE_CADENCE_COUNT more cadences
+        # Create second hive -- should add exactly HIVE_CADENCE_COUNT more cadences
         hive2 = await create_hive(client, headers, apiary_id, name="Hive 2")
 
         resp = await client.get(f"{PREFIX}/cadences", headers=headers)
@@ -106,11 +106,11 @@ class TestCadenceAutoInit:
         assert len(cadences_after_second) == count_after_first + HIVE_CADENCE_COUNT
 
         # The new cadences should belong to hive2
-        hive2_cadences = [c for c in cadences_after_second if c["hive_id"] == hive2["id"]]
+        hive2_cadences = [c for c in cadences_after_second if c["hiveId"] == hive2["id"]]
         assert len(hive2_cadences) == HIVE_CADENCE_COUNT
 
         # hive1 still has its own
-        hive1_cadences = [c for c in cadences_after_second if c["hive_id"] == hive1["id"]]
+        hive1_cadences = [c for c in cadences_after_second if c["hiveId"] == hive1["id"]]
         assert len(hive1_cadences) == HIVE_CADENCE_COUNT
 
     async def test_auto_init_generates_due_tasks(
@@ -155,7 +155,7 @@ class TestHiveScopedCadences:
         )
         assert resp.status_code == 200
         cadences = resp.json()
-        keys = {c["cadence_key"] for c in cadences}
+        keys = {c["cadenceKey"] for c in cadences}
         assert keys == {"regular_inspection", "varroa_monitoring"}
 
     async def test_hive_tasks_have_hive_id_and_prefixed_title(
@@ -168,12 +168,12 @@ class TestHiveScopedCadences:
 
         resp = await client.get(f"{PREFIX}/tasks", headers=headers)
         tasks = resp.json()
-        hive_tasks = [t for t in tasks if t["hive_id"] == hive["id"]]
+        hive_tasks = [t for t in tasks if t["hiveId"] == hive["id"]]
 
         assert len(hive_tasks) >= HIVE_CADENCE_COUNT
         for task in hive_tasks:
             assert task["title"].startswith("Queen Bee:")
-            assert task["apiary_id"] == apiary_id
+            assert task["apiaryId"] == apiary_id
 
     async def test_cadences_filter_by_hive_id(
         self, client: AsyncClient,
@@ -189,7 +189,7 @@ class TestHiveScopedCadences:
             params={"hive_id": hive1["id"]},
         )
         cadences = resp.json()
-        assert all(c["hive_id"] == hive1["id"] for c in cadences)
+        assert all(c["hiveId"] == hive1["id"] for c in cadences)
         assert len(cadences) == HIVE_CADENCE_COUNT
 
         resp = await client.get(
@@ -197,7 +197,7 @@ class TestHiveScopedCadences:
             params={"hive_id": hive2["id"]},
         )
         cadences = resp.json()
-        assert all(c["hive_id"] == hive2["id"] for c in cadences)
+        assert all(c["hiveId"] == hive2["id"] for c in cadences)
         assert len(cadences) == HIVE_CADENCE_COUNT
 
     async def test_delete_hive_cascades_cadences(
@@ -233,7 +233,7 @@ class TestHiveScopedCadences:
         headers, _ = await register(client)
         apiary_id = await create_apiary(client, headers)
 
-        # Create hive — triggers cadence init + task generation
+        # Create hive -- triggers cadence init + task generation
         await create_hive(client, headers, apiary_id)
 
         # All recurring cadences should have generated tasks
@@ -249,7 +249,7 @@ class TestHiveScopedCadences:
         # All recurring tasks should share the same due_date (the server's "today")
         # and it should be a recent date (not pushed into the future by interval)
         recurring_tasks = [t for t in system_tasks if t["recurring"]]
-        due_dates = {t["due_date"] for t in recurring_tasks}
+        due_dates = {t["dueDate"] for t in recurring_tasks}
         assert len(due_dates) == 1, f"Expected all recurring tasks due same day, got {due_dates}"
         due = date.fromisoformat(due_dates.pop())
         assert abs((due - date.today()).days) <= 1, "Due date should be today (allow UTC offset)"
@@ -289,7 +289,7 @@ class TestTaskDueDateSchema:
         )
         assert resp.status_code == 201
         body = resp.json()
-        assert body["due_date"] == today
+        assert body["dueDate"] == today
 
     async def test_task_response_due_date_is_date_format(
         self, client: AsyncClient,
@@ -305,8 +305,8 @@ class TestTaskDueDateSchema:
         assert resp.status_code == 201
         body = resp.json()
         # Should be exactly "2026-06-15", not "2026-06-15T00:00:00..."
-        assert body["due_date"] == due
-        assert "T" not in body["due_date"]
+        assert body["dueDate"] == due
+        assert "T" not in body["dueDate"]
 
     async def test_update_task_due_date_with_date_string(
         self, client: AsyncClient,
@@ -327,4 +327,4 @@ class TestTaskDueDateSchema:
             json={"due_date": new_date},
         )
         assert resp.status_code == 200
-        assert resp.json()["due_date"] == new_date
+        assert resp.json()["dueDate"] == new_date

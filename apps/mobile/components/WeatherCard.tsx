@@ -74,8 +74,8 @@ function WeatherDetails({ weather }: { weather: CurrentWeather }) {
   const styles = useStyles(createStyles);
   const units = useUnits();
 
-  const temp = units.toDisplayTemp(weather.temp_c);
-  const wind = units.toDisplayWindSpeed(weather.wind_speed_kmh);
+  const temp = units.toDisplayTemp(weather.tempC);
+  const wind = units.toDisplayWindSpeed(weather.windSpeedKmh);
 
   return (
     <>
@@ -96,7 +96,7 @@ function WeatherDetails({ weather }: { weather: CurrentWeather }) {
         <View style={styles.detailItem}>
           <Text style={styles.detailLabel}>Humidity</Text>
           <Text style={styles.detailValue}>
-            {weather.humidity_percent}%
+            {weather.humidityPercent}%
           </Text>
         </View>
         <View style={styles.detailItem}>

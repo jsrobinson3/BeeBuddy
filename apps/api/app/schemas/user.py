@@ -4,10 +4,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
-class UserCreate(BaseModel):
+class UserCreate(CamelBase):
     """Request model for creating a user."""
 
     name: str | None = None
@@ -15,7 +15,7 @@ class UserCreate(BaseModel):
     password: str
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(CamelBase):
     """Request model for updating a user. All fields optional."""
 
     name: str | None = None
@@ -25,10 +25,8 @@ class UserUpdate(BaseModel):
     timezone: str | None = None
 
 
-class UserResponse(BaseModel):
+class UserResponse(BaseResponse):
     """Response model for a user."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str | None = None

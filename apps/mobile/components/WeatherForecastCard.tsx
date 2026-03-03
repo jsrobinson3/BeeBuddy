@@ -111,8 +111,8 @@ function hasIdealDay(days: DayForecast[]): boolean {
   return days.some(
     (d) =>
       GOOD_CONDITIONS.has(d.conditions) &&
-      d.temp_max_c >= MIN_INSPECTION_TEMP_C &&
-      d.temp_max_c <= MAX_INSPECTION_TEMP_C,
+      d.tempMaxC >= MIN_INSPECTION_TEMP_C &&
+      d.tempMaxC <= MAX_INSPECTION_TEMP_C,
   );
 }
 
@@ -130,7 +130,7 @@ function DayColumn({
   tempLabel: string;
 }) {
   const s = useStyles(createDayStyles);
-  const temp = Math.round(toTemp(day.temp_max_c));
+  const temp = Math.round(toTemp(day.tempMaxC));
   const isToday = index === 0;
   return (
     <View style={s.dayCol}>

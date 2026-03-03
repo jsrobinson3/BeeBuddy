@@ -26,7 +26,7 @@ async def register(client: AsyncClient) -> tuple[dict, str]:
         "password": "secret123",
     })
     assert resp.status_code == 201
-    token = resp.json()["access_token"]
+    token = resp.json()["accessToken"]
     headers = {"Authorization": f"Bearer {token}"}
     me = await client.get(f"{PREFIX}/users/me", headers=headers)
     return headers, me.json()["id"]
@@ -56,7 +56,7 @@ async def create_queen(client, headers, hive_id) -> str:
         "hive_id": hive_id, "marking_color": "blue", "status": "present",
     })
     assert resp.status_code == 201
-    assert resp.json()["marking_color"] == "blue"
+    assert resp.json()["markingColor"] == "blue"
     return resp.json()["id"]
 
 
@@ -67,7 +67,7 @@ async def create_treatment(client, headers, hive_id) -> str:
         "hive_id": hive_id, "treatment_type": "oxalic_acid", "started_at": now,
     })
     assert resp.status_code == 201
-    assert resp.json()["treatment_type"] == "oxalic_acid"
+    assert resp.json()["treatmentType"] == "oxalic_acid"
     return resp.json()["id"]
 
 
@@ -90,7 +90,7 @@ async def create_event(client, headers, hive_id) -> str:
         "occurred_at": datetime.now(UTC).isoformat(),
     })
     assert resp.status_code == 201
-    assert resp.json()["event_type"] == "swarm"
+    assert resp.json()["eventType"] == "swarm"
     return resp.json()["id"]
 
 
@@ -143,7 +143,7 @@ class TestQueens:
             json={"marking_color": "white", "fertilized": True},
         )
         assert resp.status_code == 200
-        assert resp.json()["marking_color"] == "white"
+        assert resp.json()["markingColor"] == "white"
         assert resp.json()["fertilized"] is True
 
     async def test_delete_then_404(self, client: AsyncClient):
@@ -200,7 +200,7 @@ class TestTreatments:
             json={"product_name": "Api-Bioxal"},
         )
         assert resp.status_code == 200
-        assert resp.json()["product_name"] == "Api-Bioxal"
+        assert resp.json()["productName"] == "Api-Bioxal"
 
     async def test_delete_then_404(self, client: AsyncClient):
         headers, _ = await register(client)
@@ -260,7 +260,7 @@ class TestHarvests:
             json={"weight_kg": 15.0},
         )
         assert resp.status_code == 200
-        assert resp.json()["weight_kg"] == 15.0
+        assert resp.json()["weightKg"] == 15.0
 
     async def test_delete_then_404(self, client: AsyncClient):
         headers, _ = await register(client)

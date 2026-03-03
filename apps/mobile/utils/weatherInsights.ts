@@ -45,8 +45,8 @@ function isSameDate(a: string, b: string): boolean {
 function isDayGoodForInspection(day: DayForecast): boolean {
   return (
     GOOD_CONDITIONS.has(day.conditions) &&
-    day.temp_max_c >= MIN_INSPECTION_TEMP_C &&
-    day.temp_max_c <= MAX_INSPECTION_TEMP_C
+    day.tempMaxC >= MIN_INSPECTION_TEMP_C &&
+    day.tempMaxC <= MAX_INSPECTION_TEMP_C
   );
 }
 
@@ -61,7 +61,7 @@ function findBestDay(daily: DayForecast[]): DayForecast | null {
     const bScore = b.conditions === "sunny" ? 1 : 0;
     if (aScore !== bScore) return bScore - aScore;
     const idealTemp = 22;
-    return Math.abs(a.temp_max_c - idealTemp) - Math.abs(b.temp_max_c - idealTemp);
+    return Math.abs(a.tempMaxC - idealTemp) - Math.abs(b.tempMaxC - idealTemp);
   })[0];
 }
 
@@ -118,14 +118,14 @@ function extremeTempInsight(
   day: DayForecast,
   useFahrenheit?: boolean,
 ): string | null {
-  const temp = formatTemp(day.temp_max_c, useFahrenheit);
-  if (day.temp_max_c < EXTREME_COLD_C) {
+  const temp = formatTemp(day.tempMaxC, useFahrenheit);
+  if (day.tempMaxC < EXTREME_COLD_C) {
     return (
       `Cold temperatures today (${temp})` +
       ` \u2014 avoid opening hives to keep the colony warm`
     );
   }
-  if (day.temp_max_c > EXTREME_HOT_C) {
+  if (day.tempMaxC > EXTREME_HOT_C) {
     return (
       `Extreme heat today (${temp}) \u2014 ensure` +
       ` hives have adequate ventilation and water`
@@ -141,7 +141,7 @@ function bestDayInsight(
   const bestDay = findBestDay(daily);
   if (!bestDay) return null;
   const name = getDayName(bestDay.date);
-  const temp = formatTemp(bestDay.temp_max_c, useFahrenheit);
+  const temp = formatTemp(bestDay.tempMaxC, useFahrenheit);
   const sky = bestDay.conditions === "sunny" ? "sunny" : "fair";
   return (
     `${name} looks ideal for hive inspections` +

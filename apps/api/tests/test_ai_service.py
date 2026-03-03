@@ -1,0 +1,310 @@
+"""Unit tests for app.services.ai_service — cold-start retry and streaming.
+
+These tests mock httpx and the database so they run without any network
+access, running API server, or LLM endpoint.
+"""
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from app.config import LLMProvider
+from app.services.ai_service import (
+    _COLD_START_DELAYS,
+    ColdStartError,
+    _parse_openai_sse,
+    _stream_openai_compat,
+    stream_chat,
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _sse_event(data: dict | str) -> str:
+    """Format a value as an SSE data line."""
+    payload = data if isinstance(data, str) else json.dumps(data)
+    return f"data: {payload}"
+
+
+def _fake_settings(**overrides) -> MagicMock:
+    """Return a mock settings with sensible defaults."""
+    defaults = {
+        "llm_provider": LLMProvider.OPENAI,
+        "llm_model": "gpt-4",
+        "llm_base_url": "https://api.example.com/v1",
+        "llm_api_key": "test-key",
+    }
+    defaults.update(overrides)
+    mock = MagicMock()
+    for k, v in defaults.items():
+        setattr(mock, k, v)
+    return mock
+
+
+def _openai_chunk(content: str) -> str:
+    """Build an OpenAI-format SSE line with a content delta."""
+    obj = {"choices": [{"delta": {"content": content}}]}
+    return f"data: {json.dumps(obj)}"
+
+
+async def _async_lines(lines: list[str]):
+    """Simulate httpx response.aiter_lines()."""
+    for line in lines:
+        yield line
+
+
+def _mock_response(status_code: int = 200, lines: list[str] | None = None):
+    """Build a mock httpx response that streams lines."""
+    resp = AsyncMock()
+    resp.status_code = status_code
+    resp.aiter_lines = lambda: _async_lines(lines or [])
+    resp.aclose = AsyncMock()
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# _parse_openai_sse
+# ---------------------------------------------------------------------------
+
+
+class TestParseOpenAiSSE:
+    """Tests for the OpenAI SSE line parser."""
+
+    def test_content_delta(self):
+        line = _openai_chunk("Hello")
+        assert _parse_openai_sse(line) == "Hello"
+
+    def test_done_signal(self):
+        assert _parse_openai_sse("data: [DONE]") is None
+
+    def test_non_data_line_returns_empty(self):
+        assert _parse_openai_sse("event: ping") == ""
+        assert _parse_openai_sse("") == ""
+
+    def test_empty_delta_returns_empty(self):
+        obj = {"choices": [{"delta": {}}]}
+        line = f"data: {json.dumps(obj)}"
+        assert _parse_openai_sse(line) == ""
+
+
+# ---------------------------------------------------------------------------
+# _stream_openai_compat — cold start detection
+# ---------------------------------------------------------------------------
+
+
+class TestStreamOpenAiCompat:
+    """Tests for the OpenAI-compatible streaming path."""
+
+    @patch("app.services.ai_service.settings", _fake_settings())
+    async def test_raises_cold_start_error_on_503(self):
+        """A 503 response raises ColdStartError."""
+        mock_resp = _mock_response(status_code=503)
+        mock_client = AsyncMock()
+        mock_client.build_request.return_value = MagicMock()
+        mock_client.send = AsyncMock(return_value=mock_resp)
+        mock_client.aclose = AsyncMock()
+
+        with (
+            patch("app.services.ai_service.httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(ColdStartError),
+        ):
+            async for _ in _stream_openai_compat([{"role": "user", "content": "hi"}]):
+                pass
+
+    @patch("app.services.ai_service.settings", _fake_settings())
+    async def test_streams_content_on_200(self):
+        """A 200 response yields content tokens."""
+        lines = [_openai_chunk("Hello"), _openai_chunk(" world"), "data: [DONE]"]
+        mock_resp = _mock_response(status_code=200, lines=lines)
+        mock_client = AsyncMock()
+        mock_client.build_request.return_value = MagicMock()
+        mock_client.send = AsyncMock(return_value=mock_resp)
+        mock_client.aclose = AsyncMock()
+
+        chunks: list[str] = []
+        with patch("app.services.ai_service.httpx.AsyncClient", return_value=mock_client):
+            async for chunk in _stream_openai_compat([{"role": "user", "content": "hi"}]):
+                chunks.append(chunk)
+
+        assert chunks == ["Hello", " world"]
+
+
+# ---------------------------------------------------------------------------
+# stream_chat — cold-start retry loop
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "app.services.ai_service.tool_executor.try_tool_path",
+    new_callable=AsyncMock,
+    return_value=(None, []),
+)
+class TestStreamChatColdStart:
+    """Tests for the top-level stream_chat retry logic."""
+
+    async def _collect_events(self, gen) -> list[dict]:
+        """Collect and parse SSE events from the generator."""
+        events = []
+        async for raw in gen:
+            if not raw.startswith("data: "):
+                continue
+            payload = raw[6:].strip()
+            if payload != "[DONE]":
+                events.append(json.loads(payload))
+        return events
+
+    async def test_emits_waking_up_then_content_on_retry(self, _mock_tool_path):
+        """First call returns 503, second succeeds — client sees waking_up then content."""
+        call_count = 0
+
+        async def mock_stream_llm(messages):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ColdStartError()
+            yield "Hello!"
+
+        mock_db = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=mock_stream_llm),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+
+        statuses = [e for e in events if "status" in e]
+        content = [e for e in events if "content" in e]
+
+        assert len(statuses) == 1
+        assert statuses[0]["status"] == "waking_up"
+        assert len(content) == 1
+        assert content[0]["content"] == "Hello!"
+
+    async def test_emits_error_after_all_retries_exhausted(self, _mock_tool_path):
+        """If every attempt raises ColdStartError, client sees error event."""
+
+        async def always_503(messages):
+            raise ColdStartError()
+            yield  # unreachable — required to make this an async generator
+
+        mock_db = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=always_503),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+
+        errors = [e for e in events if "error" in e]
+        assert len(errors) == 1
+        assert "try again" in errors[0]["error"].lower()
+
+    async def test_waking_up_sent_only_once_across_retries(self, _mock_tool_path):
+        """Multiple 503 retries should only emit a single waking_up status."""
+        call_count = 0
+
+        async def fail_twice_then_succeed(messages):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise ColdStartError()
+            yield "Done"
+
+        mock_db = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=fail_twice_then_succeed),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+
+        statuses = [e for e in events if "status" in e]
+        assert len(statuses) == 1
+
+    async def test_no_cold_start_streams_normally(self, _mock_tool_path):
+        """When the endpoint responds immediately, no waking_up event is emitted."""
+
+        async def instant_response(messages):
+            yield "Instant reply"
+
+        mock_db = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=instant_response),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+        ):
+            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+
+        statuses = [e for e in events if "status" in e]
+        content = [e for e in events if "content" in e]
+
+        assert len(statuses) == 0
+        assert content[0]["content"] == "Instant reply"
+
+    async def test_retry_delays_match_config(self, _mock_tool_path):
+        """Sleep durations should match _COLD_START_DELAYS."""
+        call_count = 0
+
+        async def fail_three_times(messages):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                raise ColdStartError()
+            yield "OK"
+
+        mock_db = AsyncMock()
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        mock_sleep = AsyncMock()
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=fail_three_times),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+            patch("app.services.ai_service.asyncio.sleep", mock_sleep),
+        ):
+            async for _ in stream_chat(mock_db, mock_user, mock_request):
+                pass
+
+        assert mock_sleep.call_count == 3
+        for i, call in enumerate(mock_sleep.call_args_list):
+            assert call.args[0] == _COLD_START_DELAYS[i]

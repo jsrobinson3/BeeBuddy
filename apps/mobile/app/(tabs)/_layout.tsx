@@ -16,9 +16,11 @@ export default function TabsLayout() {
 
   return (
     <Tabs screenOptions={tabScreenOptions} tabBar={(props) => <CustomTabBar {...props} />}>
-      <Tabs.Screen name="(home)" options={{ title: "Apiaries" }} />
-      <Tabs.Screen name="(tasks)" options={{ title: "Tasks" }} />
-      <Tabs.Screen name="(settings)" options={{ title: "Settings" }} />
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="home" options={{ title: "Apiaries" }} />
+      <Tabs.Screen name="tasks" options={{ title: "Tasks" }} />
+      <Tabs.Screen name="chat" options={{ title: "Buddy" }} />
+      <Tabs.Screen name="settings" options={{ title: "Settings" }} />
     </Tabs>
   );
 }

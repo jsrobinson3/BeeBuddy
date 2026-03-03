@@ -23,7 +23,7 @@ export function useCreateHive() {
     mutationFn: (data: CreateHiveInput) => api.createHive(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["hives"] });
-      queryClient.invalidateQueries({ queryKey: ["apiaries", variables.apiary_id] });
+      queryClient.invalidateQueries({ queryKey: ["apiaries", variables.apiaryId] });
       queryClient.invalidateQueries({ queryKey: ["apiaries"] });
     },
   });

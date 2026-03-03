@@ -33,12 +33,12 @@ class TestEmailVerification:
         email = unique_email()
         resp = await register(client, email)
         assert resp.status_code == 201
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
 
         # Check that email_verified starts as False
         me = await client.get(f"{PREFIX}/users/me", headers=auth(token))
         assert me.status_code == 200
-        assert me.json()["email_verified"] is False
+        assert me.json()["emailVerified"] is False
 
         # Create a verification token using the service directly
         # (In production, this comes from the email link)
@@ -57,7 +57,7 @@ class TestEmailVerification:
 
         # Confirm email_verified is now True
         me = await client.get(f"{PREFIX}/users/me", headers=auth(token))
-        assert me.json()["email_verified"] is True
+        assert me.json()["emailVerified"] is True
 
     async def test_verify_email_invalid_token(self, client: AsyncClient):
         resp = await client.post(f"{PREFIX}/auth/verify-email", json={
@@ -87,4 +87,4 @@ class TestEmailVerification:
         client, headers = auth_client
         resp = await client.get(f"{PREFIX}/users/me", headers=headers)
         assert resp.status_code == 200
-        assert "email_verified" in resp.json()
+        assert "emailVerified" in resp.json()

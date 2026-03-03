@@ -3,10 +3,10 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
-class TreatmentCreate(BaseModel):
+class TreatmentCreate(CamelBase):
     """Request model for creating a treatment record."""
 
     hive_id: UUID
@@ -20,7 +20,7 @@ class TreatmentCreate(BaseModel):
     follow_up_date: date | None = None
 
 
-class TreatmentUpdate(BaseModel):
+class TreatmentUpdate(CamelBase):
     """Request model for updating a treatment record. All fields optional."""
 
     hive_id: UUID | None = None
@@ -34,10 +34,8 @@ class TreatmentUpdate(BaseModel):
     follow_up_date: date | None = None
 
 
-class TreatmentResponse(BaseModel):
+class TreatmentResponse(BaseResponse):
     """Response model for a treatment record."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     hive_id: UUID

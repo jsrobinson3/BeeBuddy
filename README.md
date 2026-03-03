@@ -35,60 +35,118 @@ An open-source, AI-powered beekeeping management platform.
 
 ### Prerequisites
 
-- Node.js 18+
-- Docker & Docker Compose
-- [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) (for GPU acceleration)
+- [Node.js](https://nodejs.org/) 18+
+- [Python](https://www.python.org/) 3.11+ and [uv](https://docs.astral.sh/uv/)
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) (optional, for GPU-accelerated local LLM)
 
-### Quick Start
+### 1. Start Infrastructure
 
 ```bash
-# Start everything
 cd infra/docker
 docker compose up -d
-
-# First run pulls llama3.2:3b (~2GB)
-docker logs -f beebuddy-ollama-init
 ```
+
+First run pulls the Ollama model (~2GB). Watch progress with `docker logs -f beebuddy-ollama-init`.
 
 This starts:
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| **API** | http://localhost:8000 | FastAPI backend |
-| **API Docs** | http://localhost:8000/docs | Swagger UI |
 | **PostgreSQL** | localhost:5432 | Database |
-| **Redis** | localhost:6379 | Cache |
-| **MinIO** | http://localhost:9001 | S3 storage (see `.env.example`) |
-| **Ollama** | http://localhost:11434 | Local LLM with GPU |
+| **Redis** | localhost:6379 | Cache & token blocklist |
+| **MinIO** | http://localhost:9001 | S3-compatible photo storage |
+| **Ollama** | http://localhost:11434 | Local LLM with GPU (Phase 2) |
 
-### Mobile App (run locally)
+### 2. Set Up the API
+
+```bash
+cd apps/api
+
+# Copy env and fill in any secrets (works as-is for local dev)
+cp .env.example .env
+
+# Install Python dependencies
+uv sync
+
+# Run database migrations
+uv run alembic upgrade head
+
+# Start the dev server
+uv run uvicorn app.main:app --reload
+```
+
+The API is now running at http://localhost:8000 with Swagger docs at http://localhost:8000/docs.
+
+**Run tests:**
+
+```bash
+uv run pytest
+```
+
+### 3. Set Up the Mobile App
+
+The mobile app runs locally (not in Docker) for hot reload and device connectivity.
 
 ```bash
 cd apps/mobile
 npm install
+```
+
+#### iOS / Android (development build)
+
+Create a [development build](https://docs.expo.dev/develop/development-builds/introduction/) for your device or emulator:
+
+```bash
+# Build and run on a connected device / emulator
+npx expo run:android
+npx expo run:ios
+
+# Or start the dev server (after an initial build)
 npm start
 ```
 
-Then press `w` for web, `a` for Android, or `i` for iOS.
+Then press `a` for Android or `i` for iOS.
 
-> Mobile runs locally (not in Docker) for better hot reload and device connectivity.
-
-### Using Larger Local Models
-
-With your GPU, you can use larger models:
+**WSL users:** Use the WSL-specific script that sets the correct packager hostname:
 
 ```bash
-# Pull a larger model
-docker exec beebuddy-ollama ollama pull llama3.1:8b
-docker exec beebuddy-ollama ollama pull qwen2.5:7b
-
-# Update the API to use it
-docker compose down
-# Edit infra/docker/docker-compose.yml: LLM_MODEL=llama3.1:8b
-docker compose up -d
+npm run start:wsl
 ```
 
-### Switching to Cloud LLM Providers
+#### Web
+
+```bash
+npm run web
+```
+
+Opens the app at http://localhost:8081. The web build includes responsive layouts — a sidebar navigation on desktop (>1024px) and constrained content widths for tablet/desktop viewports. On mobile-width browsers it looks identical to the native app.
+
+**WSL users:**
+
+```bash
+npm run web:wsl
+```
+
+#### Type-checking
+
+```bash
+npx tsc --noEmit
+```
+
+### LLM Configuration (Optional)
+
+#### Using larger local models
+
+```bash
+# Pull a larger model into the Ollama container
+docker exec beebuddy-ollama ollama pull qwen2.5:7b
+
+# Update LLM_MODEL in infra/docker/docker-compose.yml, then restart
+docker compose down && docker compose up -d
+```
+
+#### Switching to cloud LLM providers
 
 Edit `apps/api/.env`:
 

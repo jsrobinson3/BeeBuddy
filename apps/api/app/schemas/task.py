@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
 class TaskSource(StrEnum):
@@ -24,7 +24,7 @@ class TaskPriority(StrEnum):
     URGENT = "urgent"
 
 
-class TaskCreate(BaseModel):
+class TaskCreate(CamelBase):
     """Request model for creating a task."""
 
     hive_id: UUID | None = None
@@ -38,7 +38,7 @@ class TaskCreate(BaseModel):
     priority: TaskPriority = TaskPriority.MEDIUM
 
 
-class TaskUpdate(BaseModel):
+class TaskUpdate(CamelBase):
     """Request model for updating a task. All fields optional."""
 
     hive_id: UUID | None = None
@@ -53,10 +53,8 @@ class TaskUpdate(BaseModel):
     priority: TaskPriority | None = None
 
 
-class TaskResponse(BaseModel):
+class TaskResponse(BaseResponse):
     """Response model for a task."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID

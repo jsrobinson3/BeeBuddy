@@ -4,13 +4,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse
 
 
-class PhotoResponse(BaseModel):
+class PhotoResponse(BaseResponse):
     """Response model for a photo."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     inspection_id: UUID

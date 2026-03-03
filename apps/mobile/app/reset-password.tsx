@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { GradientHeader } from "../components/GradientHeader";
+import { ResponsiveContainer } from "../components/ResponsiveContainer";
 import { API_BASE_URL } from "../services/config";
 import { getErrorMessage } from "../utils/getErrorMessage";
 import { useStyles, useTheme, typography, spacing, radii, shadows, type ThemeColors } from "../theme";
@@ -250,12 +251,14 @@ export default function ResetPasswordScreen() {
 
   return (
     <ScrollView contentContainerStyle={layout.scrollContent} keyboardShouldPersistTaps="handled" bounces={false}>
-      <GradientHeader height={200} />
-      <View style={layout.container}>
-        {status === "form" && token && <ResetForm token={token} onSuccess={() => setStatus("success")} />}
-        {status === "success" && <SuccessCard onNavigate={navigateToLogin} />}
-        {status === "error" && <ErrorCard message={errorMessage} onNavigate={navigateToLogin} />}
-      </View>
+      <ResponsiveContainer maxWidth={480}>
+        <GradientHeader height={200} />
+        <View style={layout.container}>
+          {status === "form" && token && <ResetForm token={token} onSuccess={() => setStatus("success")} />}
+          {status === "success" && <SuccessCard onNavigate={navigateToLogin} />}
+          {status === "error" && <ErrorCard message={errorMessage} onNavigate={navigateToLogin} />}
+        </View>
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

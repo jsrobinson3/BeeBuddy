@@ -12,6 +12,7 @@ from app.middleware.csrf import CSRFMiddleware
 from app.monitoring import init_sentry
 from app.rate_limit import limiter
 from app.routers import (
+    ai,
     apiaries,
     auth,
     cadences,
@@ -20,6 +21,7 @@ from app.routers import (
     health,
     hives,
     inspections,
+    oauth2_server,
     photos,
     queens,
     sync,
@@ -27,6 +29,7 @@ from app.routers import (
     treatments,
     users,
 )
+from app.routers.mcp import mcp_app
 from app.services import s3_service
 
 settings = get_settings()
@@ -81,3 +84,8 @@ app.include_router(events.router, prefix=settings.api_v1_prefix, tags=["events"]
 app.include_router(tasks.router, prefix=settings.api_v1_prefix, tags=["tasks"])
 app.include_router(cadences.router, prefix=settings.api_v1_prefix, tags=["cadences"])
 app.include_router(sync.router, prefix=settings.api_v1_prefix, tags=["sync"])
+app.include_router(ai.router, prefix=settings.api_v1_prefix, tags=["ai"])
+app.include_router(oauth2_server.router, prefix=settings.api_v1_prefix, tags=["oauth2"])
+
+# Mount FastMCP Streamable-HTTP sub-app (handles its own auth via JWTVerifier)
+app.mount("/", mcp_app)

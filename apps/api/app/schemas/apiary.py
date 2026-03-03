@@ -3,10 +3,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
-class ApiaryCreate(BaseModel):
+class ApiaryCreate(CamelBase):
     """Request model for creating an apiary."""
 
     name: str
@@ -18,7 +18,7 @@ class ApiaryCreate(BaseModel):
     notes: str | None = None
 
 
-class ApiaryUpdate(BaseModel):
+class ApiaryUpdate(CamelBase):
     """Request model for updating an apiary. All fields optional."""
 
     name: str | None = None
@@ -30,10 +30,8 @@ class ApiaryUpdate(BaseModel):
     notes: str | None = None
 
 
-class ApiaryResponse(BaseModel):
+class ApiaryResponse(BaseResponse):
     """Response model for an apiary."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str

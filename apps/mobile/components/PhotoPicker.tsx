@@ -2,11 +2,12 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -104,8 +105,6 @@ const createStyles = (c: ThemeColors) => ({
     color: "#fff",
   },
   modalImage: {
-    width: Dimensions.get("window").width - 32,
-    height: Dimensions.get("window").height * 0.7,
     borderRadius: 12,
   },
   modalCaption: {
@@ -157,6 +156,12 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
   const [viewingPhoto, setViewingPhoto] = useState<InspectionPhoto | null>(null);
   const styles = useStyles(createStyles);
   const { colors } = useTheme();
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const modalImageMaxWidth = Platform.OS === "web" ? 600 : winWidth - 32;
+  const modalImageStyle = {
+    width: Math.min(winWidth - 32, modalImageMaxWidth),
+    height: winHeight * 0.7,
+  };
 
   async function pickAndUpload(
     launcher: () => Promise<ImagePicker.ImagePickerResult>,
@@ -269,7 +274,7 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
           style={styles.thumbnailScroll}
           contentContainerStyle={styles.thumbnailScrollContent}
         >
-          {photos.map((photo) => (
+          {photos.map((photo: InspectionPhoto) => (
             <Thumbnail
               key={photo.id}
               photo={photo}
@@ -299,7 +304,7 @@ export function PhotoPicker({ inspectionId }: PhotoPickerProps) {
           {viewingPhoto && (
             <Image
               source={getPhotoSource(viewingPhoto, token ?? undefined)}
-              style={styles.modalImage}
+              style={[styles.modalImage, modalImageStyle]}
               contentFit="contain"
               transition={200}
             />

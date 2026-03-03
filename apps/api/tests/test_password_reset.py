@@ -47,7 +47,7 @@ class TestResetPassword:
     async def test_reset_password_success(self, client: AsyncClient):
         email = unique_email()
         resp = await register(client, email)
-        token = resp.json()["access_token"]
+        token = resp.json()["accessToken"]
         me = await client.get(f"{PREFIX}/users/me", headers=auth(token))
         uid = me.json()["id"]
 
@@ -91,7 +91,7 @@ class TestResetPassword:
         """After password reset, old access tokens should be invalid."""
         email = unique_email()
         resp = await register(client, email)
-        old_token = resp.json()["access_token"]
+        old_token = resp.json()["accessToken"]
 
         me = await client.get(f"{PREFIX}/users/me", headers=auth(old_token))
         uid = me.json()["id"]

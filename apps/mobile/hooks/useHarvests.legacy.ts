@@ -23,7 +23,7 @@ export function useCreateHarvest() {
     mutationFn: (data: CreateHarvestInput) => api.createHarvest(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["harvests"] });
-      queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+      queryClient.invalidateQueries({ queryKey: ["hives", variables.hiveId] });
     },
   });
 }

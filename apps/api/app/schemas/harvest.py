@@ -3,10 +3,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.common import BaseResponse, CamelBase
 
 
-class HarvestCreate(BaseModel):
+class HarvestCreate(CamelBase):
     """Request model for creating a harvest record."""
 
     hive_id: UUID
@@ -20,7 +20,7 @@ class HarvestCreate(BaseModel):
     notes: str | None = None
 
 
-class HarvestUpdate(BaseModel):
+class HarvestUpdate(CamelBase):
     """Request model for updating a harvest record. All fields optional."""
 
     hive_id: UUID | None = None
@@ -34,10 +34,8 @@ class HarvestUpdate(BaseModel):
     notes: str | None = None
 
 
-class HarvestResponse(BaseModel):
+class HarvestResponse(BaseResponse):
     """Response model for a harvest record."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     hive_id: UUID

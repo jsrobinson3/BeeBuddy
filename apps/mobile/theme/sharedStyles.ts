@@ -1,7 +1,11 @@
 /** Reusable style fragments for picker chips and form submit buttons. */
 
+import { Platform } from "react-native";
+
 import type { ThemeColors } from "./themes";
 import { typography } from "./tokens";
+
+export const webPointer = Platform.select({ web: { cursor: "pointer" as const } });
 
 export const pickerStyles = (c: ThemeColors) => ({
   pickerLabel: {
@@ -23,6 +27,7 @@ export const pickerStyles = (c: ThemeColors) => ({
     paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: c.bgInputSoft,
+    ...webPointer,
   },
   pickerOptionSelected: {
     borderColor: c.selectedBorder,
@@ -46,6 +51,7 @@ export const formSubmitStyles = (c: ThemeColors) => ({
     padding: 16,
     alignItems: "center" as const,
     marginTop: 8,
+    ...webPointer,
   },
   submitDisabled: {
     opacity: 0.6,
@@ -66,6 +72,7 @@ export const formDeleteStyles = (c: ThemeColors) => ({
     marginTop: 8,
     borderWidth: 1,
     borderColor: c.danger,
+    ...webPointer,
   },
   deleteText: {
     color: c.danger,

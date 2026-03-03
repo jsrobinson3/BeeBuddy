@@ -1,7 +1,7 @@
 import { Model, type Query } from "@nozbe/watermelondb";
 import { text, field, date, children, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
-import type { Relation } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb";
 import type Apiary from "./Apiary";
 import type Queen from "./Queen";
 import type Inspection from "./Inspection";

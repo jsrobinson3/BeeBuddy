@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 
 import { GradientHeader } from "../../components/GradientHeader";
+import { ResponsiveContainer } from "../../components/ResponsiveContainer";
 import {
   AuthHeader,
   AuthInput,
@@ -176,24 +177,26 @@ export default function RegisterScreen() {
       keyboardShouldPersistTaps="handled"
       bounces={false}
     >
-      <GradientHeader height={260}>
-        <AuthHeader subtitle="Create your account" />
-      </GradientHeader>
-      <RegisterForm
-        error={error}
-        onError={setError}
-        name={name}
-        setName={setName}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
-        confirmPassword={confirmPassword}
-        setConfirmPassword={setConfirmPassword}
-        loading={loading}
-        onSubmit={handleRegister}
-        onNavigate={() => router.replace("/(auth)/login" as any)}
-      />
+      <ResponsiveContainer maxWidth={480}>
+        <GradientHeader height={260}>
+          <AuthHeader subtitle="Create your account" />
+        </GradientHeader>
+        <RegisterForm
+          error={error}
+          onError={setError}
+          name={name}
+          setName={setName}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          confirmPassword={confirmPassword}
+          setConfirmPassword={setConfirmPassword}
+          loading={loading}
+          onSubmit={handleRegister}
+          onNavigate={() => router.replace("/(auth)/login" as any)}
+        />
+      </ResponsiveContainer>
     </ScrollView>
   );
 }

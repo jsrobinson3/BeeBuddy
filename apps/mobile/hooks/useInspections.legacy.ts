@@ -23,7 +23,7 @@ export function useCreateInspection() {
     mutationFn: (data: CreateInspectionInput) => api.createInspection(data),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["inspections"] });
-      queryClient.invalidateQueries({ queryKey: ["hives", variables.hive_id] });
+      queryClient.invalidateQueries({ queryKey: ["hives", variables.hiveId] });
     },
   });
 }

@@ -6,6 +6,20 @@ import type { CreateTaskInput, UpdateTaskInput } from "../../services/api.types"
 import { syncAfterWrite } from "../../database/syncAfterWrite";
 import { useObservable } from "./useObservable";
 import { useMutationWrapper } from "./useMutationWrapper";
+import type { RawRecord } from "@nozbe/watermelondb/RawRecord";
+
+interface TaskRaw extends RawRecord {
+  hive_id: string | null;
+  apiary_id: string | null;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  recurring: boolean;
+  recurrence_rule: string | null;
+  source: string;
+  completed_at: number | null;
+  priority: string;
+}
 
 const tasksCollection = database.get<Task>("tasks");
 
@@ -32,16 +46,17 @@ export function useCreateTask() {
   const fn = useCallback(async (data: CreateTaskInput) => {
     await database.write(async () => {
       await tasksCollection.create((record) => {
-        record._raw.title = data.title;
-        if (data.description) record._raw.description = data.description;
-        if (data.hive_id) record._raw.hive_id = data.hive_id;
-        if (data.apiary_id) record._raw.apiary_id = data.apiary_id;
-        if (data.due_date) record._raw.due_date = data.due_date;
-        record._raw.recurring = data.recurring ?? false;
-        if (data.recurrence_rule)
-          record._raw.recurrence_rule = data.recurrence_rule;
-        record._raw.source = "manual";
-        record._raw.priority = data.priority ?? "medium";
+        const raw = record._raw as TaskRaw;
+        raw.title = data.title;
+        if (data.description) raw.description = data.description;
+        if (data.hiveId) raw.hive_id = data.hiveId;
+        if (data.apiaryId) raw.apiary_id = data.apiaryId;
+        if (data.dueDate) raw.due_date = data.dueDate;
+        raw.recurring = data.recurring ?? false;
+        if (data.recurrenceRule)
+          raw.recurrence_rule = data.recurrenceRule;
+        raw.source = "manual";
+        raw.priority = data.priority ?? "medium";
       });
     });
     syncAfterWrite();
@@ -55,16 +70,17 @@ export function useUpdateTask() {
       const record = await tasksCollection.find(id);
       await database.write(async () => {
         await record.update((r) => {
-          if (data.title !== undefined) r._raw.title = data.title;
+          const raw = r._raw as TaskRaw;
+          if (data.title !== undefined) raw.title = data.title;
           if (data.description !== undefined)
-            r._raw.description = data.description ?? null;
-          if (data.due_date !== undefined)
-            r._raw.due_date = data.due_date ?? null;
-          if (data.completed_at !== undefined)
-            r._raw.completed_at = data.completed_at
-              ? new Date(data.completed_at).getTime()
+            raw.description = data.description ?? null;
+          if (data.dueDate !== undefined)
+            raw.due_date = data.dueDate ?? null;
+          if (data.completedAt !== undefined)
+            raw.completed_at = data.completedAt
+              ? new Date(data.completedAt).getTime()
               : null;
-          if (data.priority !== undefined) r._raw.priority = data.priority;
+          if (data.priority !== undefined) raw.priority = data.priority;
         });
       });
       syncAfterWrite();

@@ -1,7 +1,7 @@
 import { Model } from "@nozbe/watermelondb";
 import { text, field, date, relation, readonly } from "@nozbe/watermelondb/decorators";
 import type { Associations } from "@nozbe/watermelondb/Model";
-import type { Relation } from "@nozbe/watermelondb/Model";
+import type { Relation } from "@nozbe/watermelondb";
 import type Hive from "./Hive";
 import type Apiary from "./Apiary";
 

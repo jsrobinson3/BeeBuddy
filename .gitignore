@@ -63,8 +63,18 @@ yarn-error.log*
 
 # Local data
 data/ml_models/
+data/datasets/
+data/processed/
+data/models/
 *.sqlite
 *.db
+
+# Training artifacts
+training/.venv/
+*.gguf
+*.safetensors
+*.bin
+wandb/
 
 # Secrets (never commit these)
 credentials.json
@@ -93,3 +103,6 @@ tmp/
 temp/
 .grepai/
 docs/RandD
+
+#Training Data
+training/

@@ -25,6 +25,7 @@ jest.mock("../hooks/useApiaries", () => ({
 
 const mockGetLocation = jest.fn();
 const mockGeocodeAddress = jest.fn();
+const mockReverseGeocode = jest.fn().mockResolvedValue(null);
 jest.mock("../hooks/useLocation", () => {
   const actual = jest.requireActual("../hooks/useLocation");
   return {
@@ -32,6 +33,7 @@ jest.mock("../hooks/useLocation", () => {
     useLocation: () => ({
       getLocation: mockGetLocation,
       geocodeAddress: mockGeocodeAddress,
+      reverseGeocode: mockReverseGeocode,
       loading: false,
       geocoding: false,
     }),
@@ -98,7 +100,7 @@ jest.mock("../theme", () => ({
 
 jest.spyOn(Alert, "alert").mockImplementation(() => {});
 
-import CreateApiaryScreen from "../app/(tabs)/(home)/apiary/new";
+import CreateApiaryScreen from "../app/(tabs)/home/apiary/new";
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -116,7 +118,6 @@ describe("CreateApiaryScreen", () => {
   it("renders form fields", () => {
     renderScreen();
     expect(screen.getByText("Name")).toBeTruthy();
-    expect(screen.getByText("City")).toBeTruthy();
     expect(screen.getByText("Address or Place")).toBeTruthy();
     expect(screen.getByText("Latitude")).toBeTruthy();
     expect(screen.getByText("Longitude")).toBeTruthy();
