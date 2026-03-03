@@ -18,6 +18,7 @@ import Markdown from "react-native-markdown-display";
 
 import type { ChatMessage } from "../services/api";
 import { useConversation, useChatStream } from "../hooks/useChat";
+import { ConfirmationCard } from "./ConfirmationCard";
 import { ResponsiveContainer } from "./ResponsiveContainer";
 import { SleepyBee } from "./illustrations";
 import {
@@ -253,6 +254,28 @@ function FetchingDataBanner() {
   );
 }
 
+const createErrorStyles = (c: ThemeColors) => ({
+  container: {
+    padding: spacing.sm,
+    backgroundColor: "rgba(220,50,50,0.1)" as const,
+  },
+  text: {
+    fontFamily: typography.families.body,
+    fontSize: 13,
+    color: c.danger,
+    textAlign: "center" as const,
+  },
+});
+
+function StreamErrorBanner({ message }: { message: string }) {
+  const styles = useStyles(createErrorStyles);
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>{message}</Text>
+    </View>
+  );
+}
+
 // ── Main Chat View ────────────────────────────────────────────────────────
 
 export function ChatView({ conversationId }: ChatViewProps) {
@@ -268,8 +291,8 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const { data: conversation } = useConversation(conversationId);
   const {
-    sendMessage, streamingContent, streamingState, reset,
-    conversationId: streamConvId,
+    sendMessage, streamingContent, streamingState, error: streamError, reset,
+    conversationId: streamConvId, pendingActions, confirmAction, rejectAction,
   } = useChatStream();
 
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
@@ -406,9 +429,18 @@ export function ChatView({ conversationId }: ChatViewProps) {
           scrollEventThrottle={100}
           onContentSizeChange={handleContentSizeChange}
         />
+        {pendingActions.map((action) => (
+          <ConfirmationCard
+            key={action.id}
+            action={action}
+            onConfirm={confirmAction}
+            onReject={rejectAction}
+          />
+        ))}
         {streamingState === "waking_up" && <WakingUpBanner />}
         {streamingState === "fetching_data" && <FetchingDataBanner />}
-        <ChatInput onSend={handleSend} disabled={streamingState !== "idle"} />
+        {streamError && <StreamErrorBanner message={streamError.message} />}
+        <ChatInput onSend={handleSend} disabled={streamingState !== "idle" && streamingState !== "error"} />
       </KeyboardAvoidingView>
     </ResponsiveContainer>
   );

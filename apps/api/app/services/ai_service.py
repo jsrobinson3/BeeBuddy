@@ -11,6 +11,7 @@ Supported providers (via LLM_PROVIDER env var):
 import asyncio
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator
 from uuid import UUID
 
@@ -22,21 +23,34 @@ from app.config import LLMProvider, get_settings
 from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
-from app.services import ag_data_service, tool_executor
+from app.services import ag_data_service, pending_action_service, tool_executor
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-SYSTEM_PROMPT_TEMPLATE = """You are Buddy, a friendly beekeeping assistant \
-built into the BeeBuddy app. You talk like a knowledgeable friend at the bee \
-yard — warm, direct, and practical. Keep answers short and scannable:
-- Lead with the answer, then explain only if needed.
-- Use bullet points for steps, lists, or multiple options.
-- Match length to complexity: a yes/no question gets a sentence, not a paragraph.
-- Skip filler phrases like "It's important to note that" or "This is because."
-- Say "I'm not sure" when you are, and point to a local extension service or \
-bee club for hands-on help.
-Never recommend anything that could harm bees or pollinators.
+SYSTEM_PROMPT_TEMPLATE = """You are Buddy, a beekeeping assistant built into \
+the BeeBuddy app. You combine real expertise with an approachable tone — think \
+experienced mentor at the bee yard, not textbook or chatbot.
+
+Personality:
+- Warm and direct. No corporate filler ("It's important to note…"), but don't \
+strip personality either.
+- Confident when the science is clear; honest when it's debated or regional.
+- Say "I'm not sure" when you genuinely are, and suggest a local extension \
+service or bee club for hands-on help.
+
+Depth:
+- Lead with a clear answer, then give the *why* — beekeepers learn faster when \
+they understand the reasoning, not just the action.
+- For simple questions, keep it brief. For treatment decisions, disease ID, \
+seasonal management, or anything where mistakes are costly, give thorough \
+guidance with reasoning.
+- Use bullet points for steps and lists. Use short paragraphs for explanations.
+
+Safety:
+- Never recommend anything that could harm bees, pollinators, or contaminate \
+hive products.
+- For chemical treatments, always mention withdrawal periods and label compliance.
 
 {context}"""
 
@@ -47,7 +61,12 @@ hives, inspections, harvests, treatments, queens, events, and tasks. When the us
 about their own data (e.g. "how many hives do I have?", "when was my last inspection?", \
 "how much honey did I harvest this year?"), use the appropriate tool to look up the real \
 answer. For general beekeeping knowledge questions, answer from your training data without \
-using tools."""
+using tools.
+
+You also have tools that can create, update, and delete records. When the user asks you \
+to create or modify data, use the appropriate write tool. Write tools don't execute \
+immediately — they prepare a pending action that the user must confirm in the app. \
+Always explain what you're proposing and let them know they'll need to confirm."""
 
 
 class ColdStartError(Exception):
@@ -58,11 +77,48 @@ class ColdStartError(Exception):
 _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
 
 
-async def _yield_tool_response(final_text: str) -> AsyncGenerator[str, None]:
+_PENDING_RE = re.compile(r'\[PENDING:([0-9a-f-]{36})\]')
+
+
+def _extract_pending_ids(text: str) -> list[str]:
+    """Extract pending action UUIDs from [PENDING:uuid] markers."""
+    return _PENDING_RE.findall(text)
+
+
+def _strip_pending_markers(text: str) -> str:
+    """Remove [PENDING:uuid] markers from text."""
+    return _PENDING_RE.sub('', text).strip()
+
+
+async def _yield_tool_response(
+    final_text: str, db: AsyncSession | None = None,
+) -> AsyncGenerator[str, None]:
     """Yield a tool-augmented response as SSE chunks (no [DONE] — caller sends it)."""
     yield f"data: {json.dumps({'status': 'fetching_data'})}\n\n"
-    for i in range(0, len(final_text), 80):
-        yield f"data: {json.dumps({'content': final_text[i:i + 80]})}\n\n"
+
+    # Extract and emit pending action events
+    if db:
+        for action_id in _extract_pending_ids(final_text):
+            action = await pending_action_service.get_action(
+                db, UUID(action_id),
+            )
+            if action:
+                event = {
+                    "pending_action": {
+                        "id": str(action.id),
+                        "actionType": action.action_type,
+                        "resourceType": action.resource_type,
+                        "summary": action.summary,
+                        "payload": action.payload,
+                        "expiresAt": action.expires_at.isoformat(),
+                    }
+                }
+                yield f"data: {json.dumps(event)}\n\n"
+
+    # Strip markers from displayed text
+    clean_text = _strip_pending_markers(final_text)
+    for i in range(0, len(clean_text), 80):
+        yield f"data: {json.dumps({'content': clean_text[i:i + 80]})}\n\n"
 
 
 async def _yield_streaming_response(messages: list[dict]) -> AsyncGenerator[str, None]:
@@ -106,7 +162,7 @@ async def stream_chat(
     try:
         final_text, tool_msgs = await tool_executor.try_tool_path(messages, db, user.id)
         if final_text is not None:
-            async for chunk in _yield_tool_response(final_text):
+            async for chunk in _yield_tool_response(final_text, db):
                 yield chunk
             conv = await _save_conversation(db, user.id, request, final_text, tool_msgs)
             yield f"data: {json.dumps({'conversation_id': str(conv.id)})}\n\n"

@@ -62,6 +62,8 @@ export type {
   Conversation,
   ConversationDetail,
   ChatRequest,
+  PendingAction,
+  PendingActionResponse,
 } from "./api.types";
 
 import type {
@@ -106,6 +108,7 @@ import type {
   ChatRequest,
   Conversation,
   ConversationDetail,
+  PendingActionResponse,
 } from "./api.types";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -617,6 +620,18 @@ class ApiClient {
       headers,
       body: JSON.stringify(data),
       ...(isWeb && { credentials: "include" as RequestCredentials }),
+    });
+  }
+
+  async confirmAction(actionId: string) {
+    return this.request<PendingActionResponse>(`/ai/actions/${actionId}/confirm`, {
+      method: "POST",
+    });
+  }
+
+  async rejectAction(actionId: string) {
+    return this.request<void>(`/ai/actions/${actionId}/reject`, {
+      method: "POST",
     });
   }
 

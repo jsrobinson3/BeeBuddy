@@ -528,3 +528,28 @@ export interface ChatRequest {
   conversationId?: string;
 }
 
+// ─── Pending Action Types ────────────────────────────────────────────────────
+
+export interface PendingAction {
+  id: string;
+  actionType: string;
+  resourceType: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  expiresAt: string;
+  status?: "pending" | "confirmed" | "rejected" | "expired";
+  resultId?: string;
+}
+
+export interface PendingActionResponse {
+  id: string;
+  actionType: string;
+  resourceType: string;
+  summary: string;
+  payload: Record<string, unknown>;
+  status: string;
+  expiresAt: string;
+  executedAt?: string;
+  resultId?: string;
+}
+

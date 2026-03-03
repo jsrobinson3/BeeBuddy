@@ -45,3 +45,17 @@ class ConversationDetailResponse(ConversationResponse):
     """Full conversation with message history."""
 
     messages: list[ChatMessage]
+
+
+class PendingActionResponse(BaseResponse):
+    """Response for a pending action."""
+
+    id: UUID
+    action_type: str
+    resource_type: str
+    summary: str
+    payload: dict
+    status: str
+    expires_at: datetime
+    executed_at: datetime | None = None
+    result_id: UUID | None = None

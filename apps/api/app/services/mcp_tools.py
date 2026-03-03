@@ -20,6 +20,7 @@ from app.services import (
     harvest_service,
     hive_service,
     inspection_service,
+    pending_action_service,
     queen_service,
     task_service,
     treatment_service,
@@ -272,5 +273,444 @@ def create_mcp_server(db: AsyncSession, user_id: UUID) -> FastMCP:
         if target_id:
             hives = [h for h in hives if h.id == target_id]
         return [await _build_hive_summary(h) for h in hives]
+
+    # ── Write Tools (confirm-before-write) ────────────────────────────────
+
+    @server.tool()
+    async def create_inspection(
+        hive_id: str,
+        notes: str = "",
+        queen_seen: bool | None = None,
+        temperament: str | None = None,
+        brood_pattern: str | None = None,
+    ) -> str:
+        """Create a new hive inspection record. Requires user confirmation before saving."""
+        hive_uid = _uuid(hive_id)
+        if not hive_uid:
+            return "Error: invalid hive_id format."
+        hive = await hive_service.get_hive(db, hive_uid, user_id)
+        if not hive:
+            return "Error: hive not found or you don't have access."
+        payload = {"hive_id": str(hive_uid)}
+        if notes:
+            payload["notes"] = notes
+        observations: dict = {}
+        if queen_seen is not None:
+            observations["queen_seen"] = queen_seen
+        if temperament:
+            observations["temperament"] = temperament
+        if brood_pattern:
+            observations["brood_pattern"] = brood_pattern
+        if observations:
+            payload["observations"] = observations
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_inspection", "inspection", payload,
+            summary=f"Create inspection for {hive.name}",
+        )
+        return (
+            f"I've prepared an inspection for {hive.name}. "
+            f"[PENDING:{action.id}] Please review and confirm to save it."
+        )
+
+    @server.tool()
+    async def update_inspection(
+        inspection_id: str,
+        notes: str | None = None,
+        queen_seen: bool | None = None,
+        temperament: str | None = None,
+        brood_pattern: str | None = None,
+    ) -> str:
+        """Update an existing inspection record. Requires user confirmation."""
+        uid = _uuid(inspection_id)
+        if not uid:
+            return "Error: invalid inspection_id format."
+        insp = await inspection_service.get_inspection(db, uid, user_id)
+        if not insp:
+            return "Error: inspection not found."
+        payload = {"inspection_id": str(uid)}
+        if notes is not None:
+            payload["notes"] = notes
+        observations: dict = {}
+        if queen_seen is not None:
+            observations["queen_seen"] = queen_seen
+        if temperament:
+            observations["temperament"] = temperament
+        if brood_pattern:
+            observations["brood_pattern"] = brood_pattern
+        if observations:
+            payload["observations"] = observations
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_inspection", "inspection", payload,
+            summary=f"Update inspection from {_serialize_date(insp.inspected_at)}",
+        )
+        return f"I've prepared updates for the inspection. [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def delete_inspection(inspection_id: str) -> str:
+        """Delete an inspection record. Requires user confirmation."""
+        uid = _uuid(inspection_id)
+        if not uid:
+            return "Error: invalid inspection_id format."
+        insp = await inspection_service.get_inspection(db, uid, user_id)
+        if not insp:
+            return "Error: inspection not found."
+        payload = {"inspection_id": str(uid)}
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "delete_inspection", "inspection", payload,
+            summary=f"Delete inspection from {_serialize_date(insp.inspected_at)}",
+        )
+        return f"I've prepared to delete the inspection. [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def create_harvest(
+        hive_id: str,
+        weight_kg: float,
+        honey_type: str | None = None,
+        frames_harvested: int | None = None,
+        notes: str = "",
+    ) -> str:
+        """Create a new harvest record. Requires user confirmation."""
+        hive_uid = _uuid(hive_id)
+        if not hive_uid:
+            return "Error: invalid hive_id format."
+        hive = await hive_service.get_hive(db, hive_uid, user_id)
+        if not hive:
+            return "Error: hive not found."
+        payload: dict = {"hive_id": str(hive_uid), "weight_kg": weight_kg}
+        if honey_type:
+            payload["honey_type"] = honey_type
+        if frames_harvested is not None:
+            payload["frames_harvested"] = frames_harvested
+        if notes:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_harvest", "harvest", payload,
+            summary=f"Log {weight_kg}kg harvest from {hive.name}",
+        )
+        return (
+            f"I've prepared a {weight_kg}kg harvest record for "
+            f"{hive.name}. [PENDING:{action.id}] Please confirm."
+        )
+
+    @server.tool()
+    async def update_harvest(
+        harvest_id: str,
+        weight_kg: float | None = None,
+        honey_type: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Update an existing harvest record. Requires user confirmation."""
+        uid = _uuid(harvest_id)
+        if not uid:
+            return "Error: invalid harvest_id format."
+        harvest = await harvest_service.get_harvest(db, uid, user_id)
+        if not harvest:
+            return "Error: harvest not found."
+        payload = {"harvest_id": str(uid)}
+        if weight_kg is not None:
+            payload["weight_kg"] = weight_kg
+        if honey_type is not None:
+            payload["honey_type"] = honey_type
+        if notes is not None:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_harvest", "harvest", payload,
+            summary="Update harvest record",
+        )
+        return f"I've prepared updates for the harvest. [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def create_treatment(
+        hive_id: str,
+        treatment_type: str,
+        product_name: str,
+        method: str | None = None,
+        dosage: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Create a new treatment record. Requires user confirmation."""
+        hive_uid = _uuid(hive_id)
+        if not hive_uid:
+            return "Error: invalid hive_id format."
+        hive = await hive_service.get_hive(db, hive_uid, user_id)
+        if not hive:
+            return "Error: hive not found."
+        payload = {
+            "hive_id": str(hive_uid),
+            "treatment_type": treatment_type,
+            "product_name": product_name,
+        }
+        if method:
+            payload["method"] = method
+        if dosage:
+            payload["dosage"] = dosage
+        if notes:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_treatment", "treatment", payload,
+            summary=f"Log {product_name} treatment for {hive.name}",
+        )
+        return (
+            f"I've prepared a {product_name} treatment record for "
+            f"{hive.name}. [PENDING:{action.id}] Please confirm."
+        )
+
+    @server.tool()
+    async def update_treatment(
+        treatment_id: str,
+        effectiveness_notes: str | None = None,
+        ended_at: str | None = None,
+    ) -> str:
+        """Update an existing treatment record. Requires user confirmation."""
+        uid = _uuid(treatment_id)
+        if not uid:
+            return "Error: invalid treatment_id format."
+        treatment = await treatment_service.get_treatment(db, uid, user_id)
+        if not treatment:
+            return "Error: treatment not found."
+        payload = {"treatment_id": str(uid)}
+        if effectiveness_notes is not None:
+            payload["effectiveness_notes"] = effectiveness_notes
+        if ended_at is not None:
+            payload["ended_at"] = ended_at
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_treatment", "treatment", payload,
+            summary=f"Update {treatment.product_name} treatment",
+        )
+        return f"I've prepared updates for the treatment. [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def create_event(
+        hive_id: str,
+        event_type: str,
+        details: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Create a new hive event (swarm, split, combine, etc.). Requires user confirmation."""
+        hive_uid = _uuid(hive_id)
+        if not hive_uid:
+            return "Error: invalid hive_id format."
+        hive = await hive_service.get_hive(db, hive_uid, user_id)
+        if not hive:
+            return "Error: hive not found."
+        payload = {"hive_id": str(hive_uid), "event_type": event_type}
+        if details:
+            payload["details"] = details
+        if notes:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_event", "event", payload,
+            summary=f"Log {event_type} event for {hive.name}",
+        )
+        return (
+            f"I've prepared a {event_type} event for {hive.name}. "
+            f"[PENDING:{action.id}] Please confirm."
+        )
+
+    @server.tool()
+    async def create_task(
+        title: str,
+        description: str = "",
+        due_date: str | None = None,
+        hive_id: str | None = None,
+        priority: str | None = None,
+    ) -> str:
+        """Create a new task. Requires user confirmation."""
+        payload: dict = {"title": title}
+        if description:
+            payload["description"] = description
+        if due_date:
+            payload["due_date"] = due_date
+        if priority:
+            payload["priority"] = priority
+        hive_name = None
+        if hive_id:
+            hive_uid = _uuid(hive_id)
+            if hive_uid:
+                hive = await hive_service.get_hive(db, hive_uid, user_id)
+                if hive:
+                    payload["hive_id"] = str(hive_uid)
+                    hive_name = hive.name
+        summary = f"Create task: {title}"
+        if hive_name:
+            summary += f" (for {hive_name})"
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_task", "task", payload, summary=summary,
+        )
+        return f"I've prepared the task \"{title}\". [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def update_task(
+        task_id: str,
+        title: str | None = None,
+        description: str | None = None,
+        due_date: str | None = None,
+        priority: str | None = None,
+    ) -> str:
+        """Update an existing task. Requires user confirmation."""
+        uid = _uuid(task_id)
+        if not uid:
+            return "Error: invalid task_id format."
+        task = await task_service.get_task(db, uid, user_id)
+        if not task:
+            return "Error: task not found."
+        payload = {"task_id": str(uid)}
+        if title is not None:
+            payload["title"] = title
+        if description is not None:
+            payload["description"] = description
+        if due_date is not None:
+            payload["due_date"] = due_date
+        if priority is not None:
+            payload["priority"] = priority
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_task", "task", payload,
+            summary=f"Update task: {task.title}",
+        )
+        return f"I've prepared updates for \"{task.title}\". [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def complete_task(task_id: str) -> str:
+        """Mark a task as completed. Requires user confirmation."""
+        uid = _uuid(task_id)
+        if not uid:
+            return "Error: invalid task_id format."
+        task = await task_service.get_task(db, uid, user_id)
+        if not task:
+            return "Error: task not found."
+        payload = {"task_id": str(uid)}
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "complete_task", "task", payload,
+            summary=f"Complete task: {task.title}",
+        )
+        return (
+            f"I've prepared to mark \"{task.title}\" as complete. "
+            f"[PENDING:{action.id}] Please confirm."
+        )
+
+    @server.tool()
+    async def delete_task(task_id: str) -> str:
+        """Delete a task. Requires user confirmation."""
+        uid = _uuid(task_id)
+        if not uid:
+            return "Error: invalid task_id format."
+        task = await task_service.get_task(db, uid, user_id)
+        if not task:
+            return "Error: task not found."
+        payload = {"task_id": str(uid)}
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "delete_task", "task", payload,
+            summary=f"Delete task: {task.title}",
+        )
+        return f"I've prepared to delete \"{task.title}\". [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def create_apiary(
+        name: str,
+        city: str | None = None,
+        country_code: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Create a new apiary. Requires user confirmation."""
+        payload: dict = {"name": name}
+        if city:
+            payload["city"] = city
+        if country_code:
+            payload["country_code"] = country_code
+        if notes:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_apiary", "apiary", payload,
+            summary=f"Create apiary: {name}",
+        )
+        return f"I've prepared a new apiary \"{name}\". [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def update_apiary(
+        apiary_id: str,
+        name: str | None = None,
+        city: str | None = None,
+        country_code: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Update an existing apiary. Requires user confirmation."""
+        uid = _uuid(apiary_id)
+        if not uid:
+            return "Error: invalid apiary_id format."
+        apiary = await apiary_service.get_apiary(db, uid)
+        if not apiary or apiary.user_id != user_id:
+            return "Error: apiary not found."
+        payload = {"apiary_id": str(uid)}
+        if name is not None:
+            payload["name"] = name
+        if city is not None:
+            payload["city"] = city
+        if country_code is not None:
+            payload["country_code"] = country_code
+        if notes is not None:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_apiary", "apiary", payload,
+            summary=f"Update apiary: {apiary.name}",
+        )
+        return f"I've prepared updates for \"{apiary.name}\". [PENDING:{action.id}] Please confirm."
+
+    @server.tool()
+    async def create_hive(
+        apiary_id: str,
+        name: str,
+        hive_type: str | None = None,
+        source: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Create a new hive in an apiary. Requires user confirmation."""
+        apiary_uid = _uuid(apiary_id)
+        if not apiary_uid:
+            return "Error: invalid apiary_id format."
+        apiary = await apiary_service.get_apiary(db, apiary_uid)
+        if not apiary or apiary.user_id != user_id:
+            return "Error: apiary not found."
+        payload = {"apiary_id": str(apiary_uid), "name": name}
+        if hive_type:
+            payload["hive_type"] = hive_type
+        if source:
+            payload["source"] = source
+        if notes:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "create_hive", "hive", payload,
+            summary=f"Create hive \"{name}\" in {apiary.name}",
+        )
+        return (
+            f"I've prepared a new hive \"{name}\" in {apiary.name}. "
+            f"[PENDING:{action.id}] Please confirm."
+        )
+
+    @server.tool()
+    async def update_hive(
+        hive_id: str,
+        name: str | None = None,
+        status: str | None = None,
+        notes: str | None = None,
+    ) -> str:
+        """Update an existing hive. Requires user confirmation."""
+        uid = _uuid(hive_id)
+        if not uid:
+            return "Error: invalid hive_id format."
+        hive = await hive_service.get_hive(db, uid, user_id)
+        if not hive:
+            return "Error: hive not found."
+        payload = {"hive_id": str(uid)}
+        if name is not None:
+            payload["name"] = name
+        if status is not None:
+            payload["status"] = status
+        if notes is not None:
+            payload["notes"] = notes
+        action = await pending_action_service.create_pending_action(
+            db, user_id, "update_hive", "hive", payload,
+            summary=f"Update hive: {hive.name}",
+        )
+        return f"I've prepared updates for \"{hive.name}\". [PENDING:{action.id}] Please confirm."
 
     return server
