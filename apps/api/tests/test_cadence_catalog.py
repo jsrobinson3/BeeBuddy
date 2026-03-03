@@ -9,7 +9,6 @@ from app.cadence_catalog import (
     CADENCE_CATALOG,
     CadenceCategory,
     CadenceSeason,
-    CadenceTemplate,
     get_catalog,
     get_template,
 )
