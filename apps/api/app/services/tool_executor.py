@@ -20,6 +20,10 @@ from app.services.mcp_tools import create_mcp_server
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+
+class ContextOverflowError(Exception):
+    """Raised when the conversation exceeds the LLM's context window."""
+
 MAX_TOOL_ROUNDS = 3
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -178,8 +182,7 @@ _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
 async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
     """Non-streaming call to OpenAI-compatible endpoint with tools.
 
-    Retries on 503 (scale-to-zero cold start) using the same delay
-    schedule as the streaming path in ai_service.py.
+    Retries on 503 during cold start (scale-to-zero endpoints).
     """
     body: dict = {
         "model": settings.effective_tool_model,
@@ -193,15 +196,31 @@ async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
     for attempt in range(len(_COLD_START_DELAYS) + 1):
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(url, json=body, headers=headers)
-            if resp.status_code != 503:
-                resp.raise_for_status()
-                return resp.json()
+        if resp.status_code != 503:
+            _check_error_response(resp)
+            return resp.json()
         if attempt >= len(_COLD_START_DELAYS):
-            resp.raise_for_status()  # raise the 503
+            resp.raise_for_status()
         delay = _COLD_START_DELAYS[attempt]
-        logger.info("Tool endpoint cold-starting, retry %d in %ds", attempt + 1, delay)
+        logger.info(
+            "Tool endpoint cold-starting (503), retry %d in %ds",
+            attempt + 1, delay,
+        )
         await asyncio.sleep(delay)
     return {}  # unreachable
+
+
+def _check_error_response(resp: httpx.Response) -> None:
+    """Log and raise on error responses, with context overflow detection."""
+    if resp.status_code < 400:
+        return
+    body = resp.text[:500]
+    logger.error("Tool LLM error %s: %s", resp.status_code, body)
+    if "exceed" in body and "context" in body:
+        raise ContextOverflowError(
+            "This conversation is too long. Please start a new conversation."
+        )
+    resp.raise_for_status()
 
 
 async def _call_anthropic(messages: list[dict], tools: list[dict]) -> dict:

@@ -258,6 +258,8 @@ const createErrorStyles = (c: ThemeColors) => ({
   container: {
     padding: spacing.sm,
     backgroundColor: "rgba(220,50,50,0.1)" as const,
+    alignItems: "center" as const,
+    gap: spacing.xs,
   },
   text: {
     fontFamily: typography.families.body,
@@ -265,13 +267,43 @@ const createErrorStyles = (c: ThemeColors) => ({
     color: c.danger,
     textAlign: "center" as const,
   },
+  newChatButton: {
+    backgroundColor: c.primaryFill,
+    borderRadius: radii.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  newChatText: {
+    fontFamily: typography.families.bodySemiBold,
+    fontSize: 13,
+    color: c.textOnPrimary,
+  },
 });
 
-function StreamErrorBanner({ message }: { message: string }) {
+function StreamErrorBanner({
+  message,
+  errorCode,
+  onNewChat,
+}: {
+  message: string;
+  errorCode?: string | null;
+  onNewChat?: () => void;
+}) {
   const styles = useStyles(createErrorStyles);
+  const isOverflow = errorCode === "conversation_too_long";
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>{message}</Text>
+      <Text style={styles.text}>
+        {isOverflow
+          ? "This conversation is too long for Buddy's memory."
+          : message}
+      </Text>
+      {isOverflow && onNewChat && (
+        <Pressable style={styles.newChatButton} onPress={onNewChat}>
+          <Text style={styles.newChatText}>New Chat</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -291,8 +323,8 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const { data: conversation } = useConversation(conversationId);
   const {
-    sendMessage, streamingContent, streamingState, error: streamError, reset,
-    conversationId: streamConvId, pendingActions, confirmAction, rejectAction,
+    sendMessage, streamingContent, streamingState, error: streamError, errorCode,
+    reset, conversationId: streamConvId, pendingActions, confirmAction, rejectAction,
   } = useChatStream();
 
   const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
@@ -439,7 +471,13 @@ export function ChatView({ conversationId }: ChatViewProps) {
         ))}
         {streamingState === "waking_up" && <WakingUpBanner />}
         {streamingState === "fetching_data" && <FetchingDataBanner />}
-        {streamError && <StreamErrorBanner message={streamError.message} />}
+        {streamError && (
+          <StreamErrorBanner
+            message={streamError.message}
+            errorCode={errorCode}
+            onNewChat={() => { reset(); router.replace("/chat"); }}
+          />
+        )}
         <ChatInput onSend={handleSend} disabled={streamingState !== "idle" && streamingState !== "error"} />
       </KeyboardAvoidingView>
     </ResponsiveContainer>

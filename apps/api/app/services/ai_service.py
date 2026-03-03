@@ -24,6 +24,7 @@ from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
+from app.services.tool_executor import ContextOverflowError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -122,13 +123,21 @@ async def _yield_tool_response(
 
 
 async def _yield_streaming_response(messages: list[dict]) -> AsyncGenerator[str, None]:
-    """Stream LLM response with cold-start retry logic. Yields (sse_chunk, token) pairs."""
+    """Stream LLM response with cold-start retry logic."""
     sent_waking = False
     for attempt in range(len(_COLD_START_DELAYS) + 1):
         try:
             async for chunk in _stream_llm(messages):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             break
+        except ContextOverflowError:
+            err = {
+                "error": "conversation_too_long",
+                "message": "This conversation is too long for Buddy. "
+                "Please start a new chat.",
+            }
+            yield f"data: {json.dumps(err)}\n\n"
+            return
         except ColdStartError:
             if not sent_waking:
                 yield f"data: {json.dumps({'status': 'waking_up'})}\n\n"
@@ -168,6 +177,16 @@ async def stream_chat(
             yield f"data: {json.dumps({'conversation_id': str(conv.id)})}\n\n"
             yield "data: [DONE]\n\n"
             return
+    except ContextOverflowError:
+        logger.warning("Context overflow in tool path")
+        err = {
+            "error": "conversation_too_long",
+            "message": "This conversation is too long for Buddy. "
+            "Please start a new chat.",
+        }
+        yield f"data: {json.dumps(err)}\n\n"
+        yield "data: [DONE]\n\n"
+        return
     except Exception:
         logger.exception("Tool path failed, falling back to streaming")
 
@@ -221,6 +240,18 @@ async def _stream_openai_compat(messages: list[dict]) -> AsyncGenerator[str, Non
     try:
         if response.status_code == 503:
             raise ColdStartError()
+        if response.status_code >= 400:
+            body = (await response.aread()).decode(errors="replace")[:500]
+            logger.error("Streaming LLM error %s: %s", response.status_code, body)
+            if "exceed" in body and "context" in body:
+                raise ContextOverflowError(
+                    "Conversation exceeds context window."
+                )
+            raise httpx.HTTPStatusError(
+                f"HTTP {response.status_code}",
+                request=response.request,
+                response=response,
+            )
         async for line in response.aiter_lines():
             content = _parse_openai_sse(line)
             if content is None:
@@ -241,7 +272,10 @@ def _parse_openai_sse(line: str) -> str | None:
         return None
     parsed = json.loads(data)
     delta = parsed["choices"][0].get("delta", {})
-    return delta.get("content", "")
+    # llama.cpp sends {"content": null} in the first chunk — don't confuse
+    # with our None sentinel (which means [DONE]).
+    content = delta.get("content")
+    return content if content is not None else ""
 
 
 # ---------------------------------------------------------------------------
