@@ -55,11 +55,8 @@ async function fetchAndStream(
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || `HTTP ${response.status}`);
   }
-  if (!response.body) {
-    throw new Error("No response body");
-  }
   await parseSSEStream(
-    response.body,
+    response.body ?? null,
     {
       onChunk: (content) => handlers.setContent((prev) => prev + content),
       onStatus: (status) => {

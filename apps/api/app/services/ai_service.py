@@ -24,6 +24,7 @@ from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
+from app.services.tool_executor import ColdStartError as ToolColdStartError
 from app.services.tool_executor import ContextOverflowError
 
 logger = logging.getLogger(__name__)
@@ -187,6 +188,8 @@ async def stream_chat(
         yield f"data: {json.dumps(err)}\n\n"
         yield "data: [DONE]\n\n"
         return
+    except ToolColdStartError:
+        logger.info("Tool path got 503, falling back to streaming with waking_up")
     except Exception:
         logger.exception("Tool path failed, falling back to streaming")
 
