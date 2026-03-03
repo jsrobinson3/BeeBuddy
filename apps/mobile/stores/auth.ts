@@ -102,7 +102,7 @@ async function invalidateAndClearTokens(
 ): Promise<void> {
   await authFetch("/api/v1/auth/logout", {
     method: "POST",
-    body: JSON.stringify({ accessToken, refreshToken }),
+    body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
   }).catch(() => {});
   await clearTokens();
 }
@@ -113,6 +113,16 @@ async function loadTokens(): Promise<{ token: string; refreshToken: string } | n
   const refreshToken = await SecureStore!.getItemAsync(REFRESH_TOKEN_KEY);
   if (token && refreshToken) return { token, refreshToken };
   return null;
+}
+
+/** Extract token pair from auth response, accepting both camelCase and snake_case. */
+function extractTokens(data: Record<string, unknown>): { accessToken: string; refreshToken: string } {
+  const accessToken = data.accessToken ?? data.access_token;
+  const refreshToken = data.refreshToken ?? data.refresh_token;
+  if (typeof accessToken !== "string" || typeof refreshToken !== "string") {
+    throw new Error("Invalid token response from server");
+  }
+  return { accessToken, refreshToken };
 }
 
 /** Throw a typed error from a failed auth response. */
@@ -148,10 +158,10 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     if (!res.ok) await throwAuthError(res, "Login failed");
 
     if (!isWeb) {
-      const data = await res.json();
-      await saveTokens(data.accessToken, data.refreshToken);
-      api.setToken(data.accessToken);
-      set({ token: data.accessToken, refreshToken: data.refreshToken });
+      const tokens = extractTokens(await res.json());
+      await saveTokens(tokens.accessToken, tokens.refreshToken);
+      api.setToken(tokens.accessToken);
+      set({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -168,10 +178,10 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     if (!res.ok) await throwAuthError(res, "Registration failed");
 
     if (!isWeb) {
-      const data = await res.json();
-      await saveTokens(data.accessToken, data.refreshToken);
-      api.setToken(data.accessToken);
-      set({ token: data.accessToken, refreshToken: data.refreshToken });
+      const tokens = extractTokens(await res.json());
+      await saveTokens(tokens.accessToken, tokens.refreshToken);
+      api.setToken(tokens.accessToken);
+      set({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -182,16 +192,16 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
   loginWithGoogle: async (idToken, name) => {
     const res = await authFetch("/api/v1/auth/oauth/google", {
       method: "POST",
-      body: JSON.stringify({ idToken, name: name || undefined }),
+      body: JSON.stringify({ id_token: idToken, name: name || undefined }),
     });
 
     if (!res.ok) await throwAuthError(res, "Google sign-in failed");
 
     if (!isWeb) {
-      const data = await res.json();
-      await saveTokens(data.accessToken, data.refreshToken);
-      api.setToken(data.accessToken);
-      set({ token: data.accessToken, refreshToken: data.refreshToken });
+      const tokens = extractTokens(await res.json());
+      await saveTokens(tokens.accessToken, tokens.refreshToken);
+      api.setToken(tokens.accessToken);
+      set({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -203,7 +213,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     const res = await authFetch("/api/v1/auth/oauth/apple", {
       method: "POST",
       body: JSON.stringify({
-        idToken,
+        id_token: idToken,
         name: name || undefined,
         email: email || undefined,
       }),
@@ -212,10 +222,10 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     if (!res.ok) await throwAuthError(res, "Apple sign-in failed");
 
     if (!isWeb) {
-      const data = await res.json();
-      await saveTokens(data.accessToken, data.refreshToken);
-      api.setToken(data.accessToken);
-      set({ token: data.accessToken, refreshToken: data.refreshToken });
+      const tokens = extractTokens(await res.json());
+      await saveTokens(tokens.accessToken, tokens.refreshToken);
+      api.setToken(tokens.accessToken);
+      set({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
     }
 
     set({ isAuthenticated: true });
@@ -258,15 +268,15 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
 
     const res = await authFetch("/api/v1/auth/refresh", {
       method: "POST",
-      body: JSON.stringify({ refreshToken: currentRefreshToken }),
+      body: JSON.stringify({ refresh_token: currentRefreshToken }),
     });
 
     if (!res.ok) { await get().logout(); throw new Error("Token refresh failed"); }
 
-    const data = await res.json();
-    await saveTokens(data.accessToken, data.refreshToken);
-    api.setToken(data.accessToken);
-    set({ token: data.accessToken, refreshToken: data.refreshToken });
+    const tokens = extractTokens(await res.json());
+    await saveTokens(tokens.accessToken, tokens.refreshToken);
+    api.setToken(tokens.accessToken);
+    set({ token: tokens.accessToken, refreshToken: tokens.refreshToken });
   },
 
   hydrate: async () => {
