@@ -119,10 +119,14 @@ function SettingsItem({
   title,
   subtitle,
   onPress,
+  onLongPress,
+  delayLongPress,
 }: {
   title: string;
   subtitle?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
+  delayLongPress?: number;
 }) {
   const styles = useStyles(createItemStyles);
   const layout = useStyles(createLayoutStyles);
@@ -131,7 +135,12 @@ function SettingsItem({
     pressed && layout.pressed,
   ];
   return (
-    <Pressable style={itemPressStyle} onPress={onPress}>
+    <Pressable
+      style={itemPressStyle}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={delayLongPress}
+    >
       <View>
         <Text style={styles.itemTitle}>{title}</Text>
         {subtitle ? <Text style={styles.itemSubtitle}>{subtitle}</Text> : null}
@@ -275,59 +284,106 @@ function AccountSection() {
   );
 }
 
-export default function SettingsScreen() {
+function NotificationsSection() {
+  const layout = useStyles(createLayoutStyles);
+  return (
+    <View style={layout.section}>
+      <Text style={layout.sectionTitle}>Notifications</Text>
+      <SettingsItem title="Push Notifications" subtitle="Enabled" />
+      <SettingsItem title="Inspection Reminders" subtitle="3 days before" />
+    </View>
+  );
+}
+
+function DataSection() {
+  const layout = useStyles(createLayoutStyles);
+  return (
+    <View style={layout.section}>
+      <Text style={layout.sectionTitle}>Data</Text>
+      <SettingsItem title="Sync Status" subtitle="Last synced: Just now" />
+      <SettingsItem title="Export Data" subtitle="CSV, JSON" />
+    </View>
+  );
+}
+
+function AboutSection({
+  onVersionLongPress,
+  onLicenses,
+}: {
+  onVersionLongPress: () => void;
+  onLicenses: () => void;
+}) {
+  const layout = useStyles(createLayoutStyles);
+  return (
+    <View style={layout.section}>
+      <Text style={layout.sectionTitle}>About</Text>
+      <SettingsItem
+        title="Version"
+        subtitle="0.1.0"
+        onLongPress={onVersionLongPress}
+        delayLongPress={800}
+      />
+      <SettingsItem title="Open Source Licenses" onPress={onLicenses} />
+      <SettingsItem
+        title="Privacy Policy"
+        onPress={() => Linking.openURL("https://beebuddyai.com/legal/privacy/")}
+      />
+    </View>
+  );
+}
+
+function DangerSection({ onDeleteAccount }: { onDeleteAccount: () => void }) {
+  const layout = useStyles(createLayoutStyles);
+  return (
+    <View style={layout.section}>
+      <Text style={layout.sectionTitle}>Danger Zone</Text>
+      <SettingsItem
+        title="Delete Account"
+        subtitle="Permanently delete your account"
+        onPress={onDeleteAccount}
+      />
+    </View>
+  );
+}
+
+function LogoutButton() {
   const { logout } = useAuthStore();
   const layout = useStyles(createLayoutStyles);
-  const router = useRouter();
-
   const logoutPressStyle = ({ pressed }: { pressed: boolean }) => [
     layout.logoutButton,
     pressed && layout.pressed,
   ];
+  return (
+    <Pressable style={logoutPressStyle} onPress={logout}>
+      <Text style={layout.logoutText}>Sign Out</Text>
+    </Pressable>
+  );
+}
+
+export default function SettingsScreen() {
+  const { user } = useAuthStore();
+  const layout = useStyles(createLayoutStyles);
+  const router = useRouter();
+
+  function handleVersionLongPress() {
+    if (user?.isAdmin) {
+      router.push("/admin/" as any);
+    }
+  }
+
+  const licensesPath = "/settings/licenses" as any;
+  const deleteAccountPath = "/settings/delete-account" as any;
 
   return (
     <ScrollView style={layout.container}>
       <ResponsiveContainer maxWidth={800}>
-      <AppearanceSection />
-      <AccountSection />
-
-      <View style={layout.section}>
-        <Text style={layout.sectionTitle}>Notifications</Text>
-        <SettingsItem title="Push Notifications" subtitle="Enabled" />
-        <SettingsItem title="Inspection Reminders" subtitle="3 days before" />
-      </View>
-
-      <View style={layout.section}>
-        <Text style={layout.sectionTitle}>Data</Text>
-        <SettingsItem title="Sync Status" subtitle="Last synced: Just now" />
-        <SettingsItem title="Export Data" subtitle="CSV, JSON" />
-      </View>
-
-      <View style={layout.section}>
-        <Text style={layout.sectionTitle}>About</Text>
-        <SettingsItem title="Version" subtitle="0.1.0" />
-        <SettingsItem
-          title="Open Source Licenses"
-          onPress={() => router.push("/settings/licenses" as any)}
-        />
-        <SettingsItem
-          title="Privacy Policy"
-          onPress={() => Linking.openURL("https://beebuddyai.com/legal/privacy/")}
-        />
-      </View>
-
-      <View style={layout.section}>
-        <Text style={layout.sectionTitle}>Danger Zone</Text>
-        <SettingsItem
-          title="Delete Account"
-          subtitle="Permanently delete your account"
-          onPress={() => router.push("/settings/delete-account" as any)}
-        />
-      </View>
-
-      <Pressable style={logoutPressStyle} onPress={logout}>
-        <Text style={layout.logoutText}>Sign Out</Text>
-      </Pressable>
+        <AppearanceSection />
+        <AccountSection />
+        <NotificationsSection />
+        <DataSection />
+        <AboutSection onVersionLongPress={handleVersionLongPress} onLicenses={() => router.push(licensesPath)} />
+        <DangerSection onDeleteAccount={() => router.push(deleteAccountPath)} />
+        <LogoutButton />
       </ResponsiveContainer>
     </ScrollView>
   );

@@ -38,6 +38,8 @@ export interface User {
   name: string | null;
   email: string;
   experienceLevel: "beginner" | "intermediate" | "advanced" | null;
+  isAdmin: boolean;
+  emailVerified: boolean;
   locale: string | null;
   timezone: string;
   preferences: UserPreferences | null;
@@ -551,5 +553,58 @@ export interface PendingActionResponse {
   expiresAt: string;
   executedAt?: string;
   resultId?: string;
+}
+
+// ─── Admin Types ──────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  name: string | null;
+  email: string;
+  experienceLevel: string | null;
+  emailVerified: boolean;
+  isAdmin: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  apiaryCount: number;
+  hiveCount: number;
+}
+
+export interface AdminUserUpdate {
+  isAdmin?: boolean;
+  emailVerified?: boolean;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  totalApiaries: number;
+  totalHives: number;
+  totalInspections: number;
+  totalConversations: number;
+  newUsers7d: number;
+  newUsers30d: number;
+  activeUsers7d: number;
+}
+
+export interface OAuth2Client {
+  id: string;
+  clientId: string;
+  name: string;
+  redirectUris: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface OAuth2ClientCreate {
+  clientId: string;
+  name: string;
+  redirectUris: string[];
+}
+
+export interface OAuth2ClientUpdate {
+  name?: string;
+  redirectUris?: string[];
+  isActive?: boolean;
 }
 

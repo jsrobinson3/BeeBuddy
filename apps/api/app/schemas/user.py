@@ -35,5 +35,6 @@ class UserResponse(BaseResponse):
     locale: str | None = None
     timezone: str = "UTC"
     email_verified: bool = False
+    is_admin: bool = False
     preferences: dict[str, Any] | None = None
     created_at: datetime

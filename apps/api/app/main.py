@@ -12,6 +12,7 @@ from app.middleware.csrf import CSRFMiddleware
 from app.monitoring import init_sentry
 from app.rate_limit import limiter
 from app.routers import (
+    admin,
     ai,
     apiaries,
     auth,
@@ -86,6 +87,7 @@ app.include_router(cadences.router, prefix=settings.api_v1_prefix, tags=["cadenc
 app.include_router(sync.router, prefix=settings.api_v1_prefix, tags=["sync"])
 app.include_router(ai.router, prefix=settings.api_v1_prefix, tags=["ai"])
 app.include_router(oauth2_server.router, prefix=settings.api_v1_prefix, tags=["oauth2"])
+app.include_router(admin.router, prefix=settings.api_v1_prefix, tags=["admin"])
 
 # Mount FastMCP Streamable-HTTP sub-app (handles its own auth via JWTVerifier)
 app.mount("/", mcp_app)

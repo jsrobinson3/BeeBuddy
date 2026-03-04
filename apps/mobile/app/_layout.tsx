@@ -75,6 +75,7 @@ function AppStack() {
         <Stack.Screen name="verify-email" options={hiddenHeader} />
         <Stack.Screen name="reset-password" options={hiddenHeader} />
         <Stack.Screen name="cancel-deletion" options={hiddenHeader} />
+        <Stack.Screen name="admin" options={hiddenHeader} />
       </Stack>
     </NavigationThemeProvider>
   );
