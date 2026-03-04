@@ -136,7 +136,7 @@ services:
       - S3_ENDPOINT_URL=http://minio:9000
       - S3_PUBLIC_URL=http://localhost:9000
       - S3_BUCKET=beebuddy-photos
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_PROVIDER=ollama
       - LLM_MODEL=beebuddy-bee
       - LLM_TOOL_MODEL=qwen2.5:7b    

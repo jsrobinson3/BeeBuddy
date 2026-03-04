@@ -13,6 +13,7 @@ import {
   type TextInputKeyPressEventData,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Send } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 
@@ -312,6 +313,7 @@ function StreamErrorBanner({
 
 export function ChatView({ conversationId }: ChatViewProps) {
   const router = useRouter();
+  const headerHeight = useHeaderHeight();
   const styles = useStyles(createContainerStyles);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const isNearBottom = useRef(true);
@@ -447,8 +449,8 @@ export function ChatView({ conversationId }: ChatViewProps) {
     <ResponsiveContainer fill>
       <KeyboardAvoidingView
         style={styles.root}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={90}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
       >
         <FlatList
           ref={listRef}
@@ -460,6 +462,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
           onScroll={handleScroll}
           scrollEventThrottle={100}
           onContentSizeChange={handleContentSizeChange}
+          keyboardShouldPersistTaps="handled"
         />
         {pendingActions.map((action) => (
           <ConfirmationCard
