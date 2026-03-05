@@ -28,7 +28,6 @@ import {
   RECORD_TYPE_SECTIONS,
   TEMPLATE_TO_BACKEND,
   isNavigationType,
-  isInspectionType,
   ObservationFields,
   GeneralFields,
   ReminderFields,
@@ -115,16 +114,11 @@ function FormContent({
   system: string;
 }) {
   const styles = useStyles(createStyles);
-  const showWeather = isInspectionType(s.template);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <FormHeader s={s} set={set} />
-      {showWeather && (
-        <>
-          <Text style={styles.sectionLabel}>Weather</Text>
-          <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
-        </>
-      )}
+      <Text style={styles.sectionLabel}>Weather</Text>
+      <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
       <Text style={styles.sectionLabel}>Reminder</Text>
       <ReminderFields s={s} set={set} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />

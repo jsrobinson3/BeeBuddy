@@ -32,7 +32,6 @@ import {
   TEMPLATE_TO_BACKEND,
   NAVIGATION_ROUTES,
   isNavigationType,
-  isInspectionType,
   DEFAULT_FORM_STATE,
   ObservationFields,
   GeneralFields,
@@ -133,7 +132,6 @@ function FormContent({
   const styles = useStyles(createStyles);
   const autoFillStyles = useStyles(createAutoFillStyles);
   const obsLabel = getObservationsLabel(s.template);
-  const showWeather = isInspectionType(s.template);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -155,17 +153,13 @@ function FormContent({
       <ObservationFields s={s} set={set} />
       <Text style={styles.sectionLabel}>General</Text>
       <GeneralFields s={s} set={set} />
-      {showWeather && (
-        <>
-          <View style={autoFillStyles.weatherHeader}>
-            <Text style={styles.sectionLabel}>Weather</Text>
-            {weatherAutoFilled && (
-              <Text style={autoFillStyles.autoFillHint}>(auto-filled)</Text>
-            )}
-          </View>
-          <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
-        </>
-      )}
+      <View style={autoFillStyles.weatherHeader}>
+        <Text style={styles.sectionLabel}>Weather</Text>
+        {weatherAutoFilled && (
+          <Text style={autoFillStyles.autoFillHint}>(auto-filled)</Text>
+        )}
+      </View>
+      <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
       <Text style={styles.sectionLabel}>Reminder</Text>
       <ReminderFields s={s} set={set} />
       <SubmitButton
