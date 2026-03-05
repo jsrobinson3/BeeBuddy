@@ -3,17 +3,28 @@ import { Pressable, Text, View } from "react-native";
 
 import { useStyles, typography, type ThemeColors } from "../theme";
 
-interface DropdownOption {
+export interface DropdownOption {
   label: string;
   value: string;
   description?: string;
 }
 
+export interface DropdownSection {
+  title: string;
+  options: DropdownOption[];
+}
+
 interface DropdownFieldProps {
   label: string;
-  options: DropdownOption[];
+  options: DropdownOption[] | DropdownSection[];
   selected: string;
   onChange: (value: string) => void;
+}
+
+function isSections(
+  opts: DropdownOption[] | DropdownSection[],
+): opts is DropdownSection[] {
+  return opts.length > 0 && "title" in opts[0];
 }
 
 const createStyles = (c: ThemeColors) => ({
@@ -60,6 +71,18 @@ const createStyles = (c: ThemeColors) => ({
     backgroundColor: c.bgElevated,
     overflow: "hidden" as const,
   },
+  sectionHeader: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: typography.families.bodySemiBold,
+    color: c.textSecondary,
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.5,
+  },
   option: {
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -89,6 +112,10 @@ const createStyles = (c: ThemeColors) => ({
     height: 1,
     backgroundColor: c.borderLight,
     marginHorizontal: 14,
+  },
+  sectionSeparator: {
+    height: 1,
+    backgroundColor: c.border,
   },
 });
 
@@ -132,6 +159,11 @@ function OptionItem({
   );
 }
 
+function flattenOptions(opts: DropdownOption[] | DropdownSection[]): DropdownOption[] {
+  if (!isSections(opts)) return opts;
+  return opts.flatMap((s) => s.options);
+}
+
 export function DropdownField({
   label,
   options,
@@ -141,7 +173,8 @@ export function DropdownField({
   const styles = useStyles(createStyles);
   const [open, setOpen] = useState(false);
 
-  const selectedOption = options.find((o) => o.value === selected);
+  const allOptions = flattenOptions(options);
+  const selectedOption = allOptions.find((o) => o.value === selected);
   const displayLabel = selectedOption?.label ?? selected;
 
   const handleSelect = useCallback(
@@ -151,6 +184,38 @@ export function DropdownField({
     },
     [onChange],
   );
+
+  const renderFlatOptions = (opts: DropdownOption[]) =>
+    opts.map((option, index) => (
+      <OptionItem
+        key={option.value}
+        option={option}
+        isSelected={option.value === selected}
+        isLast={index === opts.length - 1}
+        onPress={() => handleSelect(option.value)}
+        styles={styles}
+      />
+    ));
+
+  const renderSections = (sections: DropdownSection[]) =>
+    sections.map((section, sIdx) => (
+      <View key={section.title}>
+        {sIdx > 0 && <View style={styles.sectionSeparator} />}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+        </View>
+        {section.options.map((option, oIdx) => (
+          <OptionItem
+            key={option.value}
+            option={option}
+            isSelected={option.value === selected}
+            isLast={sIdx === sections.length - 1 && oIdx === section.options.length - 1}
+            onPress={() => handleSelect(option.value)}
+            styles={styles}
+          />
+        ))}
+      </View>
+    ));
 
   return (
     <View style={styles.container}>
@@ -164,16 +229,9 @@ export function DropdownField({
       </Pressable>
       {open && (
         <View style={styles.menu}>
-          {options.map((option, index) => (
-            <OptionItem
-              key={option.value}
-              option={option}
-              isSelected={option.value === selected}
-              isLast={index === options.length - 1}
-              onPress={() => handleSelect(option.value)}
-              styles={styles}
-            />
-          ))}
+          {isSections(options)
+            ? renderSections(options)
+            : renderFlatOptions(options)}
         </View>
       )}
     </View>

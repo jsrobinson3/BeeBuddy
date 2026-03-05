@@ -10,8 +10,8 @@ import {
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
-import { LoadingSpinner } from "../../../../components/LoadingSpinner";
 import { DropdownField } from "../../../../components/DropdownField";
+import { LoadingSpinner } from "../../../../components/LoadingSpinner";
 import {
   useInspection,
   useUpdateInspection,
@@ -25,8 +25,10 @@ import {
   type FormState,
   type FormSetter,
   type TemplateLevel,
-  TEMPLATE_OPTIONS,
+  RECORD_TYPE_SECTIONS,
   TEMPLATE_TO_BACKEND,
+  isNavigationType,
+  isInspectionType,
   ObservationFields,
   GeneralFields,
   ReminderFields,
@@ -58,23 +60,38 @@ function SubmitButton({
   );
 }
 
+function getObservationsLabel(template: TemplateLevel): string {
+  if (template === "Mite Assessment") return "Assessment";
+  if (template === "Feed Bees") return "Feeding Details";
+  if (template === "Winterize") return "Preparation";
+  if (template === "Journal Entry") return "";
+  return "Observations";
+}
+
 function FormHeader({ s, set }: { s: FormState; set: FormSetter }) {
   const styles = useStyles(createStyles);
+  const obsLabel = getObservationsLabel(s.template);
   return (
     <>
       <DatePickerField
-        label="Inspection Date"
+        label="Date"
         value={s.inspectedAt}
         onChange={(v) => set("inspectedAt", v)}
         placeholder="Today"
       />
       <DropdownField
-        label="Inspection Type"
-        options={TEMPLATE_OPTIONS}
+        label="Record Type"
+        options={RECORD_TYPE_SECTIONS}
         selected={s.template}
-        onChange={(v) => set("template", v as TemplateLevel)}
+        onChange={(v) => {
+          if (!isNavigationType(v)) {
+            set("template", v as TemplateLevel);
+          }
+        }}
       />
-      <Text style={styles.sectionLabel}>Observations</Text>
+      {obsLabel !== "" && (
+        <Text style={styles.sectionLabel}>{obsLabel}</Text>
+      )}
       <ObservationFields s={s} set={set} />
       <Text style={styles.sectionLabel}>General</Text>
       <GeneralFields s={s} set={set} />
@@ -98,11 +115,16 @@ function FormContent({
   system: string;
 }) {
   const styles = useStyles(createStyles);
+  const showWeather = isInspectionType(s.template);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <FormHeader s={s} set={set} />
-      <Text style={styles.sectionLabel}>Weather</Text>
-      <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
+      {showWeather && (
+        <>
+          <Text style={styles.sectionLabel}>Weather</Text>
+          <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
+        </>
+      )}
       <Text style={styles.sectionLabel}>Reminder</Text>
       <ReminderFields s={s} set={set} />
       <SubmitButton isPending={isPending} onPress={onSubmit} />
