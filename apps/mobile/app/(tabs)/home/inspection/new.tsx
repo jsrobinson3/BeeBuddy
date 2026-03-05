@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
-import { SegmentedControl } from "../../../../components/SegmentedControl";
+import { DropdownField } from "../../../../components/DropdownField";
 import { useApiary } from "../../../../hooks/useApiaries";
 import { useHive } from "../../../../hooks/useHives";
 import { useCreateInspection } from "../../../../hooks/useInspections";
@@ -28,6 +28,7 @@ import {
   type FormSetter,
   type TemplateLevel,
   TEMPLATE_OPTIONS,
+  TEMPLATE_TO_BACKEND,
   ObservationFields,
   GeneralFields,
   ReminderFields,
@@ -39,7 +40,7 @@ import {
 
 function useFormState() {
   const [s, setS] = useState<FormState>({
-    template: "Beginner",
+    template: "Quick Check",
     inspectedAt: null,
     queenSeen: false,
     eggsSeen: false,
@@ -141,7 +142,8 @@ function FormContent({
         onChange={(v) => set("inspectedAt", v)}
         placeholder="Today"
       />
-      <SegmentedControl
+      <DropdownField
+        label="Inspection Type"
         options={TEMPLATE_OPTIONS}
         selected={s.template}
         onChange={(v) => set("template", v as TemplateLevel)}
@@ -212,7 +214,7 @@ export default function CreateInspectionScreen() {
       const input: CreateInspectionInput = {
         hiveId: hive_id!,
         inspectedAt: inspectedAt,
-        experienceTemplate: s.template.toLowerCase(),
+        experienceTemplate: TEMPLATE_TO_BACKEND[s.template],
         observations: buildObservations(s),
         weather,
         impression: s.impression ?? undefined,

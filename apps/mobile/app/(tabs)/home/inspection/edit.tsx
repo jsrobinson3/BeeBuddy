@@ -11,7 +11,7 @@ import {
 
 import { DatePickerField } from "../../../../components/DatePickerField";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
-import { SegmentedControl } from "../../../../components/SegmentedControl";
+import { DropdownField } from "../../../../components/DropdownField";
 import {
   useInspection,
   useUpdateInspection,
@@ -26,6 +26,7 @@ import {
   type FormSetter,
   type TemplateLevel,
   TEMPLATE_OPTIONS,
+  TEMPLATE_TO_BACKEND,
   ObservationFields,
   GeneralFields,
   ReminderFields,
@@ -67,7 +68,8 @@ function FormHeader({ s, set }: { s: FormState; set: FormSetter }) {
         onChange={(v) => set("inspectedAt", v)}
         placeholder="Today"
       />
-      <SegmentedControl
+      <DropdownField
+        label="Inspection Type"
         options={TEMPLATE_OPTIONS}
         selected={s.template}
         onChange={(v) => set("template", v as TemplateLevel)}
@@ -146,7 +148,7 @@ export default function EditInspectionScreen() {
         : undefined;
       const input: UpdateInspectionInput = {
         inspectedAt: inspectedAt,
-        experienceTemplate: s.template.toLowerCase(),
+        experienceTemplate: TEMPLATE_TO_BACKEND[s.template],
         observations: buildObservations(s),
         weather,
         impression: s.impression ?? undefined,

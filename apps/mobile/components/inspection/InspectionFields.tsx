@@ -54,7 +54,7 @@ const CONDITIONS_OPTIONS = [
 ];
 
 export interface FormState {
-  template: "Beginner" | "Intermediate" | "Advanced";
+  template: "Quick Check" | "Routine Inspection" | "Detailed Inspection";
   inspectedAt: Date | null;
   queenSeen: boolean;
   eggsSeen: boolean;
@@ -309,8 +309,8 @@ export function ReminderFields({ s, set }: SectionProps) {
 
 export function buildObservations(s: FormState): InspectionObservations {
   const isInt =
-    s.template === "Intermediate" || s.template === "Advanced";
-  const isAdv = s.template === "Advanced";
+    s.template === "Routine Inspection" || s.template === "Detailed Inspection";
+  const isAdv = s.template === "Detailed Inspection";
 
   const obs: InspectionObservations = {
     queenSeen: s.queenSeen,
@@ -353,10 +353,26 @@ export function buildWeather(s: FormState): WeatherSnapshot | undefined {
 
 export type TemplateLevel = FormState["template"];
 
-export const TEMPLATE_OPTIONS: TemplateLevel[] = [
-  "Beginner",
-  "Intermediate",
-  "Advanced",
+export const TEMPLATE_OPTIONS: {
+  label: string;
+  value: TemplateLevel;
+  description: string;
+}[] = [
+  {
+    label: "Quick Check",
+    value: "Quick Check",
+    description: "Basic observations — queen, eggs, stores",
+  },
+  {
+    label: "Routine Inspection",
+    value: "Routine Inspection",
+    description: "Standard check with brood, pollen & pests",
+  },
+  {
+    label: "Detailed Inspection",
+    value: "Detailed Inspection",
+    description: "Full assessment including disease & varroa",
+  },
 ];
 
 export const inspectionFormStyles = (c: ThemeColors) => ({
@@ -398,28 +414,38 @@ export function ObservationFields({
   s: FormState;
   set: FormSetter;
 }) {
-  const isInt =
-    s.template === "Intermediate" || s.template === "Advanced";
-  const isAdv = s.template === "Advanced";
+  const isRoutine =
+    s.template === "Routine Inspection" || s.template === "Detailed Inspection";
+  const isDetailed = s.template === "Detailed Inspection";
   return (
     <>
       <BeginnerFields s={s} set={set} />
-      {isInt && <IntermediateFields s={s} set={set} />}
-      {isAdv && <AdvancedFields s={s} set={set} />}
+      {isRoutine && <IntermediateFields s={s} set={set} />}
+      {isDetailed && <AdvancedFields s={s} set={set} />}
     </>
   );
 }
 
-function capitalize(s: string): FormState["template"] {
-  return (s.charAt(0).toUpperCase() + s.slice(1)) as FormState["template"];
-}
+const BACKEND_TO_TEMPLATE: Record<string, FormState["template"]> = {
+  beginner: "Quick Check",
+  intermediate: "Routine Inspection",
+  advanced: "Detailed Inspection",
+};
+
+export const TEMPLATE_TO_BACKEND: Record<FormState["template"], string> = {
+  "Quick Check": "beginner",
+  "Routine Inspection": "intermediate",
+  "Detailed Inspection": "advanced",
+};
 
 export function inspectionToFormState(inspection: WMInspection): FormState {
   const obs = inspection.observations ?? {};
   const weather = inspection.weather ?? {};
 
   return {
-    template: capitalize(inspection.experienceTemplate ?? "beginner"),
+    template:
+      BACKEND_TO_TEMPLATE[inspection.experienceTemplate ?? "beginner"] ??
+      "Quick Check",
     inspectedAt: inspection.inspectedAt instanceof Date
       ? inspection.inspectedAt
       : null,

@@ -11,6 +11,12 @@ import type {
   InspectionObservations,
 } from "../../../../services/api";
 import { useStyles, typography, type ThemeColors } from "../../../../theme";
+
+const TEMPLATE_DISPLAY_NAMES: Record<string, string> = {
+  beginner: "Quick Check",
+  intermediate: "Routine Inspection",
+  advanced: "Detailed Inspection",
+};
 import { formatDate } from "../../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
@@ -130,7 +136,13 @@ function DetailsCard({ inspection }: { inspection: Inspection }) {
       {inspection.durationMinutes != null && (
         <InfoRow label="Duration" value={`${inspection.durationMinutes} min`} />
       )}
-      <InfoRow label="Template" value={inspection.experienceTemplate} />
+      <InfoRow
+        label="Type"
+        value={
+          TEMPLATE_DISPLAY_NAMES[inspection.experienceTemplate] ??
+          inspection.experienceTemplate
+        }
+      />
     </Card>
   );
 }
