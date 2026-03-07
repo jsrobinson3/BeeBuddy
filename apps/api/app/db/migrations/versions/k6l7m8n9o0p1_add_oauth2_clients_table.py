@@ -6,6 +6,7 @@ Create Date: 2026-03-01 00:00:00.000000
 
 """
 
+import json
 import uuid
 from collections.abc import Sequence
 
@@ -19,12 +20,14 @@ down_revision: str = "j5k6l7m8n9o0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# Note: redirect_uris must be json.dumps()'d because op.bulk_insert does not
+# handle JSONB serialization — a raw Python list would be double-encoded.
 SEED_CLIENTS = [
     {
         "id": uuid.uuid4(),
         "client_id": "claude-desktop",
         "name": "Claude Desktop",
-        "redirect_uris": ["http://localhost/callback"],
+        "redirect_uris": json.dumps(["http://localhost/callback"]),
         "is_active": True,
     },
 ]

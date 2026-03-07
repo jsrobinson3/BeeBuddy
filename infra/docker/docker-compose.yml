@@ -142,6 +142,7 @@ services:
       - LLM_TOOL_MODEL=qwen2.5:7b    
       - SECRET_KEY=local-dev-secret-do-not-use-in-production
       - COOKIE_SECURE=false
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
       - CORS_ORIGINS=["*"]
     depends_on:
       postgres:
