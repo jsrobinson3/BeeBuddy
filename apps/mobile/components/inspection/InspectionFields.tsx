@@ -1,5 +1,6 @@
 import { BooleanToggle } from "../BooleanToggle";
 import { DatePickerField } from "../DatePickerField";
+import type { DropdownSection } from "../DropdownField";
 import { FormInput } from "../FormInput";
 import { MultiSelect } from "../MultiSelect";
 import { NumberInput } from "../NumberInput";
@@ -53,9 +54,33 @@ const CONDITIONS_OPTIONS = [
   { label: "Windy", value: "windy" },
 ];
 
+export type InlineFormType =
+  | "Quick Check"
+  | "Routine Inspection"
+  | "Detailed Inspection"
+  | "Mite Assessment"
+  | "Feed Bees"
+  | "Winterize"
+  | "Journal Entry";
+
+export type NavigationFormType = "Treatment" | "Harvest" | "Requeen";
+
+export type RecordType = InlineFormType | NavigationFormType;
+
+export const NAVIGATION_ROUTES: Record<NavigationFormType, string> = {
+  Treatment: "/home/treatment/new",
+  Harvest: "/home/harvest/new",
+  Requeen: "/home/queen/new",
+};
+
+export function isNavigationType(type: string): type is NavigationFormType {
+  return type in NAVIGATION_ROUTES;
+}
+
 export interface FormState {
-  template: "Beginner" | "Intermediate" | "Advanced";
+  template: InlineFormType;
   inspectedAt: Date | null;
+  // Inspection observation fields
   queenSeen: boolean;
   eggsSeen: boolean;
   larvaeSeen: boolean;
@@ -71,6 +96,16 @@ export interface FormState {
   numSupers: number | null;
   diseaseSigns: string[];
   varroaCount: number | null;
+  // Mite assessment fields
+  miteMethod: string | null;
+  miteSampleSize: number | null;
+  // Feed bees fields
+  feedType: string | null;
+  feedAmount: string;
+  feedUnit: string | null;
+  // Winterize fields
+  winterizeChecklist: string[];
+  // General fields
   impression: number | null;
   attention: boolean;
   durationMinutes: number | null;
@@ -210,6 +245,104 @@ export function AdvancedFields({ s, set }: SectionProps) {
   );
 }
 
+const MITE_METHOD_OPTIONS = [
+  { label: "Sugar Roll", value: "sugar_roll" },
+  { label: "Alcohol Wash", value: "alcohol_wash" },
+  { label: "Sticky Board", value: "sticky_board" },
+  { label: "Visual", value: "visual" },
+];
+
+const FEED_TYPE_OPTIONS = [
+  { label: "Sugar Syrup 1:1", value: "syrup_1_1" },
+  { label: "Sugar Syrup 2:1", value: "syrup_2_1" },
+  { label: "Pollen Patty", value: "pollen_patty" },
+  { label: "Fondant", value: "fondant" },
+  { label: "Other", value: "other" },
+];
+
+const FEED_UNIT_OPTIONS = [
+  { label: "Liters", value: "liters" },
+  { label: "Kg", value: "kg" },
+  { label: "Lbs", value: "lbs" },
+  { label: "Frames", value: "frames" },
+];
+
+const WINTERIZE_OPTIONS = [
+  "mouse_guard",
+  "entrance_reducer",
+  "insulation",
+  "ventilation",
+  "moisture_board",
+  "candy_board",
+  "windbreak",
+];
+
+export function MiteAssessmentFields({ s, set }: SectionProps) {
+  return (
+    <>
+      <PickerField
+        label="Method"
+        options={MITE_METHOD_OPTIONS}
+        selected={s.miteMethod}
+        onSelect={(v) => set("miteMethod", v)}
+      />
+      <ResponsiveFormRow>
+        <NumberInput
+          label="Varroa Count"
+          value={s.varroaCount}
+          onChange={(v) => set("varroaCount", v)}
+          min={0}
+        />
+        <NumberInput
+          label="Sample Size (bees)"
+          value={s.miteSampleSize}
+          onChange={(v) => set("miteSampleSize", v)}
+          min={0}
+        />
+      </ResponsiveFormRow>
+    </>
+  );
+}
+
+export function FeedBeesFields({ s, set }: SectionProps) {
+  return (
+    <>
+      <PickerField
+        label="Feed Type"
+        options={FEED_TYPE_OPTIONS}
+        selected={s.feedType}
+        onSelect={(v) => set("feedType", v)}
+      />
+      <ResponsiveFormRow>
+        <FormInput
+          label="Amount"
+          value={s.feedAmount}
+          onChangeText={(v) => set("feedAmount", v)}
+          keyboardType="numeric"
+          placeholder="e.g. 2"
+        />
+        <PickerField
+          label="Unit"
+          options={FEED_UNIT_OPTIONS}
+          selected={s.feedUnit}
+          onSelect={(v) => set("feedUnit", v)}
+        />
+      </ResponsiveFormRow>
+    </>
+  );
+}
+
+export function WinterizeFields({ s, set }: SectionProps) {
+  return (
+    <MultiSelect
+      label="Winterization Checklist"
+      options={WINTERIZE_OPTIONS}
+      selected={s.winterizeChecklist}
+      onChange={(v) => set("winterizeChecklist", v)}
+    />
+  );
+}
+
 const notesStyle = { textAlignVertical: "top" as const, minHeight: 100 };
 
 export function GeneralFields({ s, set }: SectionProps) {
@@ -307,10 +440,39 @@ export function ReminderFields({ s, set }: SectionProps) {
   );
 }
 
+export function isInspectionType(t: InlineFormType): boolean {
+  return t === "Quick Check" || t === "Routine Inspection" || t === "Detailed Inspection";
+}
+
 export function buildObservations(s: FormState): InspectionObservations {
-  const isInt =
-    s.template === "Intermediate" || s.template === "Advanced";
-  const isAdv = s.template === "Advanced";
+  const t = s.template;
+
+  if (t === "Mite Assessment") {
+    return {
+      varroaCount: s.varroaCount,
+      miteMethod: s.miteMethod,
+      miteSampleSize: s.miteSampleSize,
+    } as InspectionObservations;
+  }
+  if (t === "Feed Bees") {
+    return {
+      feedType: s.feedType,
+      feedAmount: s.feedAmount.trim() ? Number(s.feedAmount) : null,
+      feedUnit: s.feedUnit,
+    } as InspectionObservations;
+  }
+  if (t === "Winterize") {
+    return {
+      winterizeChecklist: s.winterizeChecklist,
+    } as InspectionObservations;
+  }
+  if (t === "Journal Entry") {
+    return {} as InspectionObservations;
+  }
+
+  // Inspection types (Quick Check / Routine / Detailed)
+  const isRoutine = t === "Routine Inspection" || t === "Detailed Inspection";
+  const isDetailed = t === "Detailed Inspection";
 
   const obs: InspectionObservations = {
     queenSeen: s.queenSeen,
@@ -319,7 +481,7 @@ export function buildObservations(s: FormState): InspectionObservations {
     honeyStores: s.honeyStores,
     temperament: s.temperament,
   };
-  if (isInt) {
+  if (isRoutine) {
     obs.larvaeSeen = s.larvaeSeen;
     obs.cappedBrood = s.cappedBrood;
     obs.broodPatternScore = s.broodPatternScore;
@@ -328,7 +490,7 @@ export function buildObservations(s: FormState): InspectionObservations {
     obs.pollenStores = s.pollenStores;
     obs.pestSigns = s.pestSigns.filter((v) => v !== "none");
   }
-  if (isAdv) {
+  if (isDetailed) {
     obs.numSupers = s.numSupers;
     obs.diseaseSigns = s.diseaseSigns.filter((v) => v !== "none");
     obs.varroaCount = s.varroaCount;
@@ -353,10 +515,72 @@ export function buildWeather(s: FormState): WeatherSnapshot | undefined {
 
 export type TemplateLevel = FormState["template"];
 
-export const TEMPLATE_OPTIONS: TemplateLevel[] = [
-  "Beginner",
-  "Intermediate",
-  "Advanced",
+export const RECORD_TYPE_SECTIONS: DropdownSection[] = [
+  {
+    title: "Inspections",
+    options: [
+      {
+        label: "Quick Check",
+        value: "Quick Check",
+        description: "Basic observations — queen, eggs, stores",
+      },
+      {
+        label: "Routine Inspection",
+        value: "Routine Inspection",
+        description: "Standard check with brood, pollen & pests",
+      },
+      {
+        label: "Detailed Inspection",
+        value: "Detailed Inspection",
+        description: "Full assessment including disease & varroa",
+      },
+    ],
+  },
+  {
+    title: "Management",
+    options: [
+      {
+        label: "Feed Bees",
+        value: "Feed Bees",
+        description: "Record a feeding with type and amount",
+      },
+      {
+        label: "Mite Assessment",
+        value: "Mite Assessment",
+        description: "Varroa mite count and monitoring",
+      },
+      {
+        label: "Winterize",
+        value: "Winterize",
+        description: "Winterization prep checklist",
+      },
+    ],
+  },
+  {
+    title: "Records",
+    options: [
+      {
+        label: "Treatment",
+        value: "Treatment",
+        description: "Log a treatment application",
+      },
+      {
+        label: "Harvest",
+        value: "Harvest",
+        description: "Record a honey harvest",
+      },
+      {
+        label: "Requeen",
+        value: "Requeen",
+        description: "Record a queen change",
+      },
+      {
+        label: "Journal Entry",
+        value: "Journal Entry",
+        description: "Quick note about the hive",
+      },
+    ],
+  },
 ];
 
 export const inspectionFormStyles = (c: ThemeColors) => ({
@@ -398,28 +622,89 @@ export function ObservationFields({
   s: FormState;
   set: FormSetter;
 }) {
-  const isInt =
-    s.template === "Intermediate" || s.template === "Advanced";
-  const isAdv = s.template === "Advanced";
+  const t = s.template;
+
+  if (t === "Mite Assessment") return <MiteAssessmentFields s={s} set={set} />;
+  if (t === "Feed Bees") return <FeedBeesFields s={s} set={set} />;
+  if (t === "Winterize") return <WinterizeFields s={s} set={set} />;
+  if (t === "Journal Entry") return null;
+
+  // Inspection types
+  const isRoutine = t === "Routine Inspection" || t === "Detailed Inspection";
+  const isDetailed = t === "Detailed Inspection";
   return (
     <>
       <BeginnerFields s={s} set={set} />
-      {isInt && <IntermediateFields s={s} set={set} />}
-      {isAdv && <AdvancedFields s={s} set={set} />}
+      {isRoutine && <IntermediateFields s={s} set={set} />}
+      {isDetailed && <AdvancedFields s={s} set={set} />}
     </>
   );
 }
 
-function capitalize(s: string): FormState["template"] {
-  return (s.charAt(0).toUpperCase() + s.slice(1)) as FormState["template"];
-}
+const BACKEND_TO_TEMPLATE: Record<string, FormState["template"]> = {
+  beginner: "Quick Check",
+  intermediate: "Routine Inspection",
+  advanced: "Detailed Inspection",
+  mite_assessment: "Mite Assessment",
+  feed_bees: "Feed Bees",
+  winterize: "Winterize",
+  journal_entry: "Journal Entry",
+};
+
+export const TEMPLATE_TO_BACKEND: Record<FormState["template"], string> = {
+  "Quick Check": "beginner",
+  "Routine Inspection": "intermediate",
+  "Detailed Inspection": "advanced",
+  "Mite Assessment": "mite_assessment",
+  "Feed Bees": "feed_bees",
+  "Winterize": "winterize",
+  "Journal Entry": "journal_entry",
+};
+
+export const DEFAULT_FORM_STATE: FormState = {
+  template: "Quick Check",
+  inspectedAt: null,
+  queenSeen: false,
+  eggsSeen: false,
+  larvaeSeen: false,
+  cappedBrood: false,
+  populationEstimate: null,
+  honeyStores: null,
+  temperament: null,
+  pollenStores: null,
+  broodPatternScore: null,
+  framesOfBees: null,
+  framesOfBrood: null,
+  pestSigns: [],
+  numSupers: null,
+  diseaseSigns: [],
+  varroaCount: null,
+  miteMethod: null,
+  miteSampleSize: null,
+  feedType: null,
+  feedAmount: "",
+  feedUnit: null,
+  winterizeChecklist: [],
+  impression: null,
+  attention: false,
+  durationMinutes: null,
+  notes: "",
+  tempC: "",
+  humidityPercent: "",
+  conditions: null,
+  reminder: "",
+  reminderDate: null,
+};
 
 export function inspectionToFormState(inspection: WMInspection): FormState {
-  const obs = inspection.observations ?? {};
+  const obs = inspection.observations ?? ({} as any);
   const weather = inspection.weather ?? {};
 
   return {
-    template: capitalize(inspection.experienceTemplate ?? "beginner"),
+    ...DEFAULT_FORM_STATE,
+    template:
+      BACKEND_TO_TEMPLATE[inspection.experienceTemplate ?? "beginner"] ??
+      "Quick Check",
     inspectedAt: inspection.inspectedAt instanceof Date
       ? inspection.inspectedAt
       : null,
@@ -438,6 +723,12 @@ export function inspectionToFormState(inspection: WMInspection): FormState {
     numSupers: obs.numSupers ?? null,
     diseaseSigns: obs.diseaseSigns ?? [],
     varroaCount: obs.varroaCount ?? null,
+    miteMethod: obs.miteMethod ?? null,
+    miteSampleSize: obs.miteSampleSize ?? null,
+    feedType: obs.feedType ?? null,
+    feedAmount: obs.feedAmount != null ? String(obs.feedAmount) : "",
+    feedUnit: obs.feedUnit ?? null,
+    winterizeChecklist: obs.winterizeChecklist ?? [],
     impression: inspection.impression ?? null,
     attention: inspection.attention ?? false,
     durationMinutes: inspection.durationMinutes ?? null,

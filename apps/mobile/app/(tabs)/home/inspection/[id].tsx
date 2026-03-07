@@ -11,6 +11,16 @@ import type {
   InspectionObservations,
 } from "../../../../services/api";
 import { useStyles, typography, type ThemeColors } from "../../../../theme";
+
+const TEMPLATE_DISPLAY_NAMES: Record<string, string> = {
+  beginner: "Quick Check",
+  intermediate: "Routine Inspection",
+  advanced: "Detailed Inspection",
+  mite_assessment: "Mite Assessment",
+  feed_bees: "Feed Bees",
+  winterize: "Winterize",
+  journal_entry: "Journal Entry",
+};
 import { formatDate } from "../../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
@@ -110,6 +120,24 @@ function DetailedObservationRows({ obs }: { obs: InspectionObservations }) {
       {obs.diseaseSigns && obs.diseaseSigns.length > 0 && (
         <InfoRow label="Disease Signs" value={obs.diseaseSigns.join(", ")} />
       )}
+      {(obs as any).miteMethod && (
+        <InfoRow label="Mite Method" value={(obs as any).miteMethod} />
+      )}
+      {(obs as any).miteSampleSize != null && (
+        <InfoRow label="Sample Size" value={`${(obs as any).miteSampleSize} bees`} />
+      )}
+      {(obs as any).feedType && (
+        <InfoRow label="Feed Type" value={(obs as any).feedType} />
+      )}
+      {(obs as any).feedAmount != null && (
+        <InfoRow
+          label="Amount"
+          value={`${(obs as any).feedAmount}${(obs as any).feedUnit ? ` ${(obs as any).feedUnit}` : ""}`}
+        />
+      )}
+      {(obs as any).winterizeChecklist && (obs as any).winterizeChecklist.length > 0 && (
+        <InfoRow label="Winterization" value={(obs as any).winterizeChecklist.join(", ")} />
+      )}
     </>
   );
 }
@@ -130,7 +158,13 @@ function DetailsCard({ inspection }: { inspection: Inspection }) {
       {inspection.durationMinutes != null && (
         <InfoRow label="Duration" value={`${inspection.durationMinutes} min`} />
       )}
-      <InfoRow label="Template" value={inspection.experienceTemplate} />
+      <InfoRow
+        label="Type"
+        value={
+          TEMPLATE_DISPLAY_NAMES[inspection.experienceTemplate] ??
+          inspection.experienceTemplate
+        }
+      />
     </Card>
   );
 }
