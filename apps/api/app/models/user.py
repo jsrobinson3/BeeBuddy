@@ -41,6 +41,10 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(String(50), default="UTC", nullable=False)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     password_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -50,6 +50,12 @@ async def authenticate(db: AsyncSession, email: str, password: str) -> User | No
     return user
 
 
+async def record_login(db: AsyncSession, user: User) -> None:
+    """Update last_login_at timestamp for the user."""
+    user.last_login_at = datetime.now(UTC)
+    await db.commit()
+
+
 def issue_tokens(user_id: UUID) -> tuple[str, str]:
     """Issue an access + refresh token pair for a user."""
     data = {"sub": str(user_id)}

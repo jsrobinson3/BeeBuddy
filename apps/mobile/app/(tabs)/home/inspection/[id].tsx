@@ -6,6 +6,7 @@ import { ErrorDisplay } from "../../../../components/ErrorDisplay";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
 import { PhotoPicker } from "../../../../components/PhotoPicker";
 import { useInspection } from "../../../../hooks/useInspections";
+import { BACKEND_TO_TEMPLATE } from "../../../../components/inspection/InspectionFields";
 import type {
   Inspection,
   InspectionObservations,
@@ -110,6 +111,24 @@ function DetailedObservationRows({ obs }: { obs: InspectionObservations }) {
       {obs.diseaseSigns && obs.diseaseSigns.length > 0 && (
         <InfoRow label="Disease Signs" value={obs.diseaseSigns.join(", ")} />
       )}
+      {obs.miteMethod && (
+        <InfoRow label="Mite Method" value={obs.miteMethod} />
+      )}
+      {obs.miteSampleSize != null && (
+        <InfoRow label="Sample Size" value={`${obs.miteSampleSize} bees`} />
+      )}
+      {obs.feedType && (
+        <InfoRow label="Feed Type" value={obs.feedType} />
+      )}
+      {obs.feedAmount != null && (
+        <InfoRow
+          label="Amount"
+          value={`${obs.feedAmount}${obs.feedUnit ? ` ${obs.feedUnit}` : ""}`}
+        />
+      )}
+      {obs.winterizeChecklist && obs.winterizeChecklist.length > 0 && (
+        <InfoRow label="Winterization" value={obs.winterizeChecklist.join(", ")} />
+      )}
     </>
   );
 }
@@ -130,7 +149,13 @@ function DetailsCard({ inspection }: { inspection: Inspection }) {
       {inspection.durationMinutes != null && (
         <InfoRow label="Duration" value={`${inspection.durationMinutes} min`} />
       )}
-      <InfoRow label="Template" value={inspection.experienceTemplate} />
+      <InfoRow
+        label="Type"
+        value={
+          BACKEND_TO_TEMPLATE[inspection.experienceTemplate] ??
+          inspection.experienceTemplate
+        }
+      />
     </Card>
   );
 }

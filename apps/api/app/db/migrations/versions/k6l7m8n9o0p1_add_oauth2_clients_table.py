@@ -19,6 +19,9 @@ down_revision: str = "j5k6l7m8n9o0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
+# op.bulk_insert with a Table from op.create_table preserves column types,
+# so SQLAlchemy's JSONB processor handles serialization — pass plain Python
+# values, NOT pre-serialized JSON strings (which would be double-encoded).
 SEED_CLIENTS = [
     {
         "id": uuid.uuid4(),

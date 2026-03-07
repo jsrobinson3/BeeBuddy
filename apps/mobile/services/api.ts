@@ -64,6 +64,15 @@ export type {
   ChatRequest,
   PendingAction,
   PendingActionResponse,
+  FeedbackInput,
+  MessageFeedbackResponse,
+  ConversationFeedbackResponse,
+  AdminUser,
+  AdminUserUpdate,
+  AdminStats,
+  OAuth2Client,
+  OAuth2ClientCreate,
+  OAuth2ClientUpdate,
 } from "./api.types";
 
 import type {
@@ -109,6 +118,16 @@ import type {
   Conversation,
   ConversationDetail,
   PendingActionResponse,
+  FeedbackInput,
+  MessageFeedbackResponse,
+  ConversationFeedbackResponse,
+  AdminUser,
+  AdminUserUpdate,
+  AdminStats,
+  PaginatedAdminUsers,
+  OAuth2Client,
+  OAuth2ClientCreate,
+  OAuth2ClientUpdate,
 } from "./api.types";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -632,6 +651,78 @@ class ApiClient {
   async rejectAction(actionId: string) {
     return this.request<void>(`/ai/actions/${actionId}/reject`, {
       method: "POST",
+    });
+  }
+
+  // ── Feedback ──────────────────────────────────────────────────────────────
+
+  async submitFeedback(conversationId: string, messageIndex: number, data: FeedbackInput) {
+    return this.request<MessageFeedbackResponse>(
+      `/ai/conversations/${conversationId}/messages/${messageIndex}/feedback`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  async getConversationFeedback(conversationId: string) {
+    return this.request<ConversationFeedbackResponse>(
+      `/ai/conversations/${conversationId}/feedback`,
+    );
+  }
+
+  async deleteFeedback(conversationId: string, messageIndex: number) {
+    return this.request<void>(
+      `/ai/conversations/${conversationId}/messages/${messageIndex}/feedback`,
+      { method: "DELETE" },
+    );
+  }
+
+  // ── Admin ─────────────────────────────────────────────────────────────────
+
+  async getAdminStats() {
+    return this.request<AdminStats>("/admin/stats");
+  }
+
+  async getAdminUsers(params?: { search?: string; includeDeleted?: boolean }) {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set("search", params.search);
+    if (params?.includeDeleted) qs.set("include_deleted", "true");
+    const query = qs.toString() ? `?${qs.toString()}` : "";
+    const resp = await this.request<PaginatedAdminUsers>(`/admin/users${query}`);
+    return resp;
+  }
+
+  async getAdminUser(id: string) {
+    return this.request<AdminUser>(`/admin/users/${id}`);
+  }
+
+  async updateAdminUser(id: string, data: AdminUserUpdate) {
+    return this.request<AdminUser>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async restoreUser(id: string) {
+    return this.request<AdminUser>(`/admin/users/${id}/restore`, {
+      method: "POST",
+    });
+  }
+
+  async getOAuth2Clients() {
+    return this.request<OAuth2Client[]>("/admin/oauth-clients");
+  }
+
+  async createOAuth2Client(data: OAuth2ClientCreate) {
+    return this.request<OAuth2Client>("/admin/oauth-clients", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOAuth2Client(id: string, data: OAuth2ClientUpdate) {
+    return this.request<OAuth2Client>(`/admin/oauth-clients/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
     });
   }
 

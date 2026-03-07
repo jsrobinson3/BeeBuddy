@@ -38,6 +38,8 @@ export interface User {
   name: string | null;
   email: string;
   experienceLevel: "beginner" | "intermediate" | "advanced" | null;
+  isAdmin: boolean;
+  emailVerified: boolean;
   locale: string | null;
   timezone: string;
   preferences: UserPreferences | null;
@@ -198,6 +200,15 @@ export interface InspectionObservations {
   varroaCount?: number | null;
   numSupers?: number | null;
   framesOfBrood?: number | null;
+  // Mite assessment fields
+  miteMethod?: string | null;
+  miteSampleSize?: number | null;
+  // Feed bees fields
+  feedType?: string | null;
+  feedAmount?: number | null;
+  feedUnit?: string | null;
+  // Winterize fields
+  winterizeChecklist?: string[] | null;
 }
 
 export interface WeatherSnapshot {
@@ -528,6 +539,27 @@ export interface ChatRequest {
   conversationId?: string;
 }
 
+// ─── Message Feedback Types ──────────────────────────────────────────────────
+
+export interface FeedbackInput {
+  rating: -1 | 1;
+  correction?: string;
+}
+
+export interface MessageFeedbackResponse {
+  id: string;
+  conversationId: string;
+  messageIndex: number;
+  rating: -1 | 1;
+  correction: string | null;
+  modelVersion: string | null;
+  createdAt: string;
+}
+
+export interface ConversationFeedbackResponse {
+  feedback: MessageFeedbackResponse[];
+}
+
 // ─── Pending Action Types ────────────────────────────────────────────────────
 
 export interface PendingAction {
@@ -551,5 +583,68 @@ export interface PendingActionResponse {
   expiresAt: string;
   executedAt?: string;
   resultId?: string;
+}
+
+// ─── Admin Types ──────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id: string;
+  name: string | null;
+  email: string;
+  experienceLevel: string | null;
+  emailVerified: boolean;
+  isAdmin: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  apiaryCount: number;
+  hiveCount: number;
+  totalAiTokens: number;
+  aiRequests30D: number;
+}
+
+export interface AdminUserUpdate {
+  isAdmin?: boolean;
+  emailVerified?: boolean;
+}
+
+export interface PaginatedAdminUsers {
+  items: AdminUser[];
+  total: number;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  totalApiaries: number;
+  totalHives: number;
+  totalInspections: number;
+  totalConversations: number;
+  newUsers7D: number;
+  newUsers30D: number;
+  activeUsers7D: number;
+  totalAiTokens: number;
+  aiRequests7D: number;
+  aiRequests30D: number;
+}
+
+export interface OAuth2Client {
+  id: string;
+  clientId: string;
+  name: string;
+  redirectUris: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface OAuth2ClientCreate {
+  clientId: string;
+  name: string;
+  redirectUris: string[];
+}
+
+export interface OAuth2ClientUpdate {
+  name?: string;
+  redirectUris?: string[];
+  isActive?: boolean;
 }
 

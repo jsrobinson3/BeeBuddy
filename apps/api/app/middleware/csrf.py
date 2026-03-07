@@ -28,6 +28,9 @@ CSRF_EXEMPT_PATHS = {
     "/api/v1/auth/resend-verification",
     "/api/v1/auth/forgot-password",
     "/api/v1/auth/reset-password",
+    # OAuth2 token endpoint uses code_verifier (PKCE) to prove intent,
+    # not an existing authenticated session.
+    "/api/v1/oauth2/token",
 }
 
 

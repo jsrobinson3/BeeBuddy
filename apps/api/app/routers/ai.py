@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.verified import get_verified_user
 from app.db.session import get_db
 from app.models.user import User
 from app.rate_limit import limiter
@@ -16,7 +17,12 @@ from app.schemas.ai import (
     ConversationResponse,
     PendingActionResponse,
 )
-from app.services import ai_service, pending_action_service
+from app.schemas.feedback import (
+    ConversationFeedbackResponse,
+    FeedbackCreate,
+    FeedbackResponse,
+)
+from app.services import ai_service, feedback_service, pending_action_service
 
 router = APIRouter(prefix="/ai")
 
@@ -27,7 +33,7 @@ async def chat(
     request: Request,
     data: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
 ):
     """Stream a chat response from the beekeeping AI assistant."""
     return StreamingResponse(
@@ -142,3 +148,64 @@ async def list_pending_actions(
     return await pending_action_service.get_pending_actions(
         db, current_user.id,
     )
+
+
+# ── Feedback ──────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_index}/feedback",
+    response_model=FeedbackResponse,
+)
+@limiter.limit("30/minute")
+async def submit_feedback(
+    request: Request,
+    conversation_id: UUID,
+    message_index: int,
+    data: FeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Submit or update feedback on an assistant message."""
+    fb = await feedback_service.upsert_feedback(
+        db, current_user.id, conversation_id, message_index,
+        rating=data.rating, correction=data.correction,
+    )
+    if fb is None:
+        raise HTTPException(status_code=404, detail="Conversation or message not found")
+    return fb
+
+
+@router.get(
+    "/conversations/{conversation_id}/feedback",
+    response_model=ConversationFeedbackResponse,
+)
+async def get_feedback(
+    conversation_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all feedback for a conversation."""
+    items = await feedback_service.get_conversation_feedback(
+        db, current_user.id, conversation_id,
+    )
+    return ConversationFeedbackResponse(feedback=items)
+
+
+@router.delete(
+    "/conversations/{conversation_id}/messages/{message_index}/feedback",
+    status_code=204,
+)
+async def delete_feedback(
+    conversation_id: UUID,
+    message_index: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove feedback from a message."""
+    deleted = await feedback_service.delete_feedback(
+        db, current_user.id, conversation_id, message_index,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    return Response(status_code=204)

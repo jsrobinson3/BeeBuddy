@@ -2,6 +2,7 @@
 
 import logging
 import time
+from datetime import UTC, datetime
 
 import httpx
 from jose import JWTError
@@ -209,6 +210,7 @@ async def _link_oauth_to_existing(
     if dup is None:
         db.add(UserOAuthLink(user_id=existing.id, provider=provider, provider_sub=oauth_sub))
     existing.email_verified = True
+    existing.last_login_at = datetime.now(UTC)
     if name and not existing.name:
         existing.name = name
     await db.commit()
@@ -232,6 +234,8 @@ async def resolve_oauth_user(
     """
     user = await _find_by_oauth(db, provider, oauth_sub)
     if user is not None:
+        user.last_login_at = datetime.now(UTC)
+        await db.commit()
         return user
 
     if email:

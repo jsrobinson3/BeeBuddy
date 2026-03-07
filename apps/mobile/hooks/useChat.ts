@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../services/api";
-import type { ChatMessage, PendingAction } from "../services/api";
+import type { ChatMessage, ConversationFeedbackResponse, FeedbackInput, PendingAction } from "../services/api";
 import { parseSSEStream } from "../utils/sseParser";
 
 export function useConversations() {
@@ -153,4 +153,46 @@ export function useChatStream() {
     sendMessage, streamingContent, streamingState, error, errorCode, reset,
     conversationId, pendingActions, confirmAction, rejectAction,
   };
+}
+
+export function useConversationFeedback(conversationId?: string) {
+  return useQuery({
+    queryKey: ["feedback", conversationId],
+    queryFn: () => api.getConversationFeedback(conversationId!),
+    enabled: !!conversationId,
+    select: (data: ConversationFeedbackResponse) => {
+      const map = new Map<number, -1 | 1>();
+      for (const fb of data.feedback) {
+        map.set(fb.messageIndex, fb.rating);
+      }
+      return map;
+    },
+  });
+}
+
+export function useSubmitFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageIndex, data }: {
+      conversationId: string;
+      messageIndex: number;
+      data: FeedbackInput;
+    }) => api.submitFeedback(conversationId, messageIndex, data),
+    onSuccess: (_result, variables) => {
+      qc.invalidateQueries({ queryKey: ["feedback", variables.conversationId] });
+    },
+  });
+}
+
+export function useDeleteFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, messageIndex }: {
+      conversationId: string;
+      messageIndex: number;
+    }) => api.deleteFeedback(conversationId, messageIndex),
+    onSuccess: (_result, variables) => {
+      qc.invalidateQueries({ queryKey: ["feedback", variables.conversationId] });
+    },
+  });
 }

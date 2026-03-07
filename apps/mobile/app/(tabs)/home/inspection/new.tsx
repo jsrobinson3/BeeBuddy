@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 
 import { DatePickerField } from "../../../../components/DatePickerField";
-import { SegmentedControl } from "../../../../components/SegmentedControl";
+import { DropdownField } from "../../../../components/DropdownField";
 import { useApiary } from "../../../../hooks/useApiaries";
 import { useHive } from "../../../../hooks/useHives";
 import { useCreateInspection } from "../../../../hooks/useInspections";
@@ -27,45 +27,25 @@ import {
   type FormState,
   type FormSetter,
   type TemplateLevel,
-  TEMPLATE_OPTIONS,
+  type RecordType,
+  RECORD_TYPE_SECTIONS,
+  TEMPLATE_TO_BACKEND,
+  NAVIGATION_ROUTES,
+  isNavigationType,
+  DEFAULT_FORM_STATE,
   ObservationFields,
   GeneralFields,
   ReminderFields,
   WeatherFields,
   buildObservations,
   buildWeather,
+  getObservationsLabel,
+  getSubmitLabel,
   inspectionFormStyles as createStyles,
 } from "../../../../components/inspection/InspectionFields";
 
 function useFormState() {
-  const [s, setS] = useState<FormState>({
-    template: "Beginner",
-    inspectedAt: null,
-    queenSeen: false,
-    eggsSeen: false,
-    larvaeSeen: false,
-    cappedBrood: false,
-    populationEstimate: null,
-    honeyStores: null,
-    temperament: null,
-    pollenStores: null,
-    broodPatternScore: null,
-    framesOfBees: null,
-    framesOfBrood: null,
-    pestSigns: [],
-    numSupers: null,
-    diseaseSigns: [],
-    varroaCount: null,
-    impression: null,
-    attention: false,
-    durationMinutes: null,
-    notes: "",
-    tempC: "",
-    humidityPercent: "",
-    conditions: null,
-    reminder: "",
-    reminderDate: null,
-  });
+  const [s, setS] = useState<FormState>({ ...DEFAULT_FORM_STATE });
 
   function set<K extends keyof FormState>(
     key: K,
@@ -80,9 +60,11 @@ function useFormState() {
 function SubmitButton({
   isPending,
   onPress,
+  label,
 }: {
   isPending: boolean;
   onPress: () => void;
+  label: string;
 }) {
   const styles = useStyles(createStyles);
   return (
@@ -95,7 +77,7 @@ function SubmitButton({
       disabled={isPending}
     >
       <Text style={styles.submitText}>
-        {isPending ? "Creating..." : "Create Inspection"}
+        {isPending ? "Creating..." : label}
       </Text>
     </Pressable>
   );
@@ -119,6 +101,7 @@ function FormContent({
   set,
   isPending,
   onSubmit,
+  onRecordTypeChange,
   tempLabel,
   system,
   weatherAutoFilled,
@@ -127,26 +110,32 @@ function FormContent({
   set: FormSetter;
   isPending: boolean;
   onSubmit: () => void;
+  onRecordTypeChange: (value: string) => void;
   tempLabel: string;
   system: string;
   weatherAutoFilled: boolean;
 }) {
   const styles = useStyles(createStyles);
   const autoFillStyles = useStyles(createAutoFillStyles);
+  const obsLabel = getObservationsLabel(s.template);
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <DatePickerField
-        label="Inspection Date"
+        label="Date"
         value={s.inspectedAt}
         onChange={(v) => set("inspectedAt", v)}
         placeholder="Today"
       />
-      <SegmentedControl
-        options={TEMPLATE_OPTIONS}
+      <DropdownField
+        label="Record Type"
+        options={RECORD_TYPE_SECTIONS}
         selected={s.template}
-        onChange={(v) => set("template", v as TemplateLevel)}
+        onChange={onRecordTypeChange}
       />
-      <Text style={styles.sectionLabel}>Observations</Text>
+      {obsLabel !== "" && (
+        <Text style={styles.sectionLabel}>{obsLabel}</Text>
+      )}
       <ObservationFields s={s} set={set} />
       <Text style={styles.sectionLabel}>General</Text>
       <GeneralFields s={s} set={set} />
@@ -159,7 +148,11 @@ function FormContent({
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
       <Text style={styles.sectionLabel}>Reminder</Text>
       <ReminderFields s={s} set={set} />
-      <SubmitButton isPending={isPending} onPress={onSubmit} />
+      <SubmitButton
+        isPending={isPending}
+        onPress={onSubmit}
+        label={getSubmitLabel(s.template)}
+      />
     </ScrollView>
   );
 }
@@ -200,6 +193,18 @@ export default function CreateInspectionScreen() {
     }
   }, [weather, s.tempC, s.humidityPercent, s.conditions, units, set]);
 
+  const handleRecordTypeChange = useCallback(
+    (value: string) => {
+      if (isNavigationType(value)) {
+        const route = NAVIGATION_ROUTES[value];
+        router.replace(`${route}?hive_id=${hive_id}` as any);
+        return;
+      }
+      set("template", value as TemplateLevel);
+    },
+    [router, hive_id, set],
+  );
+
   async function handleSubmit() {
     try {
       const weather = buildWeather(s);
@@ -212,7 +217,7 @@ export default function CreateInspectionScreen() {
       const input: CreateInspectionInput = {
         hiveId: hive_id!,
         inspectedAt: inspectedAt,
-        experienceTemplate: s.template.toLowerCase(),
+        experienceTemplate: TEMPLATE_TO_BACKEND[s.template],
         observations: buildObservations(s),
         weather,
         impression: s.impression ?? undefined,
@@ -247,6 +252,7 @@ export default function CreateInspectionScreen() {
         set={set}
         isPending={createInspection.isPending}
         onSubmit={handleSubmit}
+        onRecordTypeChange={handleRecordTypeChange}
         tempLabel={units.tempLabel}
         system={units.system}
         weatherAutoFilled={weatherAutoFilled}

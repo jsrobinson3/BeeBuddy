@@ -21,6 +21,7 @@ export type User = {
   name: string | null;
   email: string;
   experienceLevel: string | null;
+  isAdmin: boolean;
 };
 
 type AuthState = {
@@ -55,6 +56,7 @@ function parseUser(data: Record<string, unknown>): User {
     email: data.email,
     name: (data.name as string) ?? null,
     experienceLevel: (data.experienceLevel as string) ?? null,
+    isAdmin: Boolean(data.isAdmin),
   };
 }
 
