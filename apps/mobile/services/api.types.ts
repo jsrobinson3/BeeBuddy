@@ -608,6 +608,11 @@ export interface AdminUserUpdate {
   emailVerified?: boolean;
 }
 
+export interface PaginatedAdminUsers {
+  items: AdminUser[];
+  total: number;
+}
+
 export interface AdminStats {
   totalUsers: number;
   totalApiaries: number;

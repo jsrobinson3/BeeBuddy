@@ -124,6 +124,7 @@ import type {
   AdminUser,
   AdminUserUpdate,
   AdminStats,
+  PaginatedAdminUsers,
   OAuth2Client,
   OAuth2ClientCreate,
   OAuth2ClientUpdate,
@@ -686,7 +687,8 @@ class ApiClient {
     if (params?.search) qs.set("search", params.search);
     if (params?.includeDeleted) qs.set("include_deleted", "true");
     const query = qs.toString() ? `?${qs.toString()}` : "";
-    return this.request<AdminUser[]>(`/admin/users${query}`);
+    const resp = await this.request<PaginatedAdminUsers>(`/admin/users${query}`);
+    return resp;
   }
 
   async getAdminUser(id: string) {

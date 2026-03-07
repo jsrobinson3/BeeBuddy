@@ -4,6 +4,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from app.auth.jwt import decode_token
 from app.config import get_settings
 
 
@@ -15,8 +16,6 @@ def _get_user_or_ip(request: Request) -> str:
         token = request.cookies.get("access_token")
     if token:
         try:
-            from app.auth.jwt import decode_token
-
             payload = decode_token(token)
             user_id = payload.get("sub")
             if user_id and payload.get("type") == "access":

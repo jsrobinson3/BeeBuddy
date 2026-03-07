@@ -20,6 +20,7 @@ export function useAdminUsers(params?: {
   return useQuery({
     queryKey: ["admin", "users", params],
     queryFn: () => api.getAdminUsers(params),
+    select: (data) => ({ items: data.items, total: data.total }),
   });
 }
 

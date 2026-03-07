@@ -1,4 +1,4 @@
-"""Unit tests for app.services.admin_service — dashboard stats, user counts,
+"""Unit tests for app.services.admin_service — dashboard stats, UserWithCounts,
 mass-assignment allowlists, and redirect URI validation.
 
 Tests mock the database session to verify query logic and security guards.
@@ -15,7 +15,7 @@ from app.schemas.admin import OAuth2ClientCreate, OAuth2ClientUpdate
 from app.services.admin_service import (
     OAUTH_CLIENT_ALLOWED_FIELDS,
     USER_ADMIN_ALLOWED_FIELDS,
-    _attach_counts,
+    UserWithCounts,
     get_dashboard_stats,
     update_oauth_client,
     update_user_admin,
@@ -53,32 +53,43 @@ def _fake_user(**overrides):
 
 
 # ---------------------------------------------------------------------------
-# _attach_counts
+# UserWithCounts
 # ---------------------------------------------------------------------------
 
 
-class TestAttachCounts:
-    def test_attaches_all_fields(self):
+class TestUserWithCounts:
+    def test_stores_all_count_fields(self):
         user = _fake_user()
-        result = _attach_counts(user, 3, 7, 15000, 42)
-        assert result.apiary_count == 3
-        assert result.hive_count == 7
-        assert result.total_ai_tokens == 15000
-        assert result.ai_requests_30d == 42
+        uwc = UserWithCounts(
+            user=user, apiary_count=3, hive_count=7,
+            total_ai_tokens=15000, ai_requests_30d=42,
+        )
+        assert uwc.apiary_count == 3
+        assert uwc.hive_count == 7
+        assert uwc.total_ai_tokens == 15000
+        assert uwc.ai_requests_30d == 42
 
-    def test_defaults_token_fields_to_zero(self):
+    def test_defaults_count_fields_to_zero(self):
         user = _fake_user()
-        result = _attach_counts(user, 1, 2)
-        assert result.total_ai_tokens == 0
-        assert result.ai_requests_30d == 0
+        uwc = UserWithCounts(user=user)
+        assert uwc.apiary_count == 0
+        assert uwc.hive_count == 0
+        assert uwc.total_ai_tokens == 0
+        assert uwc.ai_requests_30d == 0
 
-    def test_none_values_become_zero(self):
-        user = _fake_user()
-        result = _attach_counts(user, None, None, None, None)
-        assert result.apiary_count == 0
-        assert result.hive_count == 0
-        assert result.total_ai_tokens == 0
-        assert result.ai_requests_30d == 0
+    def test_forwards_user_attributes(self):
+        user = _fake_user(name="Alice", email="alice@example.com")
+        uwc = UserWithCounts(user=user, apiary_count=1, hive_count=2)
+        assert uwc.name == "Alice"
+        assert uwc.email == "alice@example.com"
+        assert uwc.id == user.id
+
+    def test_raises_attribute_error_for_unknown(self):
+        class SimpleUser:
+            id = "u1"
+        uwc = UserWithCounts(user=SimpleUser())
+        with pytest.raises(AttributeError):
+            _ = uwc.nonexistent_attribute
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +100,7 @@ class TestAttachCounts:
 class TestGetDashboardStats:
     async def test_returns_all_stat_keys(self):
         """Dashboard stats include AI token usage fields."""
-        # 11 concurrent queries via asyncio.gather
+        # 11 sequential queries
         db = _make_db(scalars=[
             10, 5, 20, 100, 15, 3, 8, 6, 50000, 25, 120,
         ])

@@ -32,6 +32,17 @@ from app.services.tool_executor import ContextOverflowError
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Shared HTTP client for LLM streaming (avoids per-request TLS handshake)
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """Return a shared httpx.AsyncClient, creating one if needed."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=120)
+    return _http_client
+
 SYSTEM_PROMPT_TEMPLATE = """You are Buddy, a beekeeping assistant built into \
 the BeeBuddy app. You combine real expertise with an approachable tone — think \
 experienced mentor at the bee yard, not textbook or chatbot.
@@ -293,7 +304,7 @@ async def _stream_openai_compat(
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
 
-    client = httpx.AsyncClient(timeout=120)
+    client = _get_http_client()
     response = await client.send(
         client.build_request("POST", url, json=body, headers=headers),
         stream=True,
@@ -308,7 +319,6 @@ async def _stream_openai_compat(
                 yield content
     finally:
         await response.aclose()
-        await client.aclose()
 
 
 def _parse_openai_sse(
@@ -365,7 +375,7 @@ async def _stream_anthropic(
     }
     url = f"{settings.llm_base_url}/messages"
 
-    client = httpx.AsyncClient(timeout=120)
+    client = _get_http_client()
     response = await client.send(
         client.build_request("POST", url, json=body, headers=headers),
         stream=True,
@@ -386,7 +396,6 @@ async def _stream_anthropic(
                 yield text
     finally:
         await response.aclose()
-        await client.aclose()
 
 
 def _parse_anthropic_sse(

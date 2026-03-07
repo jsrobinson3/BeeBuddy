@@ -170,10 +170,11 @@ export default function UsersScreen() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const { data: users, isLoading } = useAdminUsers({
+  const { data, isLoading } = useAdminUsers({
     search: debouncedSearch || undefined,
     includeDeleted,
   });
+  const users = data?.items;
 
   const renderItem = useCallback(
     ({ item }: { item: AdminUser }) => (

@@ -65,16 +65,17 @@ async def update_user(
     user_id: UUID,
     data: AdminUserUpdate,
     db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(get_admin_user),
+    admin: User = Depends(get_admin_user),
 ):
     """Update admin-controlled fields on a user."""
-    user = await admin_service.get_user_detail(db, user_id)
+    update_data = data.model_dump(exclude_unset=True)
+    if update_data.get("is_admin") is False and user_id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot revoke your own admin status")
+    user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    updated = await admin_service.update_user_admin(
-        db, user, data.model_dump(exclude_unset=True)
-    )
-    return await admin_service.get_user_detail(db, updated.id)
+    await admin_service.update_user_admin(db, user, update_data)
+    return await admin_service.get_user_detail(db, user_id)
 
 
 @router.post("/users/{user_id}/restore", response_model=AdminUserResponse)

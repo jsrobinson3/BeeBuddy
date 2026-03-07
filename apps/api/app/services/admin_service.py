@@ -1,6 +1,6 @@
 """Admin service layer — dashboard stats, user management, OAuth client CRUD."""
 
-import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -22,6 +22,35 @@ USER_ADMIN_ALLOWED_FIELDS = {"is_admin", "email_verified"}
 OAUTH_CLIENT_ALLOWED_FIELDS = {"name", "redirect_uris", "is_active"}
 
 
+# ---------------------------------------------------------------------------
+# User + counts wrapper (replaces monkey-patching ORM model attributes)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UserWithCounts:
+    """User data with aggregate counts for admin views.
+
+    Forwards attribute access to the wrapped User so Pydantic's
+    ``from_attributes=True`` can read ORM columns like ``id``, ``email``, etc.
+    """
+
+    user: User
+    apiary_count: int = 0
+    hive_count: int = 0
+    total_ai_tokens: int = 0
+    ai_requests_30d: int = 0
+
+    def __getattr__(self, name: str):
+        """Forward unknown attribute lookups to the wrapped User model."""
+        return getattr(self.user, name)
+
+
+# ---------------------------------------------------------------------------
+# Internal query helpers
+# ---------------------------------------------------------------------------
+
+
 async def _count(db: AsyncSession, model, *filters) -> int:
     """Count non-deleted rows for a model with optional extra filters."""
     stmt = (
@@ -37,7 +66,7 @@ async def _sum_tokens(db: AsyncSession, *filters) -> int:
     stmt = (
         select(func.coalesce(func.sum(AITokenUsage.total_tokens), 0))
         .select_from(AITokenUsage)
-        .where(*filters)
+        .where(AITokenUsage.deleted_at.is_(None), *filters)
     )
     return (await db.execute(stmt)).scalar_one()
 
@@ -47,14 +76,9 @@ async def _count_requests(db: AsyncSession, *filters) -> int:
     stmt = (
         select(func.count())
         .select_from(AITokenUsage)
-        .where(*filters)
+        .where(AITokenUsage.deleted_at.is_(None), *filters)
     )
     return (await db.execute(stmt)).scalar_one()
-
-
-# ---------------------------------------------------------------------------
-# Per-user aggregate counts (used by list_users / get_user_detail)
-# ---------------------------------------------------------------------------
 
 
 async def _count_user_hives(db: AsyncSession, user_id: UUID) -> int:
@@ -68,71 +92,90 @@ async def _count_user_hives(db: AsyncSession, user_id: UUID) -> int:
     return (await db.execute(stmt)).scalar_one()
 
 
-async def _user_aggregate_counts(
-    db: AsyncSession, user_id: UUID
-) -> tuple[int, int, int, int]:
-    """Fetch per-user aggregate counts concurrently via asyncio.gather."""
-    d30 = datetime.now(UTC) - timedelta(days=30)
-
-    return await asyncio.gather(
-        _count(db, Apiary, Apiary.user_id == user_id),
-        _count_user_hives(db, user_id),
-        _sum_tokens(db, AITokenUsage.user_id == user_id),
-        _count_requests(
-            db, AITokenUsage.user_id == user_id, AITokenUsage.created_at >= d30
-        ),
-    )
-
-
-def _attach_counts(
-    user: User,
-    apiary_count: int,
-    hive_count: int,
-    total_ai_tokens: int = 0,
-    ai_requests_30d: int = 0,
-) -> User:
-    """Attach aggregate counts to a user instance."""
-    user.apiary_count = apiary_count or 0
-    user.hive_count = hive_count or 0
-    user.total_ai_tokens = total_ai_tokens or 0
-    user.ai_requests_30d = ai_requests_30d or 0
-    return user
-
-
 # ---------------------------------------------------------------------------
 # Dashboard stats
 # ---------------------------------------------------------------------------
 
 
 async def get_dashboard_stats(db: AsyncSession) -> dict:
-    """Aggregate counts for the admin dashboard (concurrent via asyncio.gather)."""
+    """Aggregate counts for the admin dashboard (sequential queries)."""
     now = datetime.now(UTC)
     d7, d30 = now - timedelta(days=7), now - timedelta(days=30)
 
-    keys = [
-        "total_users", "total_apiaries", "total_hives", "total_inspections",
-        "total_conversations", "new_users_7d", "new_users_30d",
-        "active_users_7d", "total_ai_tokens", "ai_requests_7d", "ai_requests_30d",
-    ]
-    values = await asyncio.gather(
-        _count(db, User),
-        _count(db, Apiary),
-        _count(db, Hive),
-        _count(db, Inspection),
-        _count(db, AIConversation),
-        _count(db, User, User.created_at >= d7),
-        _count(db, User, User.created_at >= d30),
-        _count(db, User, User.last_login_at.isnot(None), User.last_login_at >= d7),
-        _sum_tokens(db),
-        _count_requests(db, AITokenUsage.created_at >= d7),
-        _count_requests(db, AITokenUsage.created_at >= d30),
+    total_users = await _count(db, User)
+    total_apiaries = await _count(db, Apiary)
+    total_hives = await _count(db, Hive)
+    total_inspections = await _count(db, Inspection)
+    total_conversations = await _count(db, AIConversation)
+    new_users_7d = await _count(db, User, User.created_at >= d7)
+    new_users_30d = await _count(db, User, User.created_at >= d30)
+    active_users_7d = await _count(
+        db, User, User.last_login_at.isnot(None), User.last_login_at >= d7,
     )
-    return dict(zip(keys, values))
+    total_ai_tokens = await _sum_tokens(db)
+    ai_requests_7d = await _count_requests(db, AITokenUsage.created_at >= d7)
+    ai_requests_30d = await _count_requests(db, AITokenUsage.created_at >= d30)
+
+    return {
+        "total_users": total_users,
+        "total_apiaries": total_apiaries,
+        "total_hives": total_hives,
+        "total_inspections": total_inspections,
+        "total_conversations": total_conversations,
+        "new_users_7d": new_users_7d,
+        "new_users_30d": new_users_30d,
+        "active_users_7d": active_users_7d,
+        "total_ai_tokens": total_ai_tokens,
+        "ai_requests_7d": ai_requests_7d,
+        "ai_requests_30d": ai_requests_30d,
+    }
 
 
 # ---------------------------------------------------------------------------
 # User management
 # ---------------------------------------------------------------------------
+
+
+def _user_count_subqueries():
+    """Build correlated scalar subqueries for per-user aggregate counts."""
+    d30 = datetime.now(UTC) - timedelta(days=30)
+
+    apiary_sq = (
+        select(func.count())
+        .where(Apiary.user_id == User.id, Apiary.deleted_at.is_(None))
+        .correlate(User)
+        .scalar_subquery()
+    )
+    hive_sq = (
+        select(func.count())
+        .select_from(Hive)
+        .join(Apiary, Hive.apiary_id == Apiary.id)
+        .where(
+            Apiary.user_id == User.id,
+            Hive.deleted_at.is_(None),
+            Apiary.deleted_at.is_(None),
+        )
+        .correlate(User)
+        .scalar_subquery()
+    )
+    token_sq = (
+        select(func.coalesce(func.sum(AITokenUsage.total_tokens), 0))
+        .where(AITokenUsage.user_id == User.id, AITokenUsage.deleted_at.is_(None))
+        .correlate(User)
+        .scalar_subquery()
+    )
+    req_sq = (
+        select(func.count())
+        .select_from(AITokenUsage)
+        .where(
+            AITokenUsage.user_id == User.id,
+            AITokenUsage.deleted_at.is_(None),
+            AITokenUsage.created_at >= d30,
+        )
+        .correlate(User)
+        .scalar_subquery()
+    )
+    return apiary_sq, hive_sq, token_sq, req_sq
 
 
 async def list_users(
@@ -141,12 +184,8 @@ async def list_users(
     include_deleted: bool = False,
     limit: int = 50,
     offset: int = 0,
-) -> tuple[list, int]:
-    """Paginated user list with optional search. Returns (users, total_count).
-
-    Uses asyncio.gather for per-user aggregate counts instead of correlated
-    subqueries.
-    """
+) -> tuple[list[UserWithCounts], int]:
+    """Paginated user list with search. Returns (users, total_count)."""
     base_filter = [] if include_deleted else [User.deleted_at.is_(None)]
     if search:
         pattern = f"%{search}%"
@@ -157,34 +196,56 @@ async def list_users(
     count_stmt = select(func.count()).select_from(User).where(*base_filter)
     total = (await db.execute(count_stmt)).scalar_one()
 
+    apiary_sq, hive_sq, token_sq, req_sq = _user_count_subqueries()
     stmt = (
-        select(User)
+        select(
+            User,
+            apiary_sq.label("apiary_count"),
+            hive_sq.label("hive_count"),
+            token_sq.label("total_ai_tokens"),
+            req_sq.label("ai_requests_30d"),
+        )
         .where(*base_filter)
         .order_by(User.created_at.desc())
         .limit(limit)
         .offset(offset)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-
-    # Gather aggregate counts concurrently for all users
-    count_tasks = [_user_aggregate_counts(db, u.id) for u in rows]
-    counts = await asyncio.gather(*count_tasks) if count_tasks else []
+    rows = (await db.execute(stmt)).all()
 
     users = [
-        _attach_counts(user, ac, hc, tk, ar)
-        for user, (ac, hc, tk, ar) in zip(rows, counts)
+        UserWithCounts(
+            user=row[0],
+            apiary_count=row[1],
+            hive_count=row[2],
+            total_ai_tokens=row[3],
+            ai_requests_30d=row[4],
+        )
+        for row in rows
     ]
     return users, total
 
 
-async def get_user_detail(db: AsyncSession, user_id: UUID):
-    """Get a single user with counts (including deleted)."""
+async def get_user_detail(db: AsyncSession, user_id: UUID) -> UserWithCounts | None:
+    """Get a single user with aggregate counts (including soft-deleted users)."""
     stmt = select(User).where(User.id == user_id)
     user = (await db.execute(stmt)).scalar_one_or_none()
     if user is None:
         return None
-    ac, hc, tk, ar = await _user_aggregate_counts(db, user_id)
-    return _attach_counts(user, ac, hc, tk, ar)
+
+    d30 = datetime.now(UTC) - timedelta(days=30)
+    apiary_count = await _count(db, Apiary, Apiary.user_id == user_id)
+    hive_count = await _count_user_hives(db, user_id)
+    total_ai_tokens = await _sum_tokens(db, AITokenUsage.user_id == user_id)
+    ai_requests_30d = await _count_requests(
+        db, AITokenUsage.user_id == user_id, AITokenUsage.created_at >= d30,
+    )
+    return UserWithCounts(
+        user=user,
+        apiary_count=apiary_count,
+        hive_count=hive_count,
+        total_ai_tokens=total_ai_tokens,
+        ai_requests_30d=ai_requests_30d,
+    )
 
 
 async def update_user_admin(db: AsyncSession, user: User, data: dict) -> User:

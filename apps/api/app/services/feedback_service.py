@@ -1,9 +1,10 @@
 """Service layer for AI message feedback."""
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -98,7 +99,11 @@ async def get_conversation_feedback(
 
     result = await db.execute(
         select(MessageFeedback)
-        .where(MessageFeedback.conversation_id == conversation_id)
+        .where(
+            MessageFeedback.conversation_id == conversation_id,
+            MessageFeedback.user_id == user_id,
+            MessageFeedback.deleted_at.is_(None),
+        )
         .order_by(MessageFeedback.message_index)
     )
     return list(result.scalars().all())
@@ -113,10 +118,16 @@ async def delete_feedback(
         return False
 
     result = await db.execute(
-        delete(MessageFeedback).where(
+        select(MessageFeedback).where(
             MessageFeedback.conversation_id == conversation_id,
             MessageFeedback.message_index == message_index,
+            MessageFeedback.user_id == user_id,
+            MessageFeedback.deleted_at.is_(None),
         )
     )
+    feedback = result.scalar_one_or_none()
+    if feedback is None:
+        return False
+    feedback.deleted_at = datetime.now(UTC)
     await db.commit()
-    return result.rowcount > 0
+    return True
