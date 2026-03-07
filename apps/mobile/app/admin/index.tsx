@@ -114,9 +114,11 @@ function StatsGrid({ stats }: { stats: NonNullable<ReturnType<typeof useAdminSta
       <StatCard value={stats.totalApiaries} label="Total Apiaries" />
       <StatCard value={stats.totalInspections} label="Inspections" />
       <StatCard value={stats.totalConversations} label="AI Conversations" />
-      <StatCard value={stats.activeUsers7d} label="Active (7d)" />
-      <StatCard value={stats.newUsers7d} label="New Users (7d)" />
-      <StatCard value={stats.newUsers30d} label="New Users (30d)" />
+      <StatCard value={stats.totalAiTokens} label="AI Tokens Used" />
+      <StatCard value={stats.aiRequests7D} label="AI Requests (7d)" />
+      <StatCard value={stats.activeUsers7D} label="Active (7d)" />
+      <StatCard value={stats.newUsers7D} label="New Users (7d)" />
+      <StatCard value={stats.newUsers30D} label="New Users (30d)" />
     </View>
   );
 }

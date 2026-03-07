@@ -177,6 +177,8 @@ function ActivityCard({ user }: { user: AdminUser }) {
       <InfoField label="Last Login" value={formatDate(user.lastLoginAt)} />
       <InfoField label="Apiaries" value={String(user.apiaryCount)} />
       <InfoField label="Hives" value={String(user.hiveCount)} />
+      <InfoField label="AI Tokens Used" value={user.totalAiTokens.toLocaleString()} />
+      <InfoField label="AI Requests (30d)" value={String(user.aiRequests30D)} />
     </View>
   );
 }

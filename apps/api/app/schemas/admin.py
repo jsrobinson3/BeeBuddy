@@ -20,6 +20,8 @@ class AdminUserResponse(BaseResponse):
     deleted_at: datetime | None = None
     apiary_count: int = 0
     hive_count: int = 0
+    total_ai_tokens: int = 0
+    ai_requests_30d: int = 0
 
 
 class AdminUserUpdate(CamelBase):
@@ -40,6 +42,9 @@ class AdminStatsResponse(BaseResponse):
     new_users_7d: int
     new_users_30d: int
     active_users_7d: int
+    total_ai_tokens: int
+    ai_requests_7d: int
+    ai_requests_30d: int
 
 
 class OAuth2ClientCreate(CamelBase):

@@ -569,6 +569,8 @@ export interface AdminUser {
   deletedAt: string | null;
   apiaryCount: number;
   hiveCount: number;
+  totalAiTokens: number;
+  aiRequests30D: number;
 }
 
 export interface AdminUserUpdate {
@@ -582,9 +584,12 @@ export interface AdminStats {
   totalHives: number;
   totalInspections: number;
   totalConversations: number;
-  newUsers7d: number;
-  newUsers30d: number;
-  activeUsers7d: number;
+  newUsers7D: number;
+  newUsers30D: number;
+  activeUsers7D: number;
+  totalAiTokens: number;
+  aiRequests7D: number;
+  aiRequests30D: number;
 }
 
 export interface OAuth2Client {
