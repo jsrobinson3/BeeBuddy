@@ -70,15 +70,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: testing
-          MINIO_ROOT_PASSWORD: testing1
-          MINIO_DEFAULT_BUCKETS: test-bucket
-        ports:
-          - 9000:9000
-
     env:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/beebuddy
       REDIS_URL: redis://localhost:6379/0
@@ -104,6 +95,24 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=testing \
+            -e MINIO_ROOT_PASSWORD=testing1 \
+            minio/minio server /data
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null 2>&1; then
+              echo "MinIO is ready!"
+              break
+            fi
+            echo "Attempt $i/15 - waiting..."
+            sleep 1
+          done
+          docker exec minio mc alias set local http://localhost:9000 testing testing1
+          docker exec minio mc mb local/test-bucket
 
       - name: Install dependencies
         run: uv sync --frozen --dev
