@@ -17,10 +17,14 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Send } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 
+import * as Speech from "expo-speech";
+
 import type { ChatMessage } from "../services/api";
-import { useConversation, useChatStream } from "../hooks/useChat";
+import { useConversation, useChatStream, useConversationFeedback } from "../hooks/useChat";
 import { ConfirmationCard } from "./ConfirmationCard";
+import { FeedbackButtons } from "./FeedbackButtons";
 import { ResponsiveContainer } from "./ResponsiveContainer";
+import { VoiceInputButton, type VoiceInputButtonHandle } from "./VoiceInputButton";
 import { SleepyBee } from "./illustrations";
 import {
   useStyles,
@@ -31,8 +35,15 @@ import {
   type ThemeColors,
 } from "../theme";
 
+const SecureStoreModule: typeof import("expo-secure-store") | null =
+  Platform.OS === "web" ? null : require("expo-secure-store");
+
 interface ChatViewProps {
   conversationId?: string;
+}
+
+interface DisplayMessage extends ChatMessage {
+  serverIndex: number;
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────
@@ -152,11 +163,20 @@ function TypingIndicator() {
 
 // ── Message Bubble ────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  conversationId,
+  feedbackRating,
+}: {
+  message: DisplayMessage;
+  conversationId?: string;
+  feedbackRating?: -1 | 1;
+}) {
   const styles = useStyles(createBubbleStyles);
   const mdStyles = useStyles(createMarkdownStyles);
   const isUser = message.role === "user";
   const isBuzzing = !isUser && message.content === BUZZ_PLACEHOLDER;
+  const showFeedback = !isUser && !isBuzzing && !!conversationId && message.serverIndex >= 0;
   return (
     <View style={isUser ? styles.userRow : styles.assistantRow}>
       <View style={isUser ? styles.userBubble : styles.assistantBubble}>
@@ -165,6 +185,72 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         ) : (
           <Markdown style={mdStyles}>{message.content}</Markdown>
         )}
+        {showFeedback && (
+          <FeedbackButtons
+            conversationId={conversationId}
+            messageIndex={message.serverIndex}
+            existingRating={feedbackRating}
+          />
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ── Converse-mode hint ───────────────────────────────────────────────────
+
+const CONVERSE_HINT_KEY = "beebuddy_converse_hint_dismissed";
+
+const createHintStyles = (c: ThemeColors) => ({
+  container: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.xs,
+    padding: spacing.md,
+    backgroundColor: c.bgElevated,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: c.honey,
+    gap: spacing.sm,
+  },
+  text: {
+    fontFamily: typography.families.body,
+    fontSize: 13,
+    color: c.textSecondary,
+  },
+  actions: {
+    flexDirection: "row" as const,
+    justifyContent: "flex-end" as const,
+    gap: spacing.md,
+  },
+  dismissText: {
+    fontFamily: typography.families.bodySemiBold,
+    fontSize: 13,
+    color: c.textMuted,
+  },
+  foreverText: {
+    fontFamily: typography.families.bodySemiBold,
+    fontSize: 13,
+    color: c.honey,
+  },
+});
+
+function ConverseHint({ onDismiss, onDismissForever }: {
+  onDismiss: () => void;
+  onDismissForever: () => void;
+}) {
+  const styles = useStyles(createHintStyles);
+  return (
+    <View style={styles.container}>
+      <Text style={styles.text}>
+        Hold the mic button for hands-free conversation mode
+      </Text>
+      <View style={styles.actions}>
+        <Pressable onPress={onDismiss} hitSlop={4}>
+          <Text style={styles.dismissText}>Got it</Text>
+        </Pressable>
+        <Pressable onPress={onDismissForever} hitSlop={4}>
+          <Text style={styles.foreverText}>Don't show again</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -172,12 +258,34 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
 // ── Chat Input ────────────────────────────────────────────────────────────
 
-function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disabled: boolean }) {
+const VOICE_AUTO_SEND_DELAY = 1500;
+
+function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseModeToggle, micRef }: {
+  onSend: (text: string) => void;
+  onVoiceSend?: () => void;
+  disabled: boolean;
+  converseMode: boolean;
+  onConverseModeToggle: (on: boolean) => void;
+  micRef: React.RefObject<VoiceInputButtonHandle | null>;
+}) {
   const [text, setText] = useState("");
+  const [isListening, setIsListening] = useState(false);
   const { colors } = useTheme();
   const styles = useStyles(createInputStyles);
+  const autoSendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelAutoSend = useCallback(() => {
+    if (autoSendTimer.current) {
+      clearTimeout(autoSendTimer.current);
+      autoSendTimer.current = null;
+    }
+  }, []);
+
+  // Clean up timer on unmount
+  useEffect(() => cancelAutoSend, [cancelAutoSend]);
 
   const handleSend = () => {
+    cancelAutoSend();
     const trimmed = text.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
@@ -193,20 +301,62 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
     }
   };
 
+  // Cancel auto-send when user starts editing manually; exit converse mode
+  const handleChangeText = useCallback((value: string) => {
+    cancelAutoSend();
+    setText(value);
+    if (converseMode) onConverseModeToggle(false);
+  }, [cancelAutoSend, converseMode, onConverseModeToggle]);
+
+  const handleTranscript = useCallback((transcript: string) => {
+    cancelAutoSend();
+    const finalText = transcript.trim();
+    if (!finalText) return;
+    setText(finalText);
+    setIsListening(false);
+    // Auto-send after delay — user can edit or tap Send to send immediately
+    autoSendTimer.current = setTimeout(() => {
+      onSend(finalText);
+      onVoiceSend?.();
+      setText("");
+      autoSendTimer.current = null;
+    }, VOICE_AUTO_SEND_DELAY);
+  }, [cancelAutoSend, onSend, onVoiceSend]);
+
+  const handlePartialTranscript = useCallback((partial: string) => {
+    cancelAutoSend();
+    setText(partial);
+    setIsListening(true);
+  }, [cancelAutoSend]);
+
   const hasFill = text.trim().length > 0 && !disabled;
+  const placeholder = isListening
+    ? "Listening..."
+    : converseMode
+      ? "Conversation mode"
+      : "Ask about beekeeping...";
 
   return (
     <View style={styles.bar}>
       <TextInput
         style={styles.input}
-        placeholder="Ask about beekeeping..."
+        placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         value={text}
-        onChangeText={setText}
+        onChangeText={handleChangeText}
         multiline
         returnKeyType="default"
         editable={!disabled}
         onKeyPress={handleKeyPress}
+      />
+      <VoiceInputButton
+        ref={micRef}
+        onTranscript={handleTranscript}
+        onPartialTranscript={handlePartialTranscript}
+        disabled={disabled}
+        converseMode={converseMode}
+        onLongPress={() => onConverseModeToggle(true)}
+        onConverseExit={() => onConverseModeToggle(false)}
       />
       <Pressable
         style={[styles.sendButton, { backgroundColor: hasFill ? colors.primaryFill : colors.bgInputSoft }]}
@@ -309,13 +459,41 @@ function StreamErrorBanner({
   );
 }
 
+// ── TTS helpers ──────────────────────────────────────────────────────────
+
+/** Strip markdown formatting so TTS reads clean prose. */
+function stripMarkdown(md: string): string {
+  return md
+    .replace(/```[\s\S]*?```/g, "")   // fenced code blocks
+    .replace(/`([^`]+)`/g, "$1")       // inline code
+    .replace(/!\[.*?\]\(.*?\)/g, "")   // images
+    .replace(/\[([^\]]+)\]\(.*?\)/g, "$1") // links → text
+    .replace(/^#{1,6}\s+/gm, "")       // headings
+    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, "$2") // bold/italic
+    .replace(/^\s*[-*+]\s+/gm, "")     // unordered lists
+    .replace(/^\s*\d+\.\s+/gm, "")     // ordered lists
+    .replace(/\n{2,}/g, ". ")          // paragraph breaks → pause
+    .replace(/\n/g, " ")
+    .trim();
+}
+
+function speakResponse(text: string, onDone?: () => void): void {
+  const clean = stripMarkdown(text);
+  if (!clean) {
+    onDone?.();
+    return;
+  }
+  Speech.stop();
+  Speech.speak(clean, { language: "en-US", rate: 1.0, onDone });
+}
+
 // ── Main Chat View ────────────────────────────────────────────────────────
 
 export function ChatView({ conversationId }: ChatViewProps) {
   const router = useRouter();
   const headerHeight = useHeaderHeight();
   const styles = useStyles(createContainerStyles);
-  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const listRef = useRef<FlatList<DisplayMessage>>(null);
   const isNearBottom = useRef(true);
   const lastContentHeight = useRef(0);
   const isStreamingRef = useRef(false);
@@ -324,13 +502,60 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: conversation } = useConversation(conversationId);
+  const { data: feedbackMap } = useConversationFeedback(conversationId);
   const {
     sendMessage, streamingContent, streamingState, error: streamError, errorCode,
     reset, conversationId: streamConvId, pendingActions, confirmAction, rejectAction,
   } = useChatStream();
 
-  const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
+  const [localMessages, setLocalMessages] = useState<DisplayMessage[]>([]);
+  const lastSendWasVoice = useRef(false);
   const isNewChat = !conversationId;
+
+  // ── Converse mode (continuous voice chat) ────────────────────────────
+  const [converseMode, setConverseMode] = useState(false);
+  const converseModeRef = useRef(false);
+  converseModeRef.current = converseMode;
+  const micRef = useRef<VoiceInputButtonHandle>(null);
+
+  // ── "Did you know" hint ──────────────────────────────────────────────
+  const [showConverseHint, setShowConverseHint] = useState(false);
+  const hintDismissedRef = useRef(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        if (SecureStoreModule) {
+          const val = await SecureStoreModule.getItemAsync(CONVERSE_HINT_KEY);
+          if (val === "true") hintDismissedRef.current = true;
+        }
+      } catch { /* default to showing hint */ }
+    })();
+  }, []);
+
+  const handleConverseModeToggle = useCallback((on: boolean) => {
+    setConverseMode(on);
+    if (on) {
+      setShowConverseHint(false);
+    } else {
+      Speech.stop();
+      lastSendWasVoice.current = false;
+    }
+  }, []);
+
+  const handleDismissHint = useCallback(() => {
+    setShowConverseHint(false);
+  }, []);
+
+  const handleDismissHintForever = useCallback(async () => {
+    setShowConverseHint(false);
+    hintDismissedRef.current = true;
+    try {
+      if (SecureStoreModule) {
+        await SecureStoreModule.setItemAsync(CONVERSE_HINT_KEY, "true");
+      }
+    } catch { /* best-effort */ }
+  }, []);
 
   // Seed local messages from loaded conversation (exclude internal tool messages).
   // Enter "settling" mode so handleContentSizeChange keeps scrolling to bottom
@@ -342,7 +567,9 @@ export function ChatView({ conversationId }: ChatViewProps) {
       isSettling.current = true;
 
       setLocalMessages(
-        conversation.messages.filter((m) => m.role === "user" || m.role === "assistant"),
+        conversation.messages
+          .map((m, i) => ({ ...m, serverIndex: i }))
+          .filter((m) => m.role === "user" || m.role === "assistant"),
       );
 
       if (settleTimer.current) clearTimeout(settleTimer.current);
@@ -356,10 +583,10 @@ export function ChatView({ conversationId }: ChatViewProps) {
   // Include the bubble as soon as we enter any streaming phase (even before content
   // arrives) so the FlatList item count stays stable — prevents scroll-to-top on web.
   const isActive = streamingState !== "idle" && streamingState !== "error";
-  const displayMessages: ChatMessage[] = [
+  const displayMessages: DisplayMessage[] = [
     ...localMessages.filter((m) => m.role === "user" || m.role === "assistant"),
     ...(isActive || streamingContent
-      ? [{ role: "assistant" as const, content: streamingContent || "\u200B" }]
+      ? [{ role: "assistant" as const, content: streamingContent || "\u200B", serverIndex: -1 }]
       : []),
   ];
 
@@ -368,13 +595,21 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const handleSend = useCallback(
     (text: string) => {
-      const userMsg: ChatMessage = { role: "user", content: text };
+      Speech.stop();
+      const userMsg: DisplayMessage = { role: "user", content: text, serverIndex: -1 };
       const newMessages = [...localMessages, userMsg];
       setLocalMessages(newMessages);
       sendMessage(newMessages, effectiveConvId);
     },
     [localMessages, sendMessage, effectiveConvId],
   );
+
+  const handleVoiceSend = useCallback(() => {
+    lastSendWasVoice.current = true;
+    if (!hintDismissedRef.current && !converseMode) {
+      setShowConverseHint(true);
+    }
+  }, [converseMode]);
 
   // When streaming completes, persist the assistant message locally
   useEffect(() => {
@@ -383,9 +618,18 @@ export function ChatView({ conversationId }: ChatViewProps) {
       setLocalMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.content === streamingContent) return prev;
-        return [...prev, { role: "assistant", content: streamingContent }];
+        return [...prev, { role: "assistant" as const, content: streamingContent, serverIndex: -1 }];
       });
       reset();
+
+      // Read response aloud if the user's last message was voice-initiated
+      if (lastSendWasVoice.current) {
+        lastSendWasVoice.current = false;
+        const onDone = converseModeRef.current
+          ? () => { micRef.current?.startListening(); }
+          : undefined;
+        speakResponse(streamingContent, onDone);
+      }
 
       if (shouldScroll) {
         requestAnimationFrame(() => {
@@ -400,6 +644,14 @@ export function ChatView({ conversationId }: ChatViewProps) {
       }
     }
   }, [streamingState, streamingContent, reset, isNewChat, streamConvId, router]);
+
+  // Exit converse mode on streaming error
+  useEffect(() => {
+    if (streamError && converseMode) {
+      setConverseMode(false);
+      Speech.stop();
+    }
+  }, [streamError, converseMode]);
 
   // Keep streaming ref in sync so callbacks can read it without stale closures
   useEffect(() => {
@@ -458,7 +710,13 @@ export function ChatView({ conversationId }: ChatViewProps) {
           contentContainerStyle={styles.listContent}
           data={displayMessages}
           keyExtractor={(item, i) => (item as any).id ?? `msg-${i}`}
-          renderItem={({ item }) => <MessageBubble message={item} />}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              conversationId={effectiveConvId}
+              feedbackRating={feedbackMap?.get(item.serverIndex)}
+            />
+          )}
           onScroll={handleScroll}
           scrollEventThrottle={100}
           onContentSizeChange={handleContentSizeChange}
@@ -481,7 +739,17 @@ export function ChatView({ conversationId }: ChatViewProps) {
             onNewChat={() => { reset(); router.replace("/chat"); }}
           />
         )}
-        <ChatInput onSend={handleSend} disabled={streamingState !== "idle" && streamingState !== "error"} />
+        {showConverseHint && (
+          <ConverseHint onDismiss={handleDismissHint} onDismissForever={handleDismissHintForever} />
+        )}
+        <ChatInput
+          onSend={handleSend}
+          onVoiceSend={handleVoiceSend}
+          disabled={streamingState !== "idle" && streamingState !== "error"}
+          converseMode={converseMode}
+          onConverseModeToggle={handleConverseModeToggle}
+          micRef={micRef}
+        />
       </KeyboardAvoidingView>
     </ResponsiveContainer>
   );

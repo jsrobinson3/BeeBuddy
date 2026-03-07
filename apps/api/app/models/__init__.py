@@ -9,6 +9,7 @@ from app.models.harvest import Harvest
 from app.models.hive import Hive, HiveSource, HiveStatus, HiveType
 from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
+from app.models.message_feedback import MessageFeedback
 from app.models.oauth2_client import OAuth2Client
 from app.models.oauth2_code import OAuth2Code
 from app.models.pending_action import ActionStatus, PendingAction
@@ -23,6 +24,7 @@ __all__ = [
     "AIConversation",
     "AITokenUsage",
     "Base",
+    "MessageFeedback",
     "User",
     "ExperienceLevel",
     "Apiary",

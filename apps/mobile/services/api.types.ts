@@ -530,6 +530,27 @@ export interface ChatRequest {
   conversationId?: string;
 }
 
+// ─── Message Feedback Types ──────────────────────────────────────────────────
+
+export interface FeedbackInput {
+  rating: -1 | 1;
+  correction?: string;
+}
+
+export interface MessageFeedbackResponse {
+  id: string;
+  conversationId: string;
+  messageIndex: number;
+  rating: -1 | 1;
+  correction: string | null;
+  modelVersion: string | null;
+  createdAt: string;
+}
+
+export interface ConversationFeedbackResponse {
+  feedback: MessageFeedbackResponse[];
+}
+
 // ─── Pending Action Types ────────────────────────────────────────────────────
 
 export interface PendingAction {

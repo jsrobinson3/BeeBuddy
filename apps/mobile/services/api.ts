@@ -64,6 +64,9 @@ export type {
   ChatRequest,
   PendingAction,
   PendingActionResponse,
+  FeedbackInput,
+  MessageFeedbackResponse,
+  ConversationFeedbackResponse,
   AdminUser,
   AdminUserUpdate,
   AdminStats,
@@ -115,6 +118,9 @@ import type {
   Conversation,
   ConversationDetail,
   PendingActionResponse,
+  FeedbackInput,
+  MessageFeedbackResponse,
+  ConversationFeedbackResponse,
   AdminUser,
   AdminUserUpdate,
   AdminStats,
@@ -645,6 +651,28 @@ class ApiClient {
     return this.request<void>(`/ai/actions/${actionId}/reject`, {
       method: "POST",
     });
+  }
+
+  // ── Feedback ──────────────────────────────────────────────────────────────
+
+  async submitFeedback(conversationId: string, messageIndex: number, data: FeedbackInput) {
+    return this.request<MessageFeedbackResponse>(
+      `/ai/conversations/${conversationId}/messages/${messageIndex}/feedback`,
+      { method: "POST", body: JSON.stringify(data) },
+    );
+  }
+
+  async getConversationFeedback(conversationId: string) {
+    return this.request<ConversationFeedbackResponse>(
+      `/ai/conversations/${conversationId}/feedback`,
+    );
+  }
+
+  async deleteFeedback(conversationId: string, messageIndex: number) {
+    return this.request<void>(
+      `/ai/conversations/${conversationId}/messages/${messageIndex}/feedback`,
+      { method: "DELETE" },
+    );
   }
 
   // ── Admin ─────────────────────────────────────────────────────────────────

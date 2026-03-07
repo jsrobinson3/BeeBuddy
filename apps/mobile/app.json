@@ -19,6 +19,7 @@
       "usesAppleSignIn": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "BeeBuddy uses your location to set apiary coordinates and provide local weather-based task recommendations.",
+        "NSMicrophoneUsageDescription": "BeeBuddy uses your microphone for voice-to-text input during inspections and chats.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -31,7 +32,8 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -71,6 +73,13 @@
           "android": {
             "kotlinVersion": "2.1.20"
           }
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "BeeBuddy uses your microphone for voice-to-text input during inspections and chats.",
+          "speechRecognitionPermission": "BeeBuddy uses speech recognition for hands-free input during inspections."
         }
       ]
     ],
