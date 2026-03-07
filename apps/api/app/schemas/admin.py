@@ -1,7 +1,10 @@
 """Admin panel schemas."""
 
 from datetime import datetime
+from urllib.parse import urlparse
 from uuid import UUID
+
+from pydantic import field_validator
 
 from app.schemas.common import BaseResponse, CamelBase
 
@@ -24,6 +27,13 @@ class AdminUserResponse(BaseResponse):
     ai_requests_30d: int = 0
 
 
+class PaginatedUsersResponse(CamelBase):
+    """Paginated list of admin user records."""
+
+    items: list[AdminUserResponse]
+    total: int
+
+
 class AdminUserUpdate(CamelBase):
     """Admin update fields for a user."""
 
@@ -31,8 +41,8 @@ class AdminUserUpdate(CamelBase):
     email_verified: bool | None = None
 
 
-class AdminStatsResponse(BaseResponse):
-    """Dashboard statistics."""
+class AdminStatsResponse(CamelBase):
+    """Dashboard statistics (standalone — no id/created_at from BaseResponse)."""
 
     total_users: int
     total_apiaries: int
@@ -47,12 +57,31 @@ class AdminStatsResponse(BaseResponse):
     ai_requests_30d: int
 
 
+def _validate_redirect_uris(uris: list[str]) -> list[str]:
+    """Ensure each URI uses https:// or http://localhost."""
+    for uri in uris:
+        parsed = urlparse(uri)
+        if parsed.scheme == "https":
+            continue
+        if parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1"):
+            continue
+        raise ValueError(
+            f"Redirect URI must use https:// or http://localhost: {uri}"
+        )
+    return uris
+
+
 class OAuth2ClientCreate(CamelBase):
     """Create a new OAuth2 client."""
 
     client_id: str
     name: str
     redirect_uris: list[str] = []
+
+    @field_validator("redirect_uris")
+    @classmethod
+    def check_redirect_uris(cls, v: list[str]) -> list[str]:
+        return _validate_redirect_uris(v)
 
 
 class OAuth2ClientUpdate(CamelBase):
@@ -61,6 +90,13 @@ class OAuth2ClientUpdate(CamelBase):
     name: str | None = None
     redirect_uris: list[str] | None = None
     is_active: bool | None = None
+
+    @field_validator("redirect_uris")
+    @classmethod
+    def check_redirect_uris(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        return _validate_redirect_uris(v)
 
 
 class OAuth2ClientResponse(BaseResponse):

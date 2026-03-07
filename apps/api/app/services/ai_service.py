@@ -24,6 +24,7 @@ from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
+from app.services._llm_utils import _split_system
 from app.services.token_usage import record_chat_usage
 from app.services.tool_executor import ColdStartError as ToolColdStartError
 from app.services.tool_executor import ContextOverflowError
@@ -341,18 +342,6 @@ def _parse_openai_sse(
 # ---------------------------------------------------------------------------
 
 ANTHROPIC_VERSION = "2023-06-01"
-
-
-def _split_system(messages: list[dict]) -> tuple[str, list[dict]]:
-    """Separate system message from chat messages for Anthropic API."""
-    system = ""
-    chat: list[dict] = []
-    for m in messages:
-        if m["role"] == "system":
-            system = m["content"]
-        else:
-            chat.append(m)
-    return system, chat
 
 
 async def _stream_anthropic(

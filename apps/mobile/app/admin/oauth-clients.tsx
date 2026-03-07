@@ -18,6 +18,7 @@ import {
 import type { OAuth2Client } from "../../services/api";
 import {
   useStyles,
+  useTheme,
   typography,
   spacing,
   radii,
@@ -140,6 +141,7 @@ function ClientCard({ client }: { client: OAuth2Client }) {
 
 function CreateForm() {
   const s = useStyles(createFormStyles);
+  const { colors } = useTheme();
   const createClient = useCreateOAuth2Client();
   const [clientId, setClientId] = useState("");
   const [name, setName] = useState("");
@@ -174,6 +176,7 @@ function CreateForm() {
       <TextInput
         style={s.input}
         placeholder="Client ID"
+        placeholderTextColor={colors.textMuted}
         value={clientId}
         onChangeText={setClientId}
         autoCapitalize="none"
@@ -181,12 +184,14 @@ function CreateForm() {
       <TextInput
         style={s.input}
         placeholder="Display Name"
+        placeholderTextColor={colors.textMuted}
         value={name}
         onChangeText={setName}
       />
       <TextInput
         style={s.input}
         placeholder="Redirect URIs (comma-separated)"
+        placeholderTextColor={colors.textMuted}
         value={redirectUris}
         onChangeText={setRedirectUris}
         autoCapitalize="none"

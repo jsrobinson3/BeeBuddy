@@ -39,6 +39,8 @@ import {
   WeatherFields,
   buildObservations,
   buildWeather,
+  getObservationsLabel,
+  getSubmitLabel,
   inspectionFormStyles as createStyles,
 } from "../../../../components/inspection/InspectionFields";
 
@@ -93,22 +95,6 @@ const createAutoFillStyles = (c: ThemeColors) => ({
     color: c.honey,
   },
 });
-
-function getObservationsLabel(template: TemplateLevel): string {
-  if (template === "Mite Assessment") return "Assessment";
-  if (template === "Feed Bees") return "Feeding Details";
-  if (template === "Winterize") return "Preparation";
-  if (template === "Journal Entry") return "";
-  return "Observations";
-}
-
-function getSubmitLabel(template: TemplateLevel): string {
-  if (template === "Journal Entry") return "Save Entry";
-  if (template === "Feed Bees") return "Log Feeding";
-  if (template === "Winterize") return "Save Winterization";
-  if (template === "Mite Assessment") return "Save Assessment";
-  return "Create Inspection";
-}
 
 function FormContent({
   s,

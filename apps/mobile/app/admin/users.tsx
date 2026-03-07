@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +15,7 @@ import { useAdminUsers } from "../../hooks/useAdmin";
 import type { AdminUser } from "../../services/api";
 import {
   useStyles,
+  useTheme,
   typography,
   spacing,
   radii,
@@ -137,11 +138,13 @@ function SearchFilter({
   onDeletedToggle: (v: boolean) => void;
 }) {
   const styles = useStyles(createStyles);
+  const { colors } = useTheme();
   return (
     <View>
       <TextInput
         style={styles.searchBar}
         placeholder="Search users..."
+        placeholderTextColor={colors.textMuted}
         value={search}
         onChangeText={onSearchChange}
         autoCapitalize="none"
@@ -159,10 +162,16 @@ export default function UsersScreen() {
   const styles = useStyles(createStyles);
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [includeDeleted, setIncludeDeleted] = useState(false);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data: users, isLoading } = useAdminUsers({
-    search: search || undefined,
+    search: debouncedSearch || undefined,
     includeDeleted,
   });
 

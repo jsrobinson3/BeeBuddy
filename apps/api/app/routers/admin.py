@@ -15,6 +15,7 @@ from app.schemas.admin import (
     OAuth2ClientCreate,
     OAuth2ClientResponse,
     OAuth2ClientUpdate,
+    PaginatedUsersResponse,
 )
 from app.services import admin_service
 
@@ -30,7 +31,7 @@ async def get_stats(
     return await admin_service.get_dashboard_stats(db)
 
 
-@router.get("/users", response_model=list[AdminUserResponse])
+@router.get("/users", response_model=PaginatedUsersResponse)
 async def list_users(
     search: str | None = Query(None),
     include_deleted: bool = Query(False),
@@ -43,7 +44,7 @@ async def list_users(
     users, total = await admin_service.list_users(
         db, search=search, include_deleted=include_deleted, limit=limit, offset=offset
     )
-    return users
+    return PaginatedUsersResponse(items=users, total=total)
 
 
 @router.get("/users/{user_id}", response_model=AdminUserResponse)
@@ -126,8 +127,7 @@ async def update_oauth_client(
     _admin: User = Depends(get_admin_user),
 ):
     """Update an OAuth2 client."""
-    clients = await admin_service.list_oauth_clients(db)
-    client = next((c for c in clients if c.id == client_id), None)
+    client = await admin_service.get_oauth_client(db, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="OAuth2 client not found")
     return await admin_service.update_oauth_client(

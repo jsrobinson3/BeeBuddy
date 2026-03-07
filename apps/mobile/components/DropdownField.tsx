@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Pressable, Text, View } from "react-native";
 
-import { useStyles, typography, type ThemeColors } from "../theme";
+import { useStyles, typography, spacing, radii, type ThemeColors } from "../theme";
 
 export interface DropdownOption {
   label: string;
@@ -27,25 +27,16 @@ function isSections(
   return opts.length > 0 && "title" in opts[0];
 }
 
-const createStyles = (c: ThemeColors) => ({
-  container: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontFamily: typography.families.bodyMedium,
-    color: c.textPrimary,
-    marginBottom: 8,
-  },
+const createTriggerStyles = (c: ThemeColors) => ({
   trigger: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
     alignItems: "center" as const,
     borderWidth: 1,
     borderColor: c.border,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + spacing.xs,
     backgroundColor: c.bgElevated,
   },
   triggerOpen: {
@@ -62,19 +53,22 @@ const createStyles = (c: ThemeColors) => ({
     fontSize: 12,
     color: c.textSecondary,
   },
+});
+
+const createMenuStyles = (c: ThemeColors) => ({
   menu: {
     borderWidth: 1,
     borderTopWidth: 0,
     borderColor: c.selectedBorder,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
+    borderBottomLeftRadius: radii.md,
+    borderBottomRightRadius: radii.md,
     backgroundColor: c.bgElevated,
     overflow: "hidden" as const,
   },
   sectionHeader: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 4,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
   },
   sectionTitle: {
     fontSize: 11,
@@ -83,9 +77,16 @@ const createStyles = (c: ThemeColors) => ({
     textTransform: "uppercase" as const,
     letterSpacing: 0.5,
   },
+  sectionSeparator: {
+    height: 1,
+    backgroundColor: c.border,
+  },
+});
+
+const createOptionStyles = (c: ThemeColors) => ({
   option: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + spacing.xs,
   },
   optionSelected: {
     backgroundColor: c.selectedBg,
@@ -111,11 +112,19 @@ const createStyles = (c: ThemeColors) => ({
   separator: {
     height: 1,
     backgroundColor: c.borderLight,
-    marginHorizontal: 14,
+    marginHorizontal: spacing.md,
   },
-  sectionSeparator: {
-    height: 1,
-    backgroundColor: c.border,
+});
+
+const createStyles = (c: ThemeColors) => ({
+  container: {
+    marginBottom: spacing.md,
+  },
+  label: {
+    ...typography.sizes.bodySm,
+    fontFamily: typography.families.bodyMedium,
+    color: c.textPrimary,
+    marginBottom: spacing.sm,
   },
 });
 
@@ -124,37 +133,29 @@ function OptionItem({
   isSelected,
   isLast,
   onPress,
-  styles,
 }: {
   option: DropdownOption;
   isSelected: boolean;
   isLast: boolean;
   onPress: () => void;
-  styles: ReturnType<typeof createStyles>;
 }) {
+  const s = useStyles(createOptionStyles);
+  const pressStyle = ({ pressed }: { pressed: boolean }) => [
+    s.option,
+    isSelected && s.optionSelected,
+    pressed && !isSelected && s.optionPressed,
+  ];
   return (
     <>
-      <Pressable
-        style={({ pressed }) => [
-          styles.option,
-          isSelected && styles.optionSelected,
-          pressed && !isSelected && styles.optionPressed,
-        ]}
-        onPress={onPress}
-      >
-        <Text
-          style={[
-            styles.optionLabel,
-            isSelected && styles.optionLabelSelected,
-          ]}
-        >
+      <Pressable style={pressStyle} onPress={onPress}>
+        <Text style={[s.optionLabel, isSelected && s.optionLabelSelected]}>
           {option.label}
         </Text>
         {option.description && (
-          <Text style={styles.optionDescription}>{option.description}</Text>
+          <Text style={s.optionDescription}>{option.description}</Text>
         )}
       </Pressable>
-      {!isLast && <View style={styles.separator} />}
+      {!isLast && <View style={s.separator} />}
     </>
   );
 }
@@ -164,6 +165,63 @@ function flattenOptions(opts: DropdownOption[] | DropdownSection[]): DropdownOpt
   return opts.flatMap((s) => s.options);
 }
 
+function SectionList({
+  sections,
+  selected,
+  onSelect,
+}: {
+  sections: DropdownSection[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  const ms = useStyles(createMenuStyles);
+  return (
+    <>
+      {sections.map((section, sIdx) => (
+        <View key={section.title}>
+          {sIdx > 0 && <View style={ms.sectionSeparator} />}
+          <View style={ms.sectionHeader}>
+            <Text style={ms.sectionTitle}>{section.title}</Text>
+          </View>
+          {section.options.map((option, oIdx) => (
+            <OptionItem
+              key={option.value}
+              option={option}
+              isSelected={option.value === selected}
+              isLast={sIdx === sections.length - 1 && oIdx === section.options.length - 1}
+              onPress={() => onSelect(option.value)}
+            />
+          ))}
+        </View>
+      ))}
+    </>
+  );
+}
+
+function FlatOptionList({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: DropdownOption[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <>
+      {options.map((option, index) => (
+        <OptionItem
+          key={option.value}
+          option={option}
+          isSelected={option.value === selected}
+          isLast={index === options.length - 1}
+          onPress={() => onSelect(option.value)}
+        />
+      ))}
+    </>
+  );
+}
+
 export function DropdownField({
   label,
   options,
@@ -171,6 +229,8 @@ export function DropdownField({
   onChange,
 }: DropdownFieldProps) {
   const styles = useStyles(createStyles);
+  const ts = useStyles(createTriggerStyles);
+  const ms = useStyles(createMenuStyles);
   const [open, setOpen] = useState(false);
 
   const allOptions = flattenOptions(options);
@@ -185,53 +245,21 @@ export function DropdownField({
     [onChange],
   );
 
-  const renderFlatOptions = (opts: DropdownOption[]) =>
-    opts.map((option, index) => (
-      <OptionItem
-        key={option.value}
-        option={option}
-        isSelected={option.value === selected}
-        isLast={index === opts.length - 1}
-        onPress={() => handleSelect(option.value)}
-        styles={styles}
-      />
-    ));
-
-  const renderSections = (sections: DropdownSection[]) =>
-    sections.map((section, sIdx) => (
-      <View key={section.title}>
-        {sIdx > 0 && <View style={styles.sectionSeparator} />}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-        </View>
-        {section.options.map((option, oIdx) => (
-          <OptionItem
-            key={option.value}
-            option={option}
-            isSelected={option.value === selected}
-            isLast={sIdx === sections.length - 1 && oIdx === section.options.length - 1}
-            onPress={() => handleSelect(option.value)}
-            styles={styles}
-          />
-        ))}
-      </View>
-    ));
-
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
       <Pressable
-        style={[styles.trigger, open && styles.triggerOpen]}
+        style={[ts.trigger, open && ts.triggerOpen]}
         onPress={() => setOpen((prev) => !prev)}
       >
-        <Text style={styles.triggerText}>{displayLabel}</Text>
-        <Text style={styles.chevron}>{open ? "\u25B2" : "\u25BC"}</Text>
+        <Text style={ts.triggerText}>{displayLabel}</Text>
+        <Text style={ts.chevron}>{open ? "\u25B2" : "\u25BC"}</Text>
       </Pressable>
       {open && (
-        <View style={styles.menu}>
+        <View style={ms.menu}>
           {isSections(options)
-            ? renderSections(options)
-            : renderFlatOptions(options)}
+            ? <SectionList sections={options} selected={selected} onSelect={handleSelect} />
+            : <FlatOptionList options={options} selected={selected} onSelect={handleSelect} />}
         </View>
       )}
     </View>

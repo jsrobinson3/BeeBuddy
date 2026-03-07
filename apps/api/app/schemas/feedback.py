@@ -1,6 +1,7 @@
 """Schemas for AI message feedback."""
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -11,7 +12,7 @@ from app.schemas.common import BaseResponse, CamelBase
 class FeedbackCreate(CamelBase):
     """Input for submitting or updating feedback on an assistant message."""
 
-    rating: int = Field(..., ge=-1, le=1)
+    rating: Literal[-1, 1]
     correction: str | None = Field(None, max_length=4000)
 
 
@@ -25,6 +26,7 @@ class FeedbackResponse(BaseResponse):
     correction: str | None
     model_version: str | None
     created_at: datetime
+    updated_at: datetime
 
 
 class ConversationFeedbackResponse(CamelBase):

@@ -35,15 +35,19 @@ import {
   buildObservations,
   buildWeather,
   inspectionToFormState,
+  getObservationsLabel,
+  getSubmitLabel,
   inspectionFormStyles as createStyles,
 } from "../../../../components/inspection/InspectionFields";
 
 function SubmitButton({
   isPending,
   onPress,
+  label,
 }: {
   isPending: boolean;
   onPress: () => void;
+  label: string;
 }) {
   const styles = useStyles(createStyles);
   return (
@@ -53,18 +57,10 @@ function SubmitButton({
       disabled={isPending}
     >
       <Text style={styles.submitText}>
-        {isPending ? "Saving..." : "Save Changes"}
+        {isPending ? "Saving..." : label}
       </Text>
     </Pressable>
   );
-}
-
-function getObservationsLabel(template: TemplateLevel): string {
-  if (template === "Mite Assessment") return "Assessment";
-  if (template === "Feed Bees") return "Feeding Details";
-  if (template === "Winterize") return "Preparation";
-  if (template === "Journal Entry") return "";
-  return "Observations";
 }
 
 function FormHeader({ s, set }: { s: FormState; set: FormSetter }) {
@@ -121,7 +117,7 @@ function FormContent({
       <WeatherFields s={s} set={set} tempLabel={tempLabel} system={system} />
       <Text style={styles.sectionLabel}>Reminder</Text>
       <ReminderFields s={s} set={set} />
-      <SubmitButton isPending={isPending} onPress={onSubmit} />
+      <SubmitButton isPending={isPending} onPress={onSubmit} label={getSubmitLabel(s.template)} />
     </ScrollView>
   );
 }

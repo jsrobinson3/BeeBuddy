@@ -6,21 +6,12 @@ import { ErrorDisplay } from "../../../../components/ErrorDisplay";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
 import { PhotoPicker } from "../../../../components/PhotoPicker";
 import { useInspection } from "../../../../hooks/useInspections";
+import { BACKEND_TO_TEMPLATE } from "../../../../components/inspection/InspectionFields";
 import type {
   Inspection,
   InspectionObservations,
 } from "../../../../services/api";
 import { useStyles, typography, type ThemeColors } from "../../../../theme";
-
-const TEMPLATE_DISPLAY_NAMES: Record<string, string> = {
-  beginner: "Quick Check",
-  intermediate: "Routine Inspection",
-  advanced: "Detailed Inspection",
-  mite_assessment: "Mite Assessment",
-  feed_bees: "Feed Bees",
-  winterize: "Winterize",
-  journal_entry: "Journal Entry",
-};
 import { formatDate } from "../../../../utils/format";
 
 const createStyles = (c: ThemeColors) => ({
@@ -120,23 +111,23 @@ function DetailedObservationRows({ obs }: { obs: InspectionObservations }) {
       {obs.diseaseSigns && obs.diseaseSigns.length > 0 && (
         <InfoRow label="Disease Signs" value={obs.diseaseSigns.join(", ")} />
       )}
-      {(obs as any).miteMethod && (
-        <InfoRow label="Mite Method" value={(obs as any).miteMethod} />
+      {obs.miteMethod && (
+        <InfoRow label="Mite Method" value={obs.miteMethod} />
       )}
-      {(obs as any).miteSampleSize != null && (
-        <InfoRow label="Sample Size" value={`${(obs as any).miteSampleSize} bees`} />
+      {obs.miteSampleSize != null && (
+        <InfoRow label="Sample Size" value={`${obs.miteSampleSize} bees`} />
       )}
-      {(obs as any).feedType && (
-        <InfoRow label="Feed Type" value={(obs as any).feedType} />
+      {obs.feedType && (
+        <InfoRow label="Feed Type" value={obs.feedType} />
       )}
-      {(obs as any).feedAmount != null && (
+      {obs.feedAmount != null && (
         <InfoRow
           label="Amount"
-          value={`${(obs as any).feedAmount}${(obs as any).feedUnit ? ` ${(obs as any).feedUnit}` : ""}`}
+          value={`${obs.feedAmount}${obs.feedUnit ? ` ${obs.feedUnit}` : ""}`}
         />
       )}
-      {(obs as any).winterizeChecklist && (obs as any).winterizeChecklist.length > 0 && (
-        <InfoRow label="Winterization" value={(obs as any).winterizeChecklist.join(", ")} />
+      {obs.winterizeChecklist && obs.winterizeChecklist.length > 0 && (
+        <InfoRow label="Winterization" value={obs.winterizeChecklist.join(", ")} />
       )}
     </>
   );
@@ -161,7 +152,7 @@ function DetailsCard({ inspection }: { inspection: Inspection }) {
       <InfoRow
         label="Type"
         value={
-          TEMPLATE_DISPLAY_NAMES[inspection.experienceTemplate] ??
+          BACKEND_TO_TEMPLATE[inspection.experienceTemplate] ??
           inspection.experienceTemplate
         }
       />

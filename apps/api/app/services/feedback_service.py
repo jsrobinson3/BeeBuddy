@@ -62,6 +62,7 @@ async def upsert_feedback(
         select(MessageFeedback).where(
             MessageFeedback.conversation_id == conversation_id,
             MessageFeedback.message_index == message_index,
+            MessageFeedback.user_id == user_id,
         )
     )
     existing = result.scalar_one_or_none()

@@ -5,22 +5,11 @@ import json
 import httpx
 
 from app.config import LLMProvider, get_settings
+from app.services._llm_utils import _split_system
 
 settings = get_settings()
 
 ANTHROPIC_VERSION = "2023-06-01"
-
-
-def _split_system(messages: list[dict]) -> tuple[str, list[dict]]:
-    """Separate system message from chat messages for Anthropic API."""
-    system = ""
-    chat: list[dict] = []
-    for m in messages:
-        if m["role"] == "system":
-            system = m["content"]
-        else:
-            chat.append(m)
-    return system, chat
 
 
 async def generate_summary(

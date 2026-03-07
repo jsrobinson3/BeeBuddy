@@ -76,8 +76,7 @@ async def login(
     user = await auth_service.authenticate(db, data.email, data.password)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    user.last_login_at = datetime.now(UTC)
-    await db.commit()
+    await auth_service.record_login(db, user)
     access, refresh = auth_service.issue_tokens(user.id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh)

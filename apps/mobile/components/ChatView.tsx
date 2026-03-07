@@ -17,10 +17,10 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Send } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 
-import * as Speech from "expo-speech";
-
 import type { ChatMessage } from "../services/api";
 import { useConversation, useChatStream, useConversationFeedback } from "../hooks/useChat";
+import { useConverseMode } from "../hooks/useConverseMode";
+import { useTTSReadback } from "../hooks/useTTSReadback";
 import { ConfirmationCard } from "./ConfirmationCard";
 import { FeedbackButtons } from "./FeedbackButtons";
 import { ResponsiveContainer } from "./ResponsiveContainer";
@@ -34,9 +34,6 @@ import {
   radii,
   type ThemeColors,
 } from "../theme";
-
-const SecureStoreModule: typeof import("expo-secure-store") | null =
-  Platform.OS === "web" ? null : require("expo-secure-store");
 
 interface ChatViewProps {
   conversationId?: string;
@@ -198,8 +195,6 @@ function MessageBubble({
 }
 
 // ── Converse-mode hint ───────────────────────────────────────────────────
-
-const CONVERSE_HINT_KEY = "beebuddy_converse_hint_dismissed";
 
 const createHintStyles = (c: ThemeColors) => ({
   container: {
@@ -459,34 +454,6 @@ function StreamErrorBanner({
   );
 }
 
-// ── TTS helpers ──────────────────────────────────────────────────────────
-
-/** Strip markdown formatting so TTS reads clean prose. */
-function stripMarkdown(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, "")   // fenced code blocks
-    .replace(/`([^`]+)`/g, "$1")       // inline code
-    .replace(/!\[.*?\]\(.*?\)/g, "")   // images
-    .replace(/\[([^\]]+)\]\(.*?\)/g, "$1") // links → text
-    .replace(/^#{1,6}\s+/gm, "")       // headings
-    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, "$2") // bold/italic
-    .replace(/^\s*[-*+]\s+/gm, "")     // unordered lists
-    .replace(/^\s*\d+\.\s+/gm, "")     // ordered lists
-    .replace(/\n{2,}/g, ". ")          // paragraph breaks → pause
-    .replace(/\n/g, " ")
-    .trim();
-}
-
-function speakResponse(text: string, onDone?: () => void): void {
-  const clean = stripMarkdown(text);
-  if (!clean) {
-    onDone?.();
-    return;
-  }
-  Speech.stop();
-  Speech.speak(clean, { language: "en-US", rate: 1.0, onDone });
-}
-
 // ── Main Chat View ────────────────────────────────────────────────────────
 
 export function ChatView({ conversationId }: ChatViewProps) {
@@ -509,57 +476,19 @@ export function ChatView({ conversationId }: ChatViewProps) {
   } = useChatStream();
 
   const [localMessages, setLocalMessages] = useState<DisplayMessage[]>([]);
-  const lastSendWasVoice = useRef(false);
   const isNewChat = !conversationId;
 
-  // ── Converse mode (continuous voice chat) ────────────────────────────
-  const [converseMode, setConverseMode] = useState(false);
-  const converseModeRef = useRef(false);
-  converseModeRef.current = converseMode;
+  // ── Extracted hooks ────────────────────────────────────────────────
+  const converse = useConverseMode();
+  const tts = useTTSReadback();
   const micRef = useRef<VoiceInputButtonHandle>(null);
 
-  // ── "Did you know" hint ──────────────────────────────────────────────
-  const [showConverseHint, setShowConverseHint] = useState(false);
-  const hintDismissedRef = useRef(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        if (SecureStoreModule) {
-          const val = await SecureStoreModule.getItemAsync(CONVERSE_HINT_KEY);
-          if (val === "true") hintDismissedRef.current = true;
-        }
-      } catch { /* default to showing hint */ }
-    })();
-  }, []);
-
   const handleConverseModeToggle = useCallback((on: boolean) => {
-    setConverseMode(on);
-    if (on) {
-      setShowConverseHint(false);
-    } else {
-      Speech.stop();
-      lastSendWasVoice.current = false;
-    }
-  }, []);
-
-  const handleDismissHint = useCallback(() => {
-    setShowConverseHint(false);
-  }, []);
-
-  const handleDismissHintForever = useCallback(async () => {
-    setShowConverseHint(false);
-    hintDismissedRef.current = true;
-    try {
-      if (SecureStoreModule) {
-        await SecureStoreModule.setItemAsync(CONVERSE_HINT_KEY, "true");
-      }
-    } catch { /* best-effort */ }
-  }, []);
+    converse.handleConverseModeToggle(on);
+    if (!on) tts.lastSendWasVoice.current = false;
+  }, [converse, tts]);
 
   // Seed local messages from loaded conversation (exclude internal tool messages).
-  // Enter "settling" mode so handleContentSizeChange keeps scrolling to bottom
-  // while FlatList incrementally lays out all the messages.
   useEffect(() => {
     if (conversation?.messages) {
       lastContentHeight.current = 0;
@@ -579,9 +508,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   }, [conversation]);
 
-  // Build display list: local messages + streaming bubble (filter out tool messages).
-  // Include the bubble as soon as we enter any streaming phase (even before content
-  // arrives) so the FlatList item count stays stable — prevents scroll-to-top on web.
+  // Build display list: local messages + streaming bubble.
   const isActive = streamingState !== "idle" && streamingState !== "error";
   const displayMessages: DisplayMessage[] = [
     ...localMessages.filter((m) => m.role === "user" || m.role === "assistant"),
@@ -590,26 +517,23 @@ export function ChatView({ conversationId }: ChatViewProps) {
       : []),
   ];
 
-  // Use server-assigned conversation ID for subsequent messages in new chats
   const effectiveConvId = conversationId ?? streamConvId ?? undefined;
 
   const handleSend = useCallback(
     (text: string) => {
-      Speech.stop();
+      tts.stop();
       const userMsg: DisplayMessage = { role: "user", content: text, serverIndex: -1 };
       const newMessages = [...localMessages, userMsg];
       setLocalMessages(newMessages);
       sendMessage(newMessages, effectiveConvId);
     },
-    [localMessages, sendMessage, effectiveConvId],
+    [localMessages, sendMessage, effectiveConvId, tts],
   );
 
   const handleVoiceSend = useCallback(() => {
-    lastSendWasVoice.current = true;
-    if (!hintDismissedRef.current && !converseMode) {
-      setShowConverseHint(true);
-    }
-  }, [converseMode]);
+    tts.markVoiceSend();
+    converse.markVoiceSend();
+  }, [tts, converse]);
 
   // When streaming completes, persist the assistant message locally
   useEffect(() => {
@@ -623,13 +547,10 @@ export function ChatView({ conversationId }: ChatViewProps) {
       reset();
 
       // Read response aloud if the user's last message was voice-initiated
-      if (lastSendWasVoice.current) {
-        lastSendWasVoice.current = false;
-        const onDone = converseModeRef.current
-          ? () => { micRef.current?.startListening(); }
-          : undefined;
-        speakResponse(streamingContent, onDone);
-      }
+      const onDone = converse.converseModeRef.current
+        ? () => { micRef.current?.startListening(); }
+        : undefined;
+      tts.speakIfVoice(streamingContent, onDone);
 
       if (shouldScroll) {
         requestAnimationFrame(() => {
@@ -637,31 +558,26 @@ export function ChatView({ conversationId }: ChatViewProps) {
         });
       }
 
-      // For new chats, navigate to the created conversation using the
-      // server-assigned ID (no more guessing from the conversation list)
       if (isNewChat && streamConvId) {
         router.replace(`/chat/${streamConvId}`);
       }
     }
-  }, [streamingState, streamingContent, reset, isNewChat, streamConvId, router]);
+  }, [streamingState, streamingContent, reset, isNewChat, streamConvId, router, tts, converse]);
 
   // Exit converse mode on streaming error
   useEffect(() => {
-    if (streamError && converseMode) {
-      setConverseMode(false);
-      Speech.stop();
+    if (streamError && converse.converseMode) {
+      converse.handleConverseModeToggle(false);
     }
-  }, [streamError, converseMode]);
+  }, [streamError, converse]);
 
-  // Keep streaming ref in sync so callbacks can read it without stale closures
+  // Keep streaming ref in sync
   useEffect(() => {
     isStreamingRef.current = isActive;
-    if (isActive) {
-      userScrolledAway.current = false;
-    }
+    if (isActive) userScrolledAway.current = false;
   }, [isActive]);
 
-  // Scroll to bottom when streaming begins so the response is always visible
+  // Scroll to bottom when streaming begins
   useEffect(() => {
     if (isActive) {
       requestAnimationFrame(() => {
@@ -670,9 +586,6 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   }, [isActive]);
 
-  // Track whether user is near the bottom of the chat.
-  // During settling (initial load) or streaming, don't let intermediate scroll
-  // events from FlatList layout kill auto-scroll.
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
@@ -684,10 +597,6 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   }, []);
 
-  // Auto-scroll when content grows.
-  // During settling (initial load): always scroll — FlatList is still laying out items.
-  // During streaming: always scroll unless user deliberately scrolled away.
-  // When idle: scroll only if user is near the bottom.
   const handleContentSizeChange = useCallback((_w: number, h: number) => {
     const shouldScroll = isSettling.current
       || (isStreamingRef.current ? !userScrolledAway.current : isNearBottom.current);
@@ -739,14 +648,17 @@ export function ChatView({ conversationId }: ChatViewProps) {
             onNewChat={() => { reset(); router.replace("/chat"); }}
           />
         )}
-        {showConverseHint && (
-          <ConverseHint onDismiss={handleDismissHint} onDismissForever={handleDismissHintForever} />
+        {converse.showConverseHint && (
+          <ConverseHint
+            onDismiss={converse.handleDismissHint}
+            onDismissForever={converse.handleDismissHintForever}
+          />
         )}
         <ChatInput
           onSend={handleSend}
           onVoiceSend={handleVoiceSend}
           disabled={streamingState !== "idle" && streamingState !== "error"}
-          converseMode={converseMode}
+          converseMode={converse.converseMode}
           onConverseModeToggle={handleConverseModeToggle}
           micRef={micRef}
         />

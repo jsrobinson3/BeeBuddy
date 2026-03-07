@@ -440,6 +440,22 @@ export function ReminderFields({ s, set }: SectionProps) {
   );
 }
 
+export function getObservationsLabel(template: TemplateLevel): string {
+  if (template === "Mite Assessment") return "Assessment";
+  if (template === "Feed Bees") return "Feeding Details";
+  if (template === "Winterize") return "Preparation";
+  if (template === "Journal Entry") return "";
+  return "Observations";
+}
+
+export function getSubmitLabel(template: TemplateLevel): string {
+  if (template === "Journal Entry") return "Save Entry";
+  if (template === "Feed Bees") return "Log Feeding";
+  if (template === "Winterize") return "Save Winterization";
+  if (template === "Mite Assessment") return "Save Assessment";
+  return "Save Inspection";
+}
+
 export function isInspectionType(t: InlineFormType): boolean {
   return t === "Quick Check" || t === "Routine Inspection" || t === "Detailed Inspection";
 }
@@ -452,22 +468,22 @@ export function buildObservations(s: FormState): InspectionObservations {
       varroaCount: s.varroaCount,
       miteMethod: s.miteMethod,
       miteSampleSize: s.miteSampleSize,
-    } as InspectionObservations;
+    };
   }
   if (t === "Feed Bees") {
     return {
       feedType: s.feedType,
       feedAmount: s.feedAmount.trim() ? Number(s.feedAmount) : null,
       feedUnit: s.feedUnit,
-    } as InspectionObservations;
+    };
   }
   if (t === "Winterize") {
     return {
       winterizeChecklist: s.winterizeChecklist,
-    } as InspectionObservations;
+    };
   }
   if (t === "Journal Entry") {
-    return {} as InspectionObservations;
+    return {};
   }
 
   // Inspection types (Quick Check / Routine / Detailed)
@@ -641,7 +657,7 @@ export function ObservationFields({
   );
 }
 
-const BACKEND_TO_TEMPLATE: Record<string, FormState["template"]> = {
+export const BACKEND_TO_TEMPLATE: Record<string, FormState["template"]> = {
   beginner: "Quick Check",
   intermediate: "Routine Inspection",
   advanced: "Detailed Inspection",
@@ -697,7 +713,7 @@ export const DEFAULT_FORM_STATE: FormState = {
 };
 
 export function inspectionToFormState(inspection: WMInspection): FormState {
-  const obs = inspection.observations ?? ({} as any);
+  const obs: InspectionObservations = inspection.observations ?? {};
   const weather = inspection.weather ?? {};
 
   return {

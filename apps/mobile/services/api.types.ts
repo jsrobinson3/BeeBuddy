@@ -200,6 +200,15 @@ export interface InspectionObservations {
   varroaCount?: number | null;
   numSupers?: number | null;
   framesOfBrood?: number | null;
+  // Mite assessment fields
+  miteMethod?: string | null;
+  miteSampleSize?: number | null;
+  // Feed bees fields
+  feedType?: string | null;
+  feedAmount?: number | null;
+  feedUnit?: string | null;
+  // Winterize fields
+  winterizeChecklist?: string[] | null;
 }
 
 export interface WeatherSnapshot {
