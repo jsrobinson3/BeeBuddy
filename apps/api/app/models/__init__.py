@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models for BeeBuddy."""
 
 from app.models.ai_conversation import AIConversation
+from app.models.ai_token_usage import AITokenUsage
 from app.models.apiary import Apiary
 from app.models.base import Base
 from app.models.event import Event, EventType
@@ -20,6 +21,7 @@ from app.models.user_oauth_link import UserOAuthLink
 
 __all__ = [
     "AIConversation",
+    "AITokenUsage",
     "Base",
     "User",
     "ExperienceLevel",

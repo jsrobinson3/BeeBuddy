@@ -73,12 +73,23 @@ async def _run_tool_loop(
     provider: LLMProvider,
     initial_response: dict,
     initial_tool_calls: list[ToolCall],
-) -> tuple[str, list[dict]]:
-    """Run the tool call → LLM loop for up to MAX_TOOL_ROUNDS."""
+) -> tuple[str, list[dict], dict]:
+    """Run the tool call → LLM loop for up to MAX_TOOL_ROUNDS.
+
+    Returns (final_text, tool_messages, accumulated_usage).
+    """
     tool_messages: list[dict] = []
     augmented = list(messages)
     response = initial_response
     tool_calls = initial_tool_calls
+    usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    def _add_usage(resp: dict) -> None:
+        u = _extract_response_usage(resp, provider)
+        for k in usage:
+            usage[k] += u[k]
+
+    _add_usage(initial_response)
 
     for _round in range(MAX_TOOL_ROUNDS):
         augmented.append(_build_assistant_msg(response, provider))
@@ -87,29 +98,30 @@ async def _run_tool_loop(
             await _execute_tool_call(client, tc, augmented, tool_messages, provider)
 
         response = await _call_llm_with_tools(augmented, llm_tools, provider)
+        _add_usage(response)
         tool_calls = _extract_tool_calls(response, provider)
 
         if not tool_calls:
-            return _extract_text(response, provider), tool_messages
+            return _extract_text(response, provider), tool_messages, usage
 
-    return _extract_text(response, provider), tool_messages
+    return _extract_text(response, provider), tool_messages, usage
 
 
 async def try_tool_path(
     messages: list[dict],
     db: AsyncSession,
     user_id: UUID,
-) -> tuple[str | None, list[dict]]:
+) -> tuple[str | None, list[dict], dict]:
     """Attempt tool-augmented response.
 
-    Returns (final_text, tool_messages) if tools were used,
-    or (None, []) if no tools were needed (caller should fall through to streaming).
+    Returns (final_text, tool_messages, usage) if tools were used,
+    or (None, [], {}) if no tools were needed.
     """
     server = create_mcp_server(db, user_id)
     async with Client(server) as client:
         mcp_tools = await client.list_tools()
         if not mcp_tools:
-            return None, []
+            return None, [], {}
 
         provider = settings.effective_tool_provider
         llm_tools = _convert_tools(mcp_tools, provider)
@@ -118,12 +130,12 @@ async def try_tool_path(
         tool_calls = _extract_tool_calls(response, provider)
 
         if not tool_calls:
-            return None, []
+            return None, [], {}
 
-        text, tool_msgs = await _run_tool_loop(
+        text, tool_msgs, usage = await _run_tool_loop(
             client, messages, llm_tools, provider, response, tool_calls,
         )
-        return text, tool_msgs
+        return text, tool_msgs, usage
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +344,24 @@ def _extract_text(response: dict, provider: LLMProvider) -> str:
         return "".join(parts)
     choice = response.get("choices", [{}])[0]
     return choice.get("message", {}).get("content", "")
+
+
+def _extract_response_usage(response: dict, provider: LLMProvider) -> dict:
+    """Extract and normalize token usage from a provider response."""
+    raw = response.get("usage", {})
+    if not raw:
+        return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+    if provider == LLMProvider.ANTHROPIC:
+        inp = raw.get("input_tokens", 0)
+        out = raw.get("output_tokens", 0)
+    else:
+        inp = raw.get("prompt_tokens", 0)
+        out = raw.get("completion_tokens", 0)
+    return {
+        "input_tokens": inp,
+        "output_tokens": out,
+        "total_tokens": inp + out,
+    }
 
 
 def _extract_mcp_result(result) -> str:

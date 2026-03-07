@@ -14,6 +14,7 @@ from app.services.tool_executor import (
     _extract_anthropic_tool_calls,
     _extract_mcp_result,
     _extract_openai_tool_calls,
+    _extract_response_usage,
     _extract_text,
     try_tool_path,
 )
@@ -211,7 +212,7 @@ class TestTryToolPath:
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result, msgs = await try_tool_path(
+            result, msgs, _usage = await try_tool_path(
                 [{"role": "user", "content": "hi"}],
                 AsyncMock(),
                 uuid.uuid4(),
@@ -248,7 +249,7 @@ class TestTryToolPath:
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result, msgs = await try_tool_path(
+            result, msgs, _usage = await try_tool_path(
                 [{"role": "user", "content": "how many hives?"}],
                 AsyncMock(),
                 uuid.uuid4(),
@@ -276,7 +277,7 @@ class TestTryToolPath:
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result, msgs = await try_tool_path(
+            result, msgs, _usage = await try_tool_path(
                 [{"role": "user", "content": "hi"}],
                 AsyncMock(),
                 uuid.uuid4(),
@@ -285,3 +286,70 @@ class TestTryToolPath:
         assert result is None
         assert msgs == []
         mock_call_llm.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Response usage extraction
+# ---------------------------------------------------------------------------
+
+
+class TestExtractResponseUsage:
+    """Tests for _extract_response_usage — normalizes provider usage dicts."""
+
+    def test_openai_usage(self):
+        """OpenAI format uses prompt_tokens / completion_tokens."""
+        resp = {
+            "usage": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150},
+            "choices": [{"message": {"content": "hi"}}],
+        }
+        result = _extract_response_usage(resp, LLMProvider.OPENAI)
+        assert result == {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}
+
+    def test_anthropic_usage(self):
+        """Anthropic format uses input_tokens / output_tokens."""
+        resp = {
+            "usage": {"input_tokens": 200, "output_tokens": 80},
+            "content": [{"type": "text", "text": "hi"}],
+        }
+        result = _extract_response_usage(resp, LLMProvider.ANTHROPIC)
+        assert result == {"input_tokens": 200, "output_tokens": 80, "total_tokens": 280}
+
+    def test_missing_usage_returns_zeros(self):
+        """Response without usage key returns all zeros."""
+        resp = {"choices": [{"message": {"content": "hi"}}]}
+        result = _extract_response_usage(resp, LLMProvider.OPENAI)
+        assert result == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    def test_empty_usage_returns_zeros(self):
+        """Response with empty usage dict returns all zeros."""
+        resp = {"usage": {}, "choices": [{"message": {"content": "hi"}}]}
+        result = _extract_response_usage(resp, LLMProvider.OPENAI)
+        assert result == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+    def test_ollama_uses_openai_format(self):
+        """Ollama (OpenAI-compatible) uses prompt_tokens / completion_tokens."""
+        resp = {
+            "usage": {"prompt_tokens": 30, "completion_tokens": 15, "total_tokens": 45},
+        }
+        result = _extract_response_usage(resp, LLMProvider.OLLAMA)
+        assert result == {"input_tokens": 30, "output_tokens": 15, "total_tokens": 45}
+
+    def test_total_is_computed_not_copied(self):
+        """total_tokens is always input + output, not the provider's value."""
+        resp = {
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 999},
+        }
+        result = _extract_response_usage(resp, LLMProvider.OPENAI)
+        assert result["total_tokens"] == 15
+
+    def test_partial_openai_usage_defaults_missing_to_zero(self):
+        """Missing prompt_tokens or completion_tokens default to 0."""
+        resp = {"usage": {"prompt_tokens": 50}}
+        result = _extract_response_usage(resp, LLMProvider.OPENAI)
+        assert result == {"input_tokens": 50, "output_tokens": 0, "total_tokens": 50}
+
+    def test_partial_anthropic_usage_defaults_missing_to_zero(self):
+        """Missing input_tokens or output_tokens default to 0."""
+        resp = {"usage": {"output_tokens": 30}}
+        result = _extract_response_usage(resp, LLMProvider.ANTHROPIC)
+        assert result == {"input_tokens": 0, "output_tokens": 30, "total_tokens": 30}

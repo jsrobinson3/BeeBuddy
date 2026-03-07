@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.verified import get_verified_user
 from app.db.session import get_db
 from app.models.user import User
 from app.rate_limit import limiter
@@ -27,7 +28,7 @@ async def chat(
     request: Request,
     data: ChatRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
 ):
     """Stream a chat response from the beekeeping AI assistant."""
     return StreamingResponse(

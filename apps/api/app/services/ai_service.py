@@ -24,6 +24,7 @@ from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
+from app.services.token_usage import record_chat_usage
 from app.services.tool_executor import ColdStartError as ToolColdStartError
 from app.services.tool_executor import ContextOverflowError
 
@@ -102,52 +103,49 @@ def _strip_pending_markers(text: str) -> str:
     return _PENDING_RE.sub('', text).strip()
 
 
+def _pending_action_event(action) -> dict:
+    """Build an SSE-ready pending action event dict."""
+    return {
+        "pending_action": {
+            "id": str(action.id),
+            "actionType": action.action_type,
+            "resourceType": action.resource_type,
+            "summary": action.summary,
+            "payload": action.payload,
+            "expiresAt": action.expires_at.isoformat(),
+        }
+    }
+
+
 async def _yield_tool_response(
     final_text: str, db: AsyncSession | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield a tool-augmented response as SSE chunks (no [DONE] — caller sends it)."""
     yield f"data: {json.dumps({'status': 'fetching_data'})}\n\n"
 
-    # Extract and emit pending action events
     if db:
         for action_id in _extract_pending_ids(final_text):
-            action = await pending_action_service.get_action(
-                db, UUID(action_id),
-            )
+            action = await pending_action_service.get_action(db, UUID(action_id))
             if action:
-                event = {
-                    "pending_action": {
-                        "id": str(action.id),
-                        "actionType": action.action_type,
-                        "resourceType": action.resource_type,
-                        "summary": action.summary,
-                        "payload": action.payload,
-                        "expiresAt": action.expires_at.isoformat(),
-                    }
-                }
-                yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps(_pending_action_event(action))}\n\n"
 
-    # Strip markers from displayed text
     clean_text = _strip_pending_markers(final_text)
     for i in range(0, len(clean_text), 80):
         yield f"data: {json.dumps({'content': clean_text[i:i + 80]})}\n\n"
 
 
-async def _yield_streaming_response(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _yield_streaming_response(
+    messages: list[dict], usage_out: dict | None = None,
+) -> AsyncGenerator[str, None]:
     """Stream LLM response with cold-start retry logic."""
     sent_waking = False
     for attempt in range(len(_COLD_START_DELAYS) + 1):
         try:
-            async for chunk in _stream_llm(messages):
+            async for chunk in _stream_llm(messages, usage_out):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             break
         except ContextOverflowError:
-            err = {
-                "error": "conversation_too_long",
-                "message": "This conversation is too long for Buddy. "
-                "Please start a new chat.",
-            }
-            yield f"data: {json.dumps(err)}\n\n"
+            yield _context_overflow_event()
             return
         except ColdStartError:
             if not sent_waking:
@@ -162,6 +160,32 @@ async def _yield_streaming_response(messages: list[dict]) -> AsyncGenerator[str,
             await asyncio.sleep(delay)
 
 
+def _context_overflow_event() -> str:
+    """Build an SSE event for context overflow errors."""
+    err = {
+        "error": "conversation_too_long",
+        "message": "This conversation is too long for Buddy. "
+        "Please start a new chat.",
+    }
+    return f"data: {json.dumps(err)}\n\n"
+
+
+def _conv_id_event(conversation_id: UUID) -> str:
+    """Build the conversation_id SSE event."""
+    return f"data: {json.dumps({'conversation_id': str(conversation_id)})}\n\n"
+
+
+def _build_chat_messages(request: ChatRequest, system: str) -> list[dict]:
+    """Build the LLM message list from a chat request."""
+    messages = [{"role": "system", "content": system}]
+    messages.extend(
+        {"role": m.role, "content": m.content}
+        for m in request.messages
+        if m.role in ("user", "assistant")
+    )
+    return messages
+
+
 async def stream_chat(
     db: AsyncSession,
     user: User,
@@ -170,32 +194,28 @@ async def stream_chat(
     """Stream a chat response, trying tool path first then falling back to streaming."""
     context = await ag_data_service.build_context_block()
     system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
-
-    messages = [{"role": "system", "content": system}]
-    messages.extend(
-        {"role": m.role, "content": m.content}
-        for m in request.messages
-        if m.role in ("user", "assistant")
-    )
+    messages = _build_chat_messages(request, system)
 
     # Phase 1: Try tool-augmented path (non-streaming)
     try:
-        final_text, tool_msgs = await tool_executor.try_tool_path(messages, db, user.id)
+        final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
+            messages, db, user.id,
+        )
         if final_text is not None:
             async for chunk in _yield_tool_response(final_text, db):
                 yield chunk
             conv = await _save_conversation(db, user.id, request, final_text, tool_msgs)
-            yield f"data: {json.dumps({'conversation_id': str(conv.id)})}\n\n"
+            await record_chat_usage(
+                db, user.id, conv.id, tool_usage,
+                settings.effective_tool_provider, settings.effective_tool_model,
+                "tool_chat",
+            )
+            yield _conv_id_event(conv.id)
             yield "data: [DONE]\n\n"
             return
     except ContextOverflowError:
         logger.warning("Context overflow in tool path")
-        err = {
-            "error": "conversation_too_long",
-            "message": "This conversation is too long for Buddy. "
-            "Please start a new chat.",
-        }
-        yield f"data: {json.dumps(err)}\n\n"
+        yield _context_overflow_event()
         yield "data: [DONE]\n\n"
         return
     except ToolColdStartError:
@@ -204,8 +224,9 @@ async def stream_chat(
         logger.exception("Tool path failed, falling back to streaming")
 
     # Phase 2: Streaming path with cold-start retry
+    usage_out: dict = {}
     full_response: list[str] = []
-    async for chunk in _yield_streaming_response(messages):
+    async for chunk in _yield_streaming_response(messages, usage_out):
         yield chunk
         if '"content"' in chunk:
             try:
@@ -215,17 +236,23 @@ async def stream_chat(
                 pass
 
     conv = await _save_conversation(db, user.id, request, "".join(full_response))
-    yield f"data: {json.dumps({'conversation_id': str(conv.id)})}\n\n"
+    await record_chat_usage(
+        db, user.id, conv.id, usage_out,
+        settings.llm_provider, settings.llm_model, "stream_chat",
+    )
+    yield _conv_id_event(conv.id)
     yield "data: [DONE]\n\n"
 
 
-async def _stream_llm(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _stream_llm(
+    messages: list[dict], usage_out: dict | None = None,
+) -> AsyncGenerator[str, None]:
     """Stream tokens from the configured LLM provider."""
     if settings.llm_provider == LLMProvider.ANTHROPIC:
-        async for chunk in _stream_anthropic(messages):
+        async for chunk in _stream_anthropic(messages, usage_out):
             yield chunk
     else:
-        async for chunk in _stream_openai_compat(messages):
+        async for chunk in _stream_openai_compat(messages, usage_out):
             yield chunk
 
 
@@ -234,13 +261,33 @@ async def _stream_llm(messages: list[dict]) -> AsyncGenerator[str, None]:
 # ---------------------------------------------------------------------------
 
 
-async def _stream_openai_compat(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _check_streaming_status(response: httpx.Response) -> None:
+    """Check streaming response status, raising on errors."""
+    if response.status_code == 503:
+        raise ColdStartError()
+    if response.status_code >= 400:
+        body = (await response.aread()).decode(errors="replace")[:500]
+        logger.error("Streaming LLM error %s: %s", response.status_code, body)
+        if "exceed" in body and "context" in body:
+            raise ContextOverflowError("Conversation exceeds context window.")
+        raise httpx.HTTPStatusError(
+            f"HTTP {response.status_code}",
+            request=response.request,
+            response=response,
+        )
+
+
+async def _stream_openai_compat(
+    messages: list[dict],
+    usage_out: dict | None = None,
+) -> AsyncGenerator[str, None]:
     """Stream tokens from an OpenAI-compatible /v1/chat/completions endpoint."""
-    body = {
+    body: dict = {
         "model": settings.llm_model,
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
+        "stream_options": {"include_usage": True},
     }
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
@@ -251,22 +298,9 @@ async def _stream_openai_compat(messages: list[dict]) -> AsyncGenerator[str, Non
         stream=True,
     )
     try:
-        if response.status_code == 503:
-            raise ColdStartError()
-        if response.status_code >= 400:
-            body = (await response.aread()).decode(errors="replace")[:500]
-            logger.error("Streaming LLM error %s: %s", response.status_code, body)
-            if "exceed" in body and "context" in body:
-                raise ContextOverflowError(
-                    "Conversation exceeds context window."
-                )
-            raise httpx.HTTPStatusError(
-                f"HTTP {response.status_code}",
-                request=response.request,
-                response=response,
-            )
+        await _check_streaming_status(response)
         async for line in response.aiter_lines():
-            content = _parse_openai_sse(line)
+            content = _parse_openai_sse(line, usage_out)
             if content is None:
                 break
             if content:
@@ -276,7 +310,9 @@ async def _stream_openai_compat(messages: list[dict]) -> AsyncGenerator[str, Non
         await client.aclose()
 
 
-def _parse_openai_sse(line: str) -> str | None:
+def _parse_openai_sse(
+    line: str, usage_out: dict | None = None,
+) -> str | None:
     """Parse a single SSE line and return the content token, or None for [DONE]."""
     if not line.startswith("data: "):
         return ""
@@ -284,7 +320,16 @@ def _parse_openai_sse(line: str) -> str | None:
     if data == "[DONE]":
         return None
     parsed = json.loads(data)
-    delta = parsed["choices"][0].get("delta", {})
+    # Capture usage from final chunk (stream_options: include_usage)
+    if usage_out is not None and parsed.get("usage"):
+        raw = parsed["usage"]
+        usage_out["input_tokens"] = raw.get("prompt_tokens", 0)
+        usage_out["output_tokens"] = raw.get("completion_tokens", 0)
+        usage_out["total_tokens"] = raw.get("total_tokens", 0)
+    choices = parsed.get("choices", [])
+    if not choices:
+        return ""
+    delta = choices[0].get("delta", {})
     # llama.cpp sends {"content": null} in the first chunk — don't confuse
     # with our None sentinel (which means [DONE]).
     content = delta.get("content")
@@ -310,7 +355,10 @@ def _split_system(messages: list[dict]) -> tuple[str, list[dict]]:
     return system, chat
 
 
-async def _stream_anthropic(messages: list[dict]) -> AsyncGenerator[str, None]:
+async def _stream_anthropic(
+    messages: list[dict],
+    usage_out: dict | None = None,
+) -> AsyncGenerator[str, None]:
     """Stream tokens from the Anthropic Messages API."""
     system, chat = _split_system(messages)
     body = {
@@ -342,7 +390,7 @@ async def _stream_anthropic(messages: list[dict]) -> AsyncGenerator[str, None]:
             yield f"[Error: LLM returned status {response.status_code}]"
             return
         async for line in response.aiter_lines():
-            text = _parse_anthropic_sse(line)
+            text = _parse_anthropic_sse(line, usage_out)
             if text is None:
                 break
             if text:
@@ -352,81 +400,31 @@ async def _stream_anthropic(messages: list[dict]) -> AsyncGenerator[str, None]:
         await client.aclose()
 
 
-def _parse_anthropic_sse(line: str) -> str | None:
+def _parse_anthropic_sse(
+    line: str, usage_out: dict | None = None,
+) -> str | None:
     """Parse an Anthropic SSE line. Returns text, empty string to skip, or None to stop."""
     if not line.startswith("data: "):
         return ""
     parsed = json.loads(line[6:])
-    if parsed.get("type") == "content_block_delta":
+    event_type = parsed.get("type")
+    if event_type == "message_start" and usage_out is not None:
+        msg_usage = parsed.get("message", {}).get("usage", {})
+        usage_out["input_tokens"] = msg_usage.get("input_tokens", 0)
+        return ""
+    if event_type == "content_block_delta":
         return parsed.get("delta", {}).get("text", "")
-    if parsed.get("type") == "message_stop":
+    if event_type == "message_delta":
+        if usage_out is not None:
+            delta_usage = parsed.get("usage", {})
+            out = delta_usage.get("output_tokens", 0)
+            usage_out["output_tokens"] = out
+            usage_out["total_tokens"] = usage_out.get("input_tokens", 0) + out
+        return ""
+    if event_type == "message_stop":
         return None
     return ""
 
-
-# ---------------------------------------------------------------------------
-# Non-streaming summary generation
-# ---------------------------------------------------------------------------
-
-
-async def generate_summary(
-    observations: dict | None,
-    weather: dict | None,
-    notes: str | None,
-) -> str:
-    """Generate a text summary of an inspection (non-streaming)."""
-    prompt = "Summarize this hive inspection concisely:\n"
-    if observations:
-        prompt += f"Observations: {json.dumps(observations)}\n"
-    if weather:
-        prompt += f"Weather: {json.dumps(weather)}\n"
-    if notes:
-        prompt += f"Notes: {notes}\n"
-
-    messages = [
-        {"role": "system", "content": "You are a beekeeping assistant. Summarize concisely."},
-        {"role": "user", "content": prompt},
-    ]
-
-    if settings.llm_provider == LLMProvider.ANTHROPIC:
-        return await _generate_anthropic(messages)
-    return await _generate_openai_compat(messages)
-
-
-async def _generate_openai_compat(messages: list[dict]) -> str:
-    """Non-streaming completion via OpenAI-compatible endpoint."""
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{settings.llm_base_url}/chat/completions",
-            json={"model": settings.llm_model, "messages": messages, "stream": False},
-            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    return data["choices"][0]["message"]["content"]
-
-
-async def _generate_anthropic(messages: list[dict]) -> str:
-    """Non-streaming completion via Anthropic Messages API."""
-    system, chat = _split_system(messages)
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{settings.llm_base_url}/messages",
-            json={
-                "model": settings.llm_model,
-                "max_tokens": 1024,
-                "system": system,
-                "messages": chat,
-            },
-            headers={
-                "x-api-key": settings.llm_api_key,
-                "anthropic-version": ANTHROPIC_VERSION,
-                "content-type": "application/json",
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    return data["content"][0]["text"]
 
 
 async def _save_conversation(

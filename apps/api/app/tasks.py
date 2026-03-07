@@ -54,7 +54,6 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
 
     from app.db.session import AsyncSessionLocal
     from app.models.inspection import Inspection
-    from app.services import ai_service
 
     async with AsyncSessionLocal() as db:
         inspection = await db.get(Inspection, UUID(inspection_id))
@@ -62,7 +61,9 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
             logger.warning("Inspection %s not found for summary", inspection_id)
             return
 
-        summary = await ai_service.generate_summary(
+        from app.services.ai_summary import generate_summary
+
+        summary = await generate_summary(
             observations=inspection.observations,
             weather=inspection.weather,
             notes=inspection.notes,
