@@ -625,21 +625,39 @@ class ApiClient {
   }
 
   async chatStream(data: ChatRequest): Promise<Response> {
-    const url = `${this.config.baseUrl}/api/v1/ai/chat`;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+    const doFetch = () => {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (isWeb) {
+        headers["X-Requested-With"] = "BeeBuddy";
+      } else if (this.config.token) {
+        headers["Authorization"] = `Bearer ${this.config.token}`;
+      }
+      return fetch(`${this.config.baseUrl}/api/v1/ai/chat`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(data),
+        ...(isWeb && { credentials: "include" as RequestCredentials }),
+      });
     };
-    if (isWeb) {
-      headers["X-Requested-With"] = "BeeBuddy";
-    } else if (this.config.token) {
-      headers["Authorization"] = `Bearer ${this.config.token}`;
+
+    const response = await doFetch();
+    if (response.status === 401 && this.onRefresh) {
+      try {
+        if (!this.refreshPromise) {
+          this.refreshPromise = this.onRefresh().finally(() => {
+            this.refreshPromise = null;
+          });
+        }
+        await this.refreshPromise;
+        return doFetch();
+      } catch {
+        await this.onLogout?.();
+        throw new Error("Session expired");
+      }
     }
-    return fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(data),
-      ...(isWeb && { credentials: "include" as RequestCredentials }),
-    });
+    return response;
   }
 
   async confirmAction(actionId: string) {

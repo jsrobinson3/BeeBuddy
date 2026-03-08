@@ -8,6 +8,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { database } from "../database";
@@ -139,7 +140,9 @@ function Providers({ children }: { children: React.ReactNode }) {
   const inner = (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <ThemeProvider>{children}</ThemeProvider>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+          <ThemeProvider>{children}</ThemeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
   );
