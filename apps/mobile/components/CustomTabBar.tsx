@@ -5,8 +5,8 @@
  * Active tabs get a filled hex background with forest-coloured icons;
  * inactive tabs get an unfilled outline with muted icons.
  */
-import React from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Keyboard, Platform, Pressable, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Home, ClipboardList, MessageCircle, Settings } from "lucide-react-native";
@@ -122,6 +122,17 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const styles = useStyles(createStyles);
   const tabs = useTabItems(state, navigation);
+
+  // Hide tab bar when keyboard is open on Android (prevents overlap in chat)
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  if (keyboardVisible) return null;
 
   return (
     <View style={[styles.bar, { paddingBottom: insets.bottom }]}>

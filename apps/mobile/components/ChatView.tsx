@@ -296,6 +296,8 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
     }
   };
 
+  const handleSubmitEditing = () => handleSend();
+
   // Cancel auto-send when user starts editing manually; exit converse mode
   const handleChangeText = useCallback((value: string) => {
     cancelAutoSend();
@@ -340,9 +342,12 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
         value={text}
         onChangeText={handleChangeText}
         multiline
-        returnKeyType="default"
+        submitBehavior="submit"
+        returnKeyType="send"
+        blurOnSubmit={false}
         editable={!disabled}
         onKeyPress={handleKeyPress}
+        onSubmitEditing={handleSubmitEditing}
       />
       <VoiceInputButton
         ref={micRef}
