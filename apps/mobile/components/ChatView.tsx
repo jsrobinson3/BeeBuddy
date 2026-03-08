@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
@@ -12,8 +11,9 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from "react-native";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import { useRouter } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { Send } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 
@@ -458,7 +458,10 @@ function StreamErrorBanner({
 
 export function ChatView({ conversationId }: ChatViewProps) {
   const router = useRouter();
-  const headerHeight = useHeaderHeight();
+  const { height: kbHeight } = useReanimatedKeyboardAnimation();
+  const keyboardStyle = useAnimatedStyle(() => ({
+    paddingBottom: -kbHeight.value,
+  }));
   const styles = useStyles(createContainerStyles);
   const listRef = useRef<FlatList<DisplayMessage>>(null);
   const isNearBottom = useRef(true);
@@ -608,11 +611,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   return (
     <ResponsiveContainer fill>
-      <KeyboardAvoidingView
-        style={styles.root}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-      >
+      <Reanimated.View style={[styles.root, keyboardStyle]}>
         <FlatList
           ref={listRef}
           style={styles.list}
@@ -662,7 +661,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
           onConverseModeToggle={handleConverseModeToggle}
           micRef={micRef}
         />
-      </KeyboardAvoidingView>
+      </Reanimated.View>
     </ResponsiveContainer>
   );
 }
