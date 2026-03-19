@@ -18,7 +18,7 @@
     "@react-native-community/datetimepicker": "^8.6.0",
     "@react-native-community/netinfo": "^12.0.1",
     "@react-native-google-signin/google-signin": "^16.1.2",
-    "@sentry/react-native": "~8.4.0",
+    "@sentry/react-native": "~8.5.0",
     "@tanstack/react-query": "^5.90.21",
     "babel-preset-expo": "^55.0.11",
     "expo": "~55.0.5",
