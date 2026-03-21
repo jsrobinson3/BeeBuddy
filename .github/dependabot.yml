@@ -11,6 +11,14 @@ updates:
         patterns: ["expo*", "@expo/*", "react-native*"]
       tanstack:
         patterns: ["@tanstack/*"]
+      react:
+        patterns: ["react", "react-dom", "react-test-renderer"]
+      testing:
+        patterns: ["jest", "jest-expo", "@testing-library/*", "@types/jest"]
+      misc-deps:
+        exclude-patterns: ["expo*", "@expo/*", "react-native*", "@tanstack/*",
+          "react", "react-dom", "react-test-renderer", "jest", "jest-expo",
+          "@testing-library/*", "@types/jest"]
 
   - package-ecosystem: "pip"
     directory: "/apps/api"
