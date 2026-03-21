@@ -22,7 +22,7 @@ from app.schemas.feedback import (
     FeedbackCreate,
     FeedbackResponse,
 )
-from app.services import ai_service, feedback_service, pending_action_service
+from app.services import ai_service, feedback_service, pending_action_service, warmup_service
 
 router = APIRouter(prefix="/ai")
 
@@ -91,6 +91,14 @@ async def delete_conversation(
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return Response(status_code=204)
+
+
+@router.post("/warmup")
+async def warmup(
+    current_user: User = Depends(get_current_user),
+):
+    """Pre-warm HF Inference Endpoints (fire-and-forget from mobile)."""
+    return await warmup_service.warm_endpoints()
 
 
 @router.post(

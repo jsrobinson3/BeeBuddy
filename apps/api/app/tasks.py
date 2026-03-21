@@ -280,6 +280,20 @@ def celery_worker_heartbeat():
     r.close()
 
 
+@celery_app.task
+def hf_warmup_keepalive():
+    """Periodic ping to prevent HF endpoint scale-to-zero.
+
+    Disabled by default (HF_WARMUP_KEEPALIVE_ENABLED=false).
+    """
+    import asyncio
+
+    from app.services import warmup_service
+
+    result = asyncio.run(warmup_service.warm_endpoints())
+    logger.info("HF keepalive warmup: %s", result)
+
+
 # Celery Beat schedule
 celery_app.conf.beat_schedule = {
     "generate-cadence-tasks-daily": {
@@ -291,3 +305,9 @@ celery_app.conf.beat_schedule = {
         "schedule": 60,  # every 60 seconds
     },
 }
+
+if settings.hf_warmup_keepalive_enabled:
+    celery_app.conf.beat_schedule["hf-warmup-keepalive"] = {
+        "task": "app.tasks.hf_warmup_keepalive",
+        "schedule": settings.hf_warmup_keepalive_interval,
+    }

@@ -8,11 +8,13 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo } from "react";
 import { Platform } from "react-native";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { database } from "../database";
 import { useSyncOnForeground } from "../database/useSyncOnForeground";
 import { useSyncOnReconnect } from "../database/useSyncOnReconnect";
+import { api } from "../services/api";
 import { queryClient } from "../services/queryClient";
 import { useAuthStore } from "../stores/auth";
 import { useThemeStore } from "../stores/theme";
@@ -89,6 +91,19 @@ function SyncManager() {
   return null;
 }
 
+function WarmupManager() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isHydrated = useAuthStore((s) => s.isHydrated);
+
+  useEffect(() => {
+    if (isHydrated && isAuthenticated) {
+      api.warmup();
+    }
+  }, [isHydrated, isAuthenticated]);
+
+  return null;
+}
+
 function RootNav() {
   const { isDark } = useTheme();
   const hydrateAuth = useAuthStore((s) => s.hydrate);
@@ -129,6 +144,7 @@ function RootNav() {
   return (
     <>
       <StatusBar style={isDark ? "light" : "dark"} />
+      <WarmupManager />
       <SyncManager />
       <AppStack />
     </>
@@ -139,7 +155,9 @@ function Providers({ children }: { children: React.ReactNode }) {
   const inner = (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
-        <ThemeProvider>{children}</ThemeProvider>
+        <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+          <ThemeProvider>{children}</ThemeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </QueryClientProvider>
   );

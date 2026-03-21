@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
@@ -12,8 +11,9 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from "react-native";
+import { useReanimatedKeyboardAnimation } from "react-native-keyboard-controller";
+import Reanimated, { useAnimatedStyle } from "react-native-reanimated";
 import { useRouter } from "expo-router";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { Send } from "lucide-react-native";
 import Markdown from "react-native-markdown-display";
 
@@ -279,12 +279,17 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
   // Clean up timer on unmount
   useEffect(() => cancelAutoSend, [cancelAutoSend]);
 
+  const sendGuard = useRef(false);
   const handleSend = () => {
     cancelAutoSend();
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled || sendGuard.current) return;
+    sendGuard.current = true;
     onSend(trimmed);
     setText("");
+    // Reset guard after current event loop to prevent double-fires
+    // from onSubmitEditing + onKeyPress both triggering on Enter
+    setTimeout(() => { sendGuard.current = false; }, 100);
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -295,6 +300,8 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
       handleSend();
     }
   };
+
+  const handleSubmitEditing = () => handleSend();
 
   // Cancel auto-send when user starts editing manually; exit converse mode
   const handleChangeText = useCallback((value: string) => {
@@ -311,9 +318,13 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
     setIsListening(false);
     // Auto-send after delay — user can edit or tap Send to send immediately
     autoSendTimer.current = setTimeout(() => {
-      onSend(finalText);
-      onVoiceSend?.();
-      setText("");
+      if (!sendGuard.current) {
+        sendGuard.current = true;
+        onSend(finalText);
+        onVoiceSend?.();
+        setText("");
+        setTimeout(() => { sendGuard.current = false; }, 100);
+      }
       autoSendTimer.current = null;
     }, VOICE_AUTO_SEND_DELAY);
   }, [cancelAutoSend, onSend, onVoiceSend]);
@@ -340,9 +351,12 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
         value={text}
         onChangeText={handleChangeText}
         multiline
-        returnKeyType="default"
+        submitBehavior="submit"
+        returnKeyType="send"
+        blurOnSubmit={false}
         editable={!disabled}
         onKeyPress={handleKeyPress}
+        onSubmitEditing={handleSubmitEditing}
       />
       <VoiceInputButton
         ref={micRef}
@@ -458,7 +472,10 @@ function StreamErrorBanner({
 
 export function ChatView({ conversationId }: ChatViewProps) {
   const router = useRouter();
-  const headerHeight = useHeaderHeight();
+  const { height: kbHeight } = useReanimatedKeyboardAnimation();
+  const keyboardStyle = useAnimatedStyle(() => ({
+    paddingBottom: -kbHeight.value,
+  }));
   const styles = useStyles(createContainerStyles);
   const listRef = useRef<FlatList<DisplayMessage>>(null);
   const isNearBottom = useRef(true);
@@ -608,11 +625,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   return (
     <ResponsiveContainer fill>
-      <KeyboardAvoidingView
-        style={styles.root}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? headerHeight : 0}
-      >
+      <Reanimated.View style={[styles.root, keyboardStyle]}>
         <FlatList
           ref={listRef}
           style={styles.list}
@@ -662,7 +675,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
           onConverseModeToggle={handleConverseModeToggle}
           micRef={micRef}
         />
-      </KeyboardAvoidingView>
+      </Reanimated.View>
     </ResponsiveContainer>
   );
 }

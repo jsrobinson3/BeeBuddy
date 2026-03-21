@@ -25,6 +25,7 @@ from app.models.user import User
 from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
 from app.services._llm_utils import _split_system
+from app.services.guardrails import guardrail_pipeline
 from app.services.token_usage import record_chat_usage
 from app.services.tool_executor import ColdStartError as ToolColdStartError
 from app.services.tool_executor import ContextOverflowError
@@ -68,11 +69,12 @@ hive products.
 - For chemical treatments, always mention withdrawal periods and label compliance.
 
 App capabilities:
-- Your tools represent the complete set of BeeBuddy's features. If you don't \
-have a tool for something, the app doesn't support it yet.
-- Never suggest or recommend app features beyond what your tools can do. If \
-a user asks about a feature you have no tool for, let them know it's not \
-available yet and help with what IS available instead.
+- Your tools let you access the beekeeper's data. Some app features (weather \
+forecasts, offline sync, task scheduling) exist in the app but aren't \
+accessible through your tools yet — acknowledge them if asked, but don't \
+pretend you can access their data.
+- Never suggest or recommend app features that don't exist. If unsure \
+whether a feature exists, be honest rather than guessing.
 - When answering questions about the user's data, always use your tools to \
 look up the real answer. Never answer user-data questions from memory or \
 training data — your tools are the source of truth for their data.
@@ -198,44 +200,47 @@ def _build_chat_messages(request: ChatRequest, system: str) -> list[dict]:
     return messages
 
 
-async def stream_chat(
-    db: AsyncSession,
-    user: User,
-    request: ChatRequest,
+async def _yield_canned_response(
+    message: str,
 ) -> AsyncGenerator[str, None]:
-    """Stream a chat response, trying tool path first then falling back to streaming."""
-    context = await ag_data_service.build_context_block()
-    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
-    messages = _build_chat_messages(request, system)
+    """Yield a blocked/canned response as SSE chunks."""
+    for i in range(0, len(message), 80):
+        yield f"data: {json.dumps({'content': message[i:i + 80]})}\n\n"
 
-    # Phase 1: Try tool-augmented path (non-streaming)
-    try:
-        final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
-            messages, db, user.id,
-        )
-        if final_text is not None:
-            async for chunk in _yield_tool_response(final_text, db):
-                yield chunk
-            conv = await _save_conversation(db, user.id, request, final_text, tool_msgs)
-            await record_chat_usage(
-                db, user.id, conv.id, tool_usage,
-                settings.effective_tool_provider, settings.effective_tool_model,
-                "tool_chat",
-            )
-            yield _conv_id_event(conv.id)
-            yield "data: [DONE]\n\n"
-            return
-    except ContextOverflowError:
-        logger.warning("Context overflow in tool path")
-        yield _context_overflow_event()
-        yield "data: [DONE]\n\n"
+
+async def _handle_tool_path(
+    db: AsyncSession, user: User, request: ChatRequest,
+    messages: list[dict], user_msg: str,
+) -> AsyncGenerator[str, None]:
+    """Phase 1: tool-augmented path with output guard."""
+    final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
+        messages, db, user.id,
+    )
+    if final_text is None:
         return
-    except ToolColdStartError:
-        logger.info("Tool path got 503, falling back to streaming with waking_up")
-    except Exception:
-        logger.exception("Tool path failed, falling back to streaming")
 
-    # Phase 2: Streaming path with cold-start retry
+    # --- Output guard (can log/flag before emission) ---
+    await guardrail_pipeline.check_output(final_text, user_msg)
+
+    async for chunk in _yield_tool_response(final_text, db):
+        yield chunk
+    conv = await _save_conversation(
+        db, user.id, request, final_text, tool_msgs,
+    )
+    await record_chat_usage(
+        db, user.id, conv.id, tool_usage,
+        settings.effective_tool_provider,
+        settings.effective_tool_model, "tool_chat",
+    )
+    yield _conv_id_event(conv.id)
+    yield "data: [DONE]\n\n"
+
+
+async def _handle_streaming_path(
+    db: AsyncSession, user: User, request: ChatRequest,
+    messages: list[dict], user_msg: str,
+) -> AsyncGenerator[str, None]:
+    """Phase 2: streaming path with post-stream audit."""
     usage_out: dict = {}
     full_response: list[str] = []
     async for chunk in _yield_streaming_response(messages, usage_out):
@@ -247,13 +252,63 @@ async def stream_chat(
             except (json.JSONDecodeError, IndexError):
                 pass
 
-    conv = await _save_conversation(db, user.id, request, "".join(full_response))
+    response_text = "".join(full_response)
+
+    # --- Audit guard (post-stream, log-only) ---
+    guardrail_pipeline.audit(response_text, user_msg, user.id)
+
+    conv = await _save_conversation(db, user.id, request, response_text)
     await record_chat_usage(
         db, user.id, conv.id, usage_out,
         settings.llm_provider, settings.llm_model, "stream_chat",
     )
     yield _conv_id_event(conv.id)
     yield "data: [DONE]\n\n"
+
+
+async def stream_chat(
+    db: AsyncSession,
+    user: User,
+    request: ChatRequest,
+) -> AsyncGenerator[str, None]:
+    """Stream a chat response with guardrails pipeline."""
+    user_msg = request.messages[-1].content if request.messages else ""
+
+    # --- Input guard (saves an LLM call for blocked messages) ---
+    input_result = guardrail_pipeline.check_input(user_msg)
+    if not input_result.allowed:
+        async for chunk in _yield_canned_response(input_result.canned_response):
+            yield chunk
+        yield "data: [DONE]\n\n"
+        return
+
+    context = await ag_data_service.build_context_block()
+    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
+    messages = _build_chat_messages(request, system)
+
+    # Phase 1: Try tool-augmented path
+    try:
+        async for chunk in _handle_tool_path(
+            db, user, request, messages, user_msg,
+        ):
+            yield chunk
+            if '"conversation_id"' in chunk:
+                return
+    except ContextOverflowError:
+        logger.warning("Context overflow in tool path")
+        yield _context_overflow_event()
+        yield "data: [DONE]\n\n"
+        return
+    except ToolColdStartError:
+        logger.info("Tool path 503, falling back to streaming")
+    except Exception:
+        logger.exception("Tool path failed, falling back to streaming")
+
+    # Phase 2: Streaming path
+    async for chunk in _handle_streaming_path(
+        db, user, request, messages, user_msg,
+    ):
+        yield chunk
 
 
 async def _stream_llm(
