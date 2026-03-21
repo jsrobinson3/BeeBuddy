@@ -16,6 +16,7 @@ from app.services.guardrails.patterns import (
     PII_PATTERNS,
     RESPONSE_OFF_TOPIC,
     RESPONSE_PII_DETECTED,
+    normalize_for_injection_check,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,8 +51,17 @@ def _check_pii(text: str) -> bool:
 
 
 def _check_injection(text: str) -> bool:
-    """Return True if text matches prompt injection patterns."""
-    return any(p.search(text) for p in INJECTION_PATTERNS)
+    """Return True if text matches prompt injection patterns.
+
+    Checks both raw text and a normalized form (leetspeak/homoglyph stripped)
+    to catch evasion attempts.
+    """
+    if any(p.search(text) for p in INJECTION_PATTERNS):
+        return True
+    normalized = normalize_for_injection_check(text)
+    if normalized != text.lower():
+        return any(p.search(normalized) for p in INJECTION_PATTERNS)
+    return False
 
 
 def _has_domain_keyword(text: str) -> bool:

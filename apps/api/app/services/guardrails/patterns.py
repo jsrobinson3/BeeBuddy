@@ -5,6 +5,51 @@ and canned responses used by the style and topic guards.
 """
 
 import re
+import unicodedata
+
+# ---------------------------------------------------------------------------
+# Text normalizer — strips leetspeak and unicode homoglyphs before checks
+# ---------------------------------------------------------------------------
+
+# Leetspeak: common digit/symbol → letter substitutions
+_LEET_MAP = str.maketrans({
+    "0": "o", "1": "i", "3": "e", "4": "a", "5": "s",
+    "7": "t", "8": "b", "@": "a", "$": "s", "!": "i",
+})
+
+# Unicode homoglyphs: Cyrillic/Greek/special chars that look like Latin
+_HOMOGLYPH_MAP = str.maketrans({
+    "\u0430": "a",  # Cyrillic а
+    "\u0435": "e",  # Cyrillic е
+    "\u043e": "o",  # Cyrillic о
+    "\u0440": "p",  # Cyrillic р
+    "\u0441": "c",  # Cyrillic с
+    "\u0443": "y",  # Cyrillic у
+    "\u0445": "x",  # Cyrillic х
+    "\u0456": "i",  # Cyrillic і
+    "\u0455": "s",  # Cyrillic ѕ
+    "\u0475": "v",  # Cyrillic ѵ
+    "\u0261": "g",  # Latin ɡ
+    "\u2160": "I",  # Roman numeral Ⅰ
+    "\u2170": "i",  # Roman numeral ⅰ
+})
+
+
+def normalize_for_injection_check(text: str) -> str:
+    """Normalize text to defeat leetspeak and homoglyph evasion.
+
+    Applied only for injection detection — not for topic/domain checks
+    where numbers and special chars are meaningful.
+    """
+    # 1. NFKC normalization (collapses fullwidth, compatibility forms)
+    result = unicodedata.normalize("NFKC", text)
+    # 2. Homoglyph replacement (before lowering — some are case-sensitive)
+    result = result.translate(_HOMOGLYPH_MAP)
+    # 3. Lowercase
+    result = result.lower()
+    # 4. Leetspeak replacement
+    result = result.translate(_LEET_MAP)
+    return result
 
 # ---------------------------------------------------------------------------
 # Beekeeping domain keywords — used for topic relevance classification.
@@ -97,11 +142,12 @@ INJECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"ignore\s+(all\s+)?previous\s+(instructions?|prompts?|rules?)", re.I),
     re.compile(r"ignore\s+(everything\s+)?(above|before|prior)", re.I),
     re.compile(r"ignore\s+your\s+(instructions?|prompts?|rules?|programming)", re.I),
+    re.compile(r"ignore\s+(all\s+)?(safety\s+)?(guidelines?|restrictions?)", re.I),
     re.compile(
-        r"forget\s+(everything|all|what)\s+(above|before|prior|you)", re.I,
+        r"forget\s+(everything|all|what)\s+(above|before|prior|you|about)", re.I,
     ),
     re.compile(
-        r"disregard\s+(all\s+)?(previous\s+)?(instructions?|prompts?|rules?)", re.I,
+        r"disregard\s+(all\s+)?(previous\s+)?(instructions?|prompts?|rules?|guidelines?)", re.I,
     ),
     re.compile(r"you\s+are\s+now\s+(a|an|my)\s+", re.I),
     re.compile(r"(pretend|act)\s+(like\s+)?(you'?re|to\s+be|you\s+are)\s+", re.I),
@@ -119,6 +165,15 @@ INJECTION_PATTERNS: list[re.Pattern] = [
     re.compile(r"(jailbreak|do\s+anything\s+now|dan\s+mode)", re.I),
     re.compile(r"\[\s*(system|SYSTEM)\s*\]", re.I),
     re.compile(r"<\s*(system|SYSTEM)\s*>", re.I),
+    # Polite / indirect injection
+    re.compile(
+        r"(kindly|please)\s+(disregard|set\s+aside|ignore|forget)\s+"
+        r"(your|all|the|any|previous|my)?\s*(instructions?|rules?|guidelines?|prompts?|restrictions?|safety|filters?)",
+        re.I,
+    ),
+    re.compile(r"(temporarily|just)\s+(expand|relax|remove|drop)\s+your\s+", re.I),
+    re.compile(r"(share|explain)\s+how\s+your\s+(instructions?|prompt|rules?)\s+work", re.I),
+    re.compile(r"output\s+your\s+(full\s+)?(system\s+)?prompt", re.I),
 ]
 
 # ---------------------------------------------------------------------------
