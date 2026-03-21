@@ -1,9 +1,36 @@
 """Shared test fixtures."""
 
+import json
+from pathlib import Path
+
 import pytest
 from httpx import AsyncClient
 
 BASE_URL = "http://localhost:8000"
+
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+def load_jsonl(filename: str) -> list[dict]:
+    """Load a JSONL fixture file and return a list of dicts.
+
+    Args:
+        filename: Relative path under tests/fixtures/
+            (e.g. "guardrails/beekeeping_adversarial.jsonl").
+
+    Returns:
+        List of parsed JSON objects, one per line.
+    """
+    filepath = FIXTURES_DIR / filename
+    if not filepath.exists():
+        pytest.skip(f"Fixture not found: {filepath}")
+    records = []
+    with open(filepath, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
 
 
 @pytest.fixture

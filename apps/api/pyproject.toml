@@ -56,3 +56,6 @@ known-first-party = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "eval: evaluation/benchmark tests (may be slow or require downloaded fixtures)",
+]
