@@ -220,7 +220,9 @@ async def _handle_tool_path(
         return
 
     # --- Output guard (can log/flag before emission) ---
-    await guardrail_pipeline.check_output(final_text, user_msg)
+    output_result = await guardrail_pipeline.check_output(final_text, user_msg)
+    if output_result.disclaimer:
+        final_text += output_result.disclaimer
 
     async for chunk in _yield_tool_response(final_text, db):
         yield chunk
@@ -254,8 +256,8 @@ async def _handle_streaming_path(
 
     response_text = "".join(full_response)
 
-    # --- Audit guard (post-stream, log-only) ---
-    guardrail_pipeline.audit(response_text, user_msg, user.id)
+    # --- Audit guard (post-stream, persists to DB) ---
+    await guardrail_pipeline.audit(db, response_text, user_msg, user.id)
 
     conv = await _save_conversation(db, user.id, request, response_text)
     await record_chat_usage(

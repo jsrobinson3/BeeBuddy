@@ -5,6 +5,7 @@ from app.models.ai_token_usage import AITokenUsage
 from app.models.apiary import Apiary
 from app.models.base import Base
 from app.models.event import Event, EventType
+from app.models.guardrail_log import GuardrailLog
 from app.models.harvest import Harvest
 from app.models.hive import Hive, HiveSource, HiveStatus, HiveType
 from app.models.inspection import Inspection
@@ -43,6 +44,7 @@ __all__ = [
     "Harvest",
     "Event",
     "EventType",
+    "GuardrailLog",
     "Task",
     "TaskSource",
     "TaskCadence",
