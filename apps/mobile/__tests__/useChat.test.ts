@@ -195,12 +195,13 @@ describe("useChatStream", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("sets error when response has no body", async () => {
+  it("falls back to text parsing when response has no body", async () => {
     const resp = {
       ok: true,
       status: 200,
       body: null,
       json: jest.fn().mockResolvedValue({}),
+      text: jest.fn().mockResolvedValue(""),
     } as unknown as Response;
     api.chatStream.mockResolvedValue(resp);
 
@@ -210,8 +211,9 @@ describe("useChatStream", () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
     });
 
-    expect(result.current.streamingState).toBe("error");
-    expect(result.current.error?.message).toBe("No response body");
+    // With the response fallback, parseViaText runs and completes normally
+    expect(result.current.streamingState).toBe("idle");
+    expect(result.current.error).toBeNull();
   });
 
   it("captures conversationId from onMeta callback", async () => {
