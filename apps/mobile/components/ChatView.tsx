@@ -279,12 +279,17 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
   // Clean up timer on unmount
   useEffect(() => cancelAutoSend, [cancelAutoSend]);
 
+  const sendGuard = useRef(false);
   const handleSend = () => {
     cancelAutoSend();
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled || sendGuard.current) return;
+    sendGuard.current = true;
     onSend(trimmed);
     setText("");
+    // Reset guard after current event loop to prevent double-fires
+    // from onSubmitEditing + onKeyPress both triggering on Enter
+    setTimeout(() => { sendGuard.current = false; }, 100);
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -313,9 +318,13 @@ function ChatInput({ onSend, disabled, onVoiceSend, converseMode, onConverseMode
     setIsListening(false);
     // Auto-send after delay — user can edit or tap Send to send immediately
     autoSendTimer.current = setTimeout(() => {
-      onSend(finalText);
-      onVoiceSend?.();
-      setText("");
+      if (!sendGuard.current) {
+        sendGuard.current = true;
+        onSend(finalText);
+        onVoiceSend?.();
+        setText("");
+        setTimeout(() => { sendGuard.current = false; }, 100);
+      }
       autoSendTimer.current = null;
     }, VOICE_AUTO_SEND_DELAY);
   }, [cancelAutoSend, onSend, onVoiceSend]);

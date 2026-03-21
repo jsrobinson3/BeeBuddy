@@ -612,6 +612,15 @@ class ApiClient {
 
   // ── AI Chat ─────────────────────────────────────────────────────────────
 
+  /** Fire-and-forget pre-warm of HF inference endpoints. */
+  async warmup(): Promise<void> {
+    try {
+      await this.request<Record<string, string>>("/ai/warmup", { method: "POST" });
+    } catch {
+      // Fire-and-forget — swallow errors silently
+    }
+  }
+
   async getConversations() {
     return this.request<Conversation[]>("/ai/conversations");
   }

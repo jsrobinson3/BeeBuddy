@@ -1,5 +1,6 @@
 """BeeBuddy API - FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -34,6 +35,7 @@ from app.routers.mcp import mcp_app
 from app.services import s3_service
 
 settings = get_settings()
+logging.basicConfig(level=logging.INFO)
 init_sentry()
 
 

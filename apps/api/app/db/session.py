@@ -13,7 +13,7 @@ _connect_args = database_connect_args()
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=False,
     pool_pre_ping=True,
     pool_size=settings.db_pool_size,
     max_overflow=settings.db_max_overflow,

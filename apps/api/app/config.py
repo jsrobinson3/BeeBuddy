@@ -127,9 +127,22 @@ class Settings(BaseSettings):
     # Hugging Face Inference Endpoints
     hf_token: str | None = None
     hf_inference_endpoint_url: str | None = None  # e.g. https://<id>.endpoints.huggingface.cloud
+    hf_warmup_cooldown_seconds: int = 300       # 5 min between warm-up attempts
+    hf_warmup_keepalive_enabled: bool = False   # Celery Beat periodic ping
+    hf_warmup_keepalive_interval: int = 240     # Seconds between keep-alive pings
 
     # Agricultural data APIs
     usda_nass_api_key: str | None = None
+
+    # Guardrails
+    guardrails_enabled: bool = True
+    guardrails_log_only: bool = True  # Log flags but never block/rewrite
+    guardrails_style_enabled: bool = True
+    guardrails_topic_enabled: bool = True
+    guardrails_condense_enabled: bool = False  # Extra LLM call, off by default
+    guardrails_max_words_yes_no: int = 30
+    guardrails_max_words_how_to: int = 150
+    guardrails_max_words_explain: int = 250
 
     # Rate limiting
     rate_limit_enabled: bool = True
