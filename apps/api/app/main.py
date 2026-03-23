@@ -44,12 +44,18 @@ async def _ensure_knowledge_loaded() -> None:
     from app.db.session import AsyncSessionLocal
     from app.services import knowledge_service
 
+    log = logging.getLogger(__name__)
     async with AsyncSessionLocal() as db:
         count = await knowledge_service.chunk_count(db)
         if count > 0:
-            logging.getLogger(__name__).info("Knowledge base: %d chunks loaded", count)
+            log.info("Knowledge base: %d chunks loaded", count)
             return
-        logging.getLogger(__name__).info("Knowledge base empty — no seed available")
+        log.info("Knowledge base empty — loading seed from HF Hub")
+        try:
+            inserted = await knowledge_service.load_seed_from_hf(db)
+            log.info("Knowledge base seeded: %d chunks", inserted)
+        except Exception:
+            log.exception("Failed to load knowledge seed from HF")
 
 
 @asynccontextmanager

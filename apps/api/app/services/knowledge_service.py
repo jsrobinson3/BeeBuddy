@@ -7,9 +7,11 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.knowledge_chunk import KnowledgeChunk
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 async def chunk_count(db: AsyncSession) -> int:
@@ -92,6 +94,25 @@ async def load_from_hf(db: AsyncSession, dataset_id: str, split: str = "train") 
     await db.commit()
     logger.info("HF load complete: %d new chunks from %s", inserted, dataset_id)
     return inserted
+
+
+async def load_seed_from_hf(db: AsyncSession, repo_id: str | None = None) -> int:
+    """Download seed JSONL from HuggingFace Hub and load into pgvector.
+
+    Downloads to a temp file, then delegates to ``load_seed`` for insert.
+    """
+    from huggingface_hub import hf_hub_download
+
+    repo_id = repo_id or settings.rag_seed_hf_dataset
+    logger.info("Downloading seed from HF: %s", repo_id)
+    local_path = hf_hub_download(
+        repo_id=repo_id,
+        filename="knowledge_seed.jsonl",
+        repo_type="dataset",
+        token=True,
+    )
+    logger.info("Seed downloaded to %s", local_path)
+    return await load_seed(db, local_path)
 
 
 async def _existing_hashes(db: AsyncSession) -> set[str]:

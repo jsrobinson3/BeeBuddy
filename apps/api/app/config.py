@@ -155,6 +155,7 @@ class Settings(BaseSettings):
     rag_similarity_threshold: float = 0.3
     embedding_model: str = "nomic-embed-text"
     embedding_dim: int = 768
+    embedding_provider: str = "ollama"  # "ollama" or "huggingface"
     rag_seed_hf_dataset: str = "jsrobinson3/beebuddy-rag-seed"
 
     # Rate limiting

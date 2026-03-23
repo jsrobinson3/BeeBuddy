@@ -25,6 +25,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.46",
     "uvicorn[standard]>=0.41.0",
     "fastmcp>=2.0.0",
+    "huggingface-hub>=0.30.0",
     "pgvector>=0.3.6",
     # Pinned for security fixes (transitive deps)
     "pyasn1>=0.6.3",          # CVE-2026-30922 DoS via unbounded recursion
