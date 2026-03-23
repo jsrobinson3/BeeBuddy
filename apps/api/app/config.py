@@ -149,6 +149,14 @@ class Settings(BaseSettings):
     guardrails_max_words_how_to: int = 150
     guardrails_max_words_explain: int = 250
 
+    # RAG Knowledge Base
+    rag_enabled: bool = True
+    rag_top_k: int = 5
+    rag_similarity_threshold: float = 0.3
+    embedding_model: str = "nomic-embed-text"
+    embedding_dim: int = 768
+    rag_seed_hf_dataset: str = "jsrobinson3/beebuddy-rag-seed"
+
     # Rate limiting
     rate_limit_enabled: bool = True
 
