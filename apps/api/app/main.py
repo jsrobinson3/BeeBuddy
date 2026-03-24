@@ -1,5 +1,6 @@
 """BeeBuddy API - FastAPI application entry point."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -64,7 +65,7 @@ async def lifespan(app: FastAPI):
     # Startup
     await s3_service.ensure_bucket_exists()
     if settings.rag_enabled:
-        await _ensure_knowledge_loaded()
+        asyncio.create_task(_ensure_knowledge_loaded(), name="seed-knowledge")
     yield
     # Shutdown
 
