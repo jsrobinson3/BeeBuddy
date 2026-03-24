@@ -1,6 +1,6 @@
 """Quick local RAG verification — tests the full pipeline end-to-end.
 
-Run with: cd apps/api && uv run python tests/test_rag_local.py
+Run with: cd apps/api && uv run python tests/verify_rag_local.py
 
 Requires: Postgres with knowledge_chunks loaded, Ollama running.
 """
