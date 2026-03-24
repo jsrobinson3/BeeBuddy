@@ -139,10 +139,24 @@ class Settings(BaseSettings):
     guardrails_log_only: bool = True  # Log flags but never block/rewrite
     guardrails_style_enabled: bool = True
     guardrails_topic_enabled: bool = True
+    guardrails_safety_enabled: bool = True
+    guardrails_safety_append_disclaimer: bool = True
+    guardrails_safety_block_high_severity: bool = False  # Log-only until calibrated
+    guardrails_audit_db_enabled: bool = True  # Persist guard decisions to DB
+    guardrails_audit_log_all: bool = False  # Only log failures by default
     guardrails_condense_enabled: bool = False  # Extra LLM call, off by default
     guardrails_max_words_yes_no: int = 30
     guardrails_max_words_how_to: int = 150
     guardrails_max_words_explain: int = 250
+
+    # RAG Knowledge Base
+    rag_enabled: bool = True
+    rag_top_k: int = 5
+    rag_similarity_threshold: float = 0.3
+    embedding_model: str = "nomic-embed-text"
+    embedding_dim: int = 768
+    embedding_provider: str = "ollama"  # "ollama" or "huggingface"
+    rag_seed_hf_dataset: str = "jsrobinson3/beebuddy-rag-seed"
 
     # Rate limiting
     rate_limit_enabled: bool = True

@@ -86,9 +86,12 @@ TOOL_SYSTEM_ADDENDUM = """
 You have access to tools that can query the beekeeper's actual data — their apiaries, \
 hives, inspections, harvests, treatments, queens, events, and tasks. When the user asks \
 about their own data (e.g. "how many hives do I have?", "when was my last inspection?", \
-"how much honey did I harvest this year?"), use the appropriate tool to look up the real \
-answer. For general beekeeping knowledge questions, answer from your training data without \
-using tools.
+"how much honey did I harvest this year?"), use the appropriate data tool to look up the \
+real answer.
+
+For general beekeeping knowledge questions (treatments, diseases, management practices, \
+seasonal guidance), use the search_knowledge_base tool to ground your answer in vetted \
+sources. When you use knowledge from the search results, briefly mention the source.
 
 You also have tools that can create, update, and delete records. When the user asks you \
 to create or modify data, use the appropriate write tool. Write tools don't execute \
@@ -220,7 +223,9 @@ async def _handle_tool_path(
         return
 
     # --- Output guard (can log/flag before emission) ---
-    await guardrail_pipeline.check_output(final_text, user_msg)
+    output_result = await guardrail_pipeline.check_output(final_text, user_msg)
+    if output_result.disclaimer:
+        final_text += output_result.disclaimer
 
     async for chunk in _yield_tool_response(final_text, db):
         yield chunk
@@ -254,8 +259,8 @@ async def _handle_streaming_path(
 
     response_text = "".join(full_response)
 
-    # --- Audit guard (post-stream, log-only) ---
-    guardrail_pipeline.audit(response_text, user_msg, user.id)
+    # --- Audit guard (post-stream, persists to DB) ---
+    await guardrail_pipeline.audit(db, response_text, user_msg, user.id)
 
     conv = await _save_conversation(db, user.id, request, response_text)
     await record_chat_usage(

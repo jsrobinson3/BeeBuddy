@@ -713,4 +713,27 @@ def create_mcp_server(db: AsyncSession, user_id: UUID) -> FastMCP:
         )
         return f"I've prepared updates for \"{hive.name}\". [PENDING:{action.id}] Please confirm."
 
+    # ── Knowledge base (RAG) ──────────────────────────────────────────────
+
+    @server.tool()
+    async def search_knowledge_base(query: str, limit: int = 5) -> list[dict]:
+        """Search the beekeeping knowledge base for relevant information.
+
+        Use this for general beekeeping questions about treatments, diseases,
+        management practices, regulations, and seasonal guidance.
+        Do NOT use this for questions about the user's own data (hives,
+        inspections, etc.) — use the data tools for those.
+        """
+        from app.services import rag_service
+
+        results = await rag_service.search(db, query, top_k=min(limit, 10))
+        return [
+            {
+                "content": r["content"],
+                "source": r["source_name"],
+                "relevance": r["similarity"],
+            }
+            for r in results
+        ]
+
     return server

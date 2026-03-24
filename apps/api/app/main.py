@@ -39,11 +39,32 @@ logging.basicConfig(level=logging.INFO)
 init_sentry()
 
 
+async def _ensure_knowledge_loaded() -> None:
+    """Load RAG seed on first boot if knowledge_chunks table is empty."""
+    from app.db.session import AsyncSessionLocal
+    from app.services import knowledge_service
+
+    log = logging.getLogger(__name__)
+    async with AsyncSessionLocal() as db:
+        count = await knowledge_service.chunk_count(db)
+        if count > 0:
+            log.info("Knowledge base: %d chunks loaded", count)
+            return
+        log.info("Knowledge base empty — loading seed from HF Hub")
+        try:
+            inserted = await knowledge_service.load_seed_from_hf(db)
+            log.info("Knowledge base seeded: %d chunks", inserted)
+        except Exception:
+            log.exception("Failed to load knowledge seed from HF")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
     # Startup
     await s3_service.ensure_bucket_exists()
+    if settings.rag_enabled:
+        await _ensure_knowledge_loaded()
     yield
     # Shutdown
 

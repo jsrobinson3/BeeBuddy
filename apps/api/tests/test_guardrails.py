@@ -257,6 +257,11 @@ def _mock_settings(**overrides):
         "guardrails_log_only": True,
         "guardrails_style_enabled": True,
         "guardrails_topic_enabled": True,
+        "guardrails_safety_enabled": True,
+        "guardrails_safety_append_disclaimer": True,
+        "guardrails_safety_block_high_severity": False,
+        "guardrails_audit_db_enabled": False,
+        "guardrails_audit_log_all": False,
         "guardrails_condense_enabled": False,
         "guardrails_max_words_yes_no": 30,
         "guardrails_max_words_how_to": 150,
@@ -330,14 +335,17 @@ class TestGuardrailPipeline:
             )
             assert result.passed is True
 
-    def test_audit_logs_flags(self):
+    @pytest.mark.asyncio
+    async def test_audit_logs_flags(self):
         pipeline = GuardrailPipeline()
         wordy = " ".join(["word"] * 300)
         with patch(
             "app.services.guardrails.get_settings",
             return_value=_mock_settings(),
         ):
-            result = pipeline.audit(wordy, "Tell me about bees", "user-123")
+            result = await pipeline.audit(
+                None, wordy, "Tell me about bees", "user-123",
+            )
             assert len(result.flags) > 0
 
     def test_on_topic_input_allowed(self):

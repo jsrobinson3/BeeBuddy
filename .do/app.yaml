@@ -52,6 +52,9 @@ envs:
   - key: HF_INFERENCE_ENDPOINT_URL
     scope: RUN_TIME
     type: SECRET
+  - key: EMBEDDING_PROVIDER
+    scope: RUN_TIME
+    value: huggingface
   - key: LLM_TOOL_PROVIDER
     scope: RUN_TIME
     value: anthropic

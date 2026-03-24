@@ -1,4 +1,4 @@
-"""Guardrails pipeline — orchestrates style and topic guards.
+"""Guardrails pipeline — orchestrates style, topic, safety, and audit guards.
 
 Usage::
 
@@ -12,8 +12,8 @@ Usage::
     # Output check (after tool path or streaming)
     output_result = await guardrail_pipeline.check_output(response, message)
 
-    # Audit (post-stream, log-only)
-    guardrail_pipeline.audit(response, message, user_id)
+    # Audit (post-stream, persists to DB)
+    await guardrail_pipeline.audit(db, response, message, user_id)
 """
 
 from __future__ import annotations
@@ -22,7 +22,11 @@ import logging
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import get_settings
+from app.services.guardrails.audit import build_flags_json, log_guardrail
+from app.services.guardrails.safety import SafetyResult, check_safety
 from app.services.guardrails.style import StyleResult, check_style
 from app.services.guardrails.topic import (
     InputClassification,
@@ -50,7 +54,9 @@ class OutputResult:
     passed: bool = True
     style: StyleResult | None = None
     relevance: OutputRelevanceResult | None = None
+    safety: SafetyResult | None = None
     flags: list[str] = field(default_factory=list)
+    disclaimer: str = ""
 
 
 @dataclass
@@ -59,6 +65,7 @@ class AuditResult:
 
     style: StyleResult | None = None
     relevance: OutputRelevanceResult | None = None
+    safety: SafetyResult | None = None
     flags: list[str] = field(default_factory=list)
 
 
@@ -74,6 +81,21 @@ def _style_flags(style: StyleResult) -> list[str]:
     if style.needs_structure:
         flags.append("needs_structure")
     return flags
+
+
+def _safety_flags(safety: SafetyResult) -> list[str]:
+    """Extract flag strings from a failed SafetyResult."""
+    return [
+        f"safety_{f.category}: {f.substance} ({f.severity})"
+        for f in safety.flags
+    ]
+
+
+def _should_append_disclaimer(safety: SafetyResult | None, settings) -> bool:
+    """Return True if a safety disclaimer should be appended."""
+    if safety is None or not safety.disclaimer_needed:
+        return False
+    return settings.guardrails_safety_append_disclaimer
 
 
 def _get_word_limits() -> dict[str, int]:
@@ -127,7 +149,7 @@ class GuardrailPipeline:
     async def check_output(
         self, response: str, user_message: str,
     ) -> OutputResult:
-        """Run output guards (style + topic). Async for future LLM rewrite."""
+        """Run output guards (style + topic + safety)."""
         settings = get_settings()
         result = OutputResult()
 
@@ -148,18 +170,27 @@ class GuardrailPipeline:
             if not result.relevance.relevant:
                 result.flags.extend(result.relevance.flags)
 
+        if settings.guardrails_safety_enabled:
+            result.safety = check_safety(response)
+            if not result.safety.passed:
+                result.flags.extend(_safety_flags(result.safety))
+            if _should_append_disclaimer(result.safety, settings):
+                result.disclaimer = result.safety.disclaimer_text
+
         if result.flags:
             logger.info("Output guard flags: %s", result.flags)
 
         return result
 
-    def audit(
+    async def audit(
         self,
+        db: AsyncSession | None,
         response: str,
         user_message: str,
         user_id: UUID | str,
+        conversation_id: UUID | str | None = None,
     ) -> AuditResult:
-        """Post-stream audit (always log-only, can't modify)."""
+        """Post-stream audit — logs and persists to DB."""
         settings = get_settings()
         result = AuditResult()
 
@@ -179,12 +210,75 @@ class GuardrailPipeline:
             if not result.relevance.relevant:
                 result.flags.extend(result.relevance.flags)
 
+        if settings.guardrails_safety_enabled:
+            result.safety = check_safety(response)
+            if not result.safety.passed:
+                result.flags.extend(_safety_flags(result.safety))
+
         if result.flags:
             logger.info(
                 "Audit guard [user=%s]: %s", user_id, result.flags,
             )
 
+        # Persist to DB
+        await _maybe_persist_audit(
+            db, settings, result, user_id, conversation_id,
+            user_message, response,
+        )
+
         return result
+
+
+async def _maybe_persist_audit(
+    db: AsyncSession | None,
+    settings,
+    result: AuditResult,
+    user_id: UUID | str,
+    conversation_id: UUID | str | None,
+    user_message: str,
+    response: str,
+) -> None:
+    """Persist audit to DB if enabled and there's something to log."""
+    if not db or not settings.guardrails_audit_db_enabled:
+        return
+    if not result.flags and not settings.guardrails_audit_log_all:
+        return
+    await _persist_audit(
+        db, result, user_id, conversation_id, user_message, response,
+    )
+
+
+async def _persist_audit(
+    db: AsyncSession,
+    result: AuditResult,
+    user_id: UUID | str,
+    conversation_id: UUID | str | None,
+    user_message: str,
+    response: str,
+) -> None:
+    """Write audit flags to the guardrail_logs table."""
+    guard_names = set()
+    if result.style and not result.style.passed:
+        guard_names.add("style")
+    if result.relevance and not result.relevance.relevant:
+        guard_names.add("topic")
+    if result.safety and not result.safety.passed:
+        guard_names.add("safety")
+
+    # One row per guard that flagged
+    for name in guard_names or {"audit"}:
+        await log_guardrail(
+            db,
+            guard_name=name,
+            phase="audit",
+            result="flag" if result.flags else "pass",
+            user_id=user_id,
+            conversation_id=conversation_id,
+            reason="; ".join(result.flags[:3]),
+            flags_json=build_flags_json(result.flags),
+            user_message=user_message[:500],
+            response_text=response,
+        )
 
 
 # Module-level singleton

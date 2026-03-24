@@ -17,7 +17,7 @@ from app.schemas.admin import (
     OAuth2ClientUpdate,
     PaginatedUsersResponse,
 )
-from app.services import admin_service
+from app.services import admin_service, knowledge_service, rag_service
 
 router = APIRouter(prefix="/admin")
 
@@ -134,3 +134,28 @@ async def update_oauth_client(
     return await admin_service.update_oauth_client(
         db, client, data.model_dump(exclude_unset=True)
     )
+
+
+# ---------------------------------------------------------------------------
+# Knowledge base management
+# ---------------------------------------------------------------------------
+
+
+@router.get("/knowledge/stats")
+async def knowledge_stats(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_admin_user),
+):
+    """Knowledge base statistics — chunk counts by source type."""
+    return await rag_service.get_stats(db)
+
+
+@router.post("/knowledge/reload")
+async def knowledge_reload(
+    seed_path: str = Query(..., description="Path to JSONL seed file"),
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(get_admin_user),
+):
+    """Reload knowledge base from seed file."""
+    inserted = await knowledge_service.load_seed(db, seed_path)
+    return {"inserted": inserted, "total": await knowledge_service.chunk_count(db)}

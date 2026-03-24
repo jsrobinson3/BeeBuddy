@@ -5,10 +5,12 @@ from app.models.ai_token_usage import AITokenUsage
 from app.models.apiary import Apiary
 from app.models.base import Base
 from app.models.event import Event, EventType
+from app.models.guardrail_log import GuardrailLog
 from app.models.harvest import Harvest
 from app.models.hive import Hive, HiveSource, HiveStatus, HiveType
 from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
+from app.models.knowledge_chunk import KnowledgeChunk
 from app.models.message_feedback import MessageFeedback
 from app.models.oauth2_client import OAuth2Client
 from app.models.oauth2_code import OAuth2Code
@@ -43,6 +45,8 @@ __all__ = [
     "Harvest",
     "Event",
     "EventType",
+    "GuardrailLog",
+    "KnowledgeChunk",
     "Task",
     "TaskSource",
     "TaskCadence",
