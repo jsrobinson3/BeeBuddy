@@ -98,25 +98,58 @@ async def load_from_hf(db: AsyncSession, dataset_id: str, split: str = "train") 
     return inserted
 
 
-async def load_seed_from_hf(db: AsyncSession, repo_id: str | None = None) -> int:
+async def load_seed_from_hf(
+    db: AsyncSession,
+    repo_id: str | None = None,
+    *,
+    max_retries: int = 3,
+) -> int:
     """Download seed JSONL from HuggingFace Hub and load into pgvector.
 
     Downloads to a temp file, then delegates to ``load_seed`` for insert.
+    Retries transient network / server errors with exponential backoff.
     """
     from huggingface_hub import hf_hub_download
+    from huggingface_hub.utils import (
+        EntryNotFoundError,
+        HfHubHTTPError,
+        RepositoryNotFoundError,
+    )
 
     repo_id = repo_id or settings.rag_seed_hf_dataset
     token = settings.hf_token or None
     logger.info("Downloading seed from HF: %s", repo_id)
-    local_path = await asyncio.to_thread(
-        hf_hub_download,
-        repo_id=repo_id,
-        filename="knowledge_seed.jsonl",
-        repo_type="dataset",
-        token=token,
-    )
-    logger.info("Seed downloaded to %s", local_path)
-    return await load_seed(db, local_path)
+
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            local_path = await asyncio.to_thread(
+                hf_hub_download,
+                repo_id=repo_id,
+                filename="knowledge_seed.jsonl",
+                repo_type="dataset",
+                token=token,
+            )
+            logger.info("Seed downloaded to %s", local_path)
+            return await load_seed(db, local_path)
+        except (RepositoryNotFoundError, EntryNotFoundError):
+            raise  # permanent errors — don't retry
+        except (HfHubHTTPError, OSError) as exc:
+            last_exc = exc
+            if attempt < max_retries:
+                delay = 2 ** (attempt + 1)  # 2, 4, 8 s
+                logger.warning(
+                    "HF download attempt %d/%d failed (%s), retrying in %ds",
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+            else:
+                logger.error("HF download failed after %d attempts", max_retries + 1)
+
+    raise last_exc  # type: ignore[misc]
 
 
 async def _existing_hashes(db: AsyncSession) -> set[str]:
