@@ -1,5 +1,6 @@
 """Knowledge base lifecycle — seed loading and corpus management."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -67,7 +68,8 @@ async def load_from_hf(db: AsyncSession, dataset_id: str, split: str = "train") 
 
     from app.services import embedding_service
 
-    ds = load_dataset(dataset_id, split=split, token=True)
+    token = settings.hf_token or None
+    ds = await asyncio.to_thread(load_dataset, dataset_id, split=split, token=token)
     existing = await _existing_hashes(db)
     texts = [row.get("text") or row.get("content") or row.get("question", "") for row in ds]
     embeddings = await embedding_service.embed_texts(texts)
@@ -104,12 +106,14 @@ async def load_seed_from_hf(db: AsyncSession, repo_id: str | None = None) -> int
     from huggingface_hub import hf_hub_download
 
     repo_id = repo_id or settings.rag_seed_hf_dataset
+    token = settings.hf_token or None
     logger.info("Downloading seed from HF: %s", repo_id)
-    local_path = hf_hub_download(
+    local_path = await asyncio.to_thread(
+        hf_hub_download,
         repo_id=repo_id,
         filename="knowledge_seed.jsonl",
         repo_type="dataset",
-        token=True,
+        token=token,
     )
     logger.info("Seed downloaded to %s", local_path)
     return await load_seed(db, local_path)
