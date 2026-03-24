@@ -33,6 +33,8 @@ async def load_seed(db: AsyncSession, seed_path: str) -> int:
     existing = await _existing_hashes(db)
     inserted = 0
 
+    batch_size = 200
+
     with open(seed_path) as f:
         for line in f:
             row = json.loads(line)
@@ -50,11 +52,13 @@ async def load_seed(db: AsyncSession, seed_path: str) -> int:
             ))
             existing.add(content_hash)
             inserted += 1
-            if inserted % 500 == 0:
-                await db.flush()
+            if inserted % batch_size == 0:
+                await db.commit()
+                db.expunge_all()
                 logger.info("  Loaded %d chunks...", inserted)
 
     await db.commit()
+    db.expunge_all()
     logger.info("Seed load complete: %d new chunks inserted", inserted)
     return inserted
 
