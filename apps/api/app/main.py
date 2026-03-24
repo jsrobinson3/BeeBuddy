@@ -41,8 +41,6 @@ init_sentry()
 
 async def _ensure_knowledge_loaded() -> None:
     """Load RAG seed on first boot if knowledge_chunks table is empty."""
-    from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
-
     from app.db.session import AsyncSessionLocal
     from app.services import knowledge_service
 
@@ -56,8 +54,6 @@ async def _ensure_knowledge_loaded() -> None:
         try:
             inserted = await knowledge_service.load_seed_from_hf(db)
             log.info("Knowledge base seeded: %d chunks", inserted)
-        except (RepositoryNotFoundError, EntryNotFoundError) as exc:
-            log.warning("HF seed dataset not available yet, skipping: %s", exc)
         except Exception:
             log.exception("Failed to load knowledge seed from HF")
 
