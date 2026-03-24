@@ -213,18 +213,21 @@ async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import AsyncSessionLocal, engine
     from app.models.user import User
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(uid, cadence_service)
+    finally:
+        await engine.dispose()
 
 
 async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:

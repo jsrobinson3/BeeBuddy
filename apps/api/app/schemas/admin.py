@@ -4,6 +4,8 @@ from datetime import datetime
 from urllib.parse import urlparse
 from uuid import UUID
 
+import json
+
 from pydantic import field_validator
 
 from app.schemas.common import BaseResponse, CamelBase
@@ -108,3 +110,11 @@ class OAuth2ClientResponse(BaseResponse):
     redirect_uris: list
     is_active: bool
     created_at: datetime
+
+    @field_validator("redirect_uris", mode="before")
+    @classmethod
+    def parse_redirect_uris(cls, v: object) -> list:
+        """Handle redirect_uris stored as a JSON string in the database."""
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
