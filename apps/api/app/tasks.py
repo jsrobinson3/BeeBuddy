@@ -52,25 +52,28 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
     from app.models.inspection import Inspection
 
-    async with AsyncSessionLocal() as db:
-        inspection = await db.get(Inspection, UUID(inspection_id))
-        if not inspection:
-            logger.warning("Inspection %s not found for summary", inspection_id)
-            return
+    engine, SessionLocal = _make_task_session()
+    try:
+        async with SessionLocal() as db:
+            inspection = await db.get(Inspection, UUID(inspection_id))
+            if not inspection:
+                logger.warning("Inspection %s not found for summary", inspection_id)
+                return
 
-        from app.services.ai_summary import generate_summary
+            from app.services.ai_summary import generate_summary
 
-        summary = await generate_summary(
-            observations=inspection.observations,
-            weather=inspection.weather,
-            notes=inspection.notes,
-        )
-        inspection.ai_summary = summary
-        await db.commit()
-        logger.info("Generated AI summary for inspection %s", inspection_id)
+            summary = await generate_summary(
+                observations=inspection.observations,
+                weather=inspection.weather,
+                notes=inspection.notes,
+            )
+            inspection.ai_summary = summary
+            await db.commit()
+            logger.info("Generated AI summary for inspection %s", inspection_id)
+    finally:
+        await engine.dispose()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -89,33 +92,64 @@ def send_email_task(self, to: str, subject: str, template_name: str, context: di
         raise self.retry(exc=exc)
 
 
+def _make_task_session():
+    """Create a one-shot async engine + session for use inside asyncio.run().
+
+    The module-level engine is bound to whatever event loop first used it.
+    Each asyncio.run() creates a *new* loop, so reusing that engine causes
+    "Future attached to a different loop" / "Event loop is closed" errors.
+    Returning a fresh engine per task avoids cross-loop contamination.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.config import get_settings
+    from app.redis_utils import database_connect_args
+
+    s = get_settings()
+    eng = create_async_engine(
+        s.database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=0,
+        pool_timeout=30,
+        pool_recycle=3600,
+        connect_args=database_connect_args(),
+    )
+    session_factory = async_sessionmaker(eng, class_=AsyncSession, expire_on_commit=False)
+    return eng, session_factory
+
+
 async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     user_id = UUID(user_id_str)
 
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, user_id)
-        if user is None:
-            logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
-            return
-        if user.deleted_at is None:
-            logger.info(
-                "hard_delete_user: user %s deletion was cancelled, skipping",
-                user_id_str,
-            )
-            return
+    engine, SessionLocal = _make_task_session()
+    try:
+        async with SessionLocal() as db:
+            user = await db.get(User, user_id)
+            if user is None:
+                logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
+                return
+            if user.deleted_at is None:
+                logger.info(
+                    "hard_delete_user: user %s deletion was cancelled, skipping",
+                    user_id_str,
+                )
+                return
 
-        delete_data = (user.preferences or {}).get("_delete_data", False)
+            delete_data = (user.preferences or {}).get("_delete_data", False)
 
-        if delete_data:
-            await _full_delete_user(db, user, user_id, user_id_str)
-        else:
-            await _anonymize_user(db, user, user_id_str)
+            if delete_data:
+                await _full_delete_user(db, user, user_id, user_id_str)
+            else:
+                await _anonymize_user(db, user, user_id_str)
+    finally:
+        await engine.dispose()
 
 
 async def _full_delete_user(db, user, user_id, user_id_str: str) -> None:
@@ -213,27 +247,29 @@ async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    engine, SessionLocal = _make_task_session()
+    try:
+        async with SessionLocal() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(uid, cadence_service, SessionLocal)
+    finally:
+        await engine.dispose()
 
 
-async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
+async def _generate_cadence_tasks_for_user(uid, cadence_service, SessionLocal) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with SessionLocal() as db:
             user = await db.get(User, uid)
             if user is None:
                 return
