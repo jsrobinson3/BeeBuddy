@@ -52,25 +52,28 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
     from app.models.inspection import Inspection
 
-    async with AsyncSessionLocal() as db:
-        inspection = await db.get(Inspection, UUID(inspection_id))
-        if not inspection:
-            logger.warning("Inspection %s not found for summary", inspection_id)
-            return
+    engine, SessionLocal = _make_celery_session_factory()
+    try:
+        async with SessionLocal() as db:
+            inspection = await db.get(Inspection, UUID(inspection_id))
+            if not inspection:
+                logger.warning("Inspection %s not found for summary", inspection_id)
+                return
 
-        from app.services.ai_summary import generate_summary
+            from app.services.ai_summary import generate_summary
 
-        summary = await generate_summary(
-            observations=inspection.observations,
-            weather=inspection.weather,
-            notes=inspection.notes,
-        )
-        inspection.ai_summary = summary
-        await db.commit()
-        logger.info("Generated AI summary for inspection %s", inspection_id)
+            summary = await generate_summary(
+                observations=inspection.observations,
+                weather=inspection.weather,
+                notes=inspection.notes,
+            )
+            inspection.ai_summary = summary
+            await db.commit()
+            logger.info("Generated AI summary for inspection %s", inspection_id)
+    finally:
+        await engine.dispose()
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -93,29 +96,32 @@ async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     user_id = UUID(user_id_str)
 
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, user_id)
-        if user is None:
-            logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
-            return
-        if user.deleted_at is None:
-            logger.info(
-                "hard_delete_user: user %s deletion was cancelled, skipping",
-                user_id_str,
-            )
-            return
+    engine, SessionLocal = _make_celery_session_factory()
+    try:
+        async with SessionLocal() as db:
+            user = await db.get(User, user_id)
+            if user is None:
+                logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
+                return
+            if user.deleted_at is None:
+                logger.info(
+                    "hard_delete_user: user %s deletion was cancelled, skipping",
+                    user_id_str,
+                )
+                return
 
-        delete_data = (user.preferences or {}).get("_delete_data", False)
+            delete_data = (user.preferences or {}).get("_delete_data", False)
 
-        if delete_data:
-            await _full_delete_user(db, user, user_id, user_id_str)
-        else:
-            await _anonymize_user(db, user, user_id_str)
+            if delete_data:
+                await _full_delete_user(db, user, user_id, user_id_str)
+            else:
+                await _anonymize_user(db, user, user_id_str)
+    finally:
+        await engine.dispose()
 
 
 async def _full_delete_user(db, user, user_id, user_id_str: str) -> None:
@@ -209,31 +215,64 @@ def _delete_s3_objects(s3_keys: list[str]) -> None:
             logger.warning("Failed to delete S3 object: %s", key)
 
 
+def _make_celery_session_factory():
+    """Create a one-shot async engine + session factory for Celery tasks.
+
+    Each ``asyncio.run()`` invocation gets its own event loop, so we must not
+    reuse the module-level engine whose connection pool is bound to a different
+    (possibly closed) loop.  Returns ``(engine, session_factory)``; callers
+    must ``await engine.dispose()`` before the loop closes.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.config import get_settings
+    from app.redis_utils import database_connect_args
+
+    _settings = get_settings()
+    _engine = create_async_engine(
+        _settings.database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=0,
+        pool_timeout=30,
+        pool_recycle=3600,
+        connect_args=database_connect_args(),
+    )
+    _factory = async_sessionmaker(_engine, class_=AsyncSession, expire_on_commit=False)
+    return _engine, _factory
+
+
 async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    engine, SessionLocal = _make_celery_session_factory()
+    try:
+        async with SessionLocal() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(uid, cadence_service, SessionLocal)
+    finally:
+        await engine.dispose()
 
 
-async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
+async def _generate_cadence_tasks_for_user(uid, cadence_service, SessionLocal=None) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
+    if SessionLocal is None:
+        from app.db.session import AsyncSessionLocal as SessionLocal
+
     try:
-        async with AsyncSessionLocal() as db:
+        async with SessionLocal() as db:
             user = await db.get(User, uid)
             if user is None:
                 return
