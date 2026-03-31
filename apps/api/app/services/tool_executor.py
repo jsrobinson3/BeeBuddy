@@ -73,6 +73,10 @@ async def _run_tool_loop(
     provider: LLMProvider,
     initial_response: dict,
     initial_tool_calls: list[ToolCall],
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> tuple[str, list[dict], dict]:
     """Run the tool call → LLM loop for up to MAX_TOOL_ROUNDS.
 
@@ -97,7 +101,10 @@ async def _run_tool_loop(
         for tc in tool_calls:
             await _execute_tool_call(client, tc, augmented, tool_messages, provider)
 
-        response = await _call_llm_with_tools(augmented, llm_tools, provider)
+        response = await _call_llm_with_tools(
+            augmented, llm_tools, provider,
+            model=model, api_key=api_key, base_url=base_url,
+        )
         _add_usage(response)
         tool_calls = _extract_tool_calls(response, provider)
 
@@ -111,11 +118,19 @@ async def try_tool_path(
     messages: list[dict],
     db: AsyncSession,
     user_id: UUID,
+    *,
+    provider_override: LLMProvider | None = None,
+    model_override: str | None = None,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
 ) -> tuple[str | None, list[dict], dict]:
     """Attempt tool-augmented response.
 
     Returns (final_text, tool_messages, usage) if tools were used,
     or (None, [], {}) if no tools were needed.
+
+    When *provider_override* / *model_override* are set they replace the
+    configured tool provider/model (used by the cold-start fallback).
     """
     server = create_mcp_server(db, user_id)
     async with Client(server) as client:
@@ -123,10 +138,14 @@ async def try_tool_path(
         if not mcp_tools:
             return None, [], {}
 
-        provider = settings.effective_tool_provider
+        provider = provider_override or settings.effective_tool_provider
+        model = model_override or settings.effective_tool_model
         llm_tools = _convert_tools(mcp_tools, provider)
 
-        response = await _call_llm_with_tools(messages, llm_tools, provider)
+        response = await _call_llm_with_tools(
+            messages, llm_tools, provider,
+            model=model, api_key=api_key_override, base_url=base_url_override,
+        )
         tool_calls = _extract_tool_calls(response, provider)
 
         if not tool_calls:
@@ -134,6 +153,7 @@ async def try_tool_path(
 
         text, tool_msgs, usage = await _run_tool_loop(
             client, messages, llm_tools, provider, response, tool_calls,
+            model=model, api_key=api_key_override, base_url=base_url_override,
         )
         return text, tool_msgs, usage
 
@@ -180,11 +200,19 @@ async def _call_llm_with_tools(
     messages: list[dict],
     tools: list[dict],
     provider: LLMProvider,
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> dict:
     """Make a non-streaming LLM call with tools attached."""
     if provider == LLMProvider.ANTHROPIC:
-        return await _call_anthropic(messages, tools)
-    return await _call_openai_compat(messages, tools)
+        return await _call_anthropic(
+            messages, tools, model=model, api_key=api_key, base_url=base_url,
+        )
+    return await _call_openai_compat(
+        messages, tools, model=model, api_key=api_key, base_url=base_url,
+    )
 
 
 _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
@@ -194,20 +222,27 @@ class ColdStartError(Exception):
     """Raised when an inference endpoint is scaled to zero (503)."""
 
 
-async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
+async def _call_openai_compat(
+    messages: list[dict],
+    tools: list[dict],
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> dict:
     """Non-streaming call to OpenAI-compatible endpoint with tools.
 
     Raises ColdStartError on 503 so the caller (stream_chat) can show
     the waking-up UI and manage retries with SSE feedback.
     """
     body: dict = {
-        "model": settings.effective_tool_model,
+        "model": model or settings.effective_tool_model,
         "messages": messages,
         "tools": tools,
         "stream": False,
     }
-    headers = {"Authorization": f"Bearer {settings.llm_tool_api_key}"}
-    url = f"{settings.llm_tool_base_url}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key or settings.llm_tool_api_key}"}
+    url = f"{(base_url or settings.llm_tool_base_url)}/chat/completions"
 
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(url, json=body, headers=headers)
@@ -230,22 +265,29 @@ def _check_error_response(resp: httpx.Response) -> None:
     resp.raise_for_status()
 
 
-async def _call_anthropic(messages: list[dict], tools: list[dict]) -> dict:
+async def _call_anthropic(
+    messages: list[dict],
+    tools: list[dict],
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> dict:
     """Non-streaming call to Anthropic Messages API with tools."""
     system, chat = _split_system(messages)
     body: dict = {
-        "model": settings.effective_tool_model,
+        "model": model or settings.effective_tool_model,
         "max_tokens": 4096,
         "system": system,
         "messages": chat,
         "tools": tools,
     }
     headers = {
-        "x-api-key": settings.llm_tool_api_key,
+        "x-api-key": api_key or settings.llm_tool_api_key,
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    url = f"{settings.llm_tool_base_url}/messages"
+    url = f"{(base_url or settings.llm_tool_base_url)}/messages"
 
     async with httpx.AsyncClient(timeout=120) as client:
         resp = await client.post(url, json=body, headers=headers)

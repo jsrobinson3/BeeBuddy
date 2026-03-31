@@ -11,7 +11,6 @@ import pytest
 
 from app.config import LLMProvider
 from app.services.ai_service import (
-    _COLD_START_DELAYS,
     ColdStartError,
     _parse_anthropic_sse,
     _parse_openai_sse,
@@ -144,7 +143,11 @@ class TestStreamOpenAiCompat:
     return_value=(None, [], {}),
 )
 class TestStreamChatColdStart:
-    """Tests for the top-level stream_chat retry logic."""
+    """Tests for the top-level stream_chat cold-start fallback logic.
+
+    When the primary endpoint returns 503, stream_chat fires a background
+    wake request and retries via the configured fallback provider.
+    """
 
     async def _collect_events(self, gen) -> list[dict]:
         """Collect and parse SSE events from the generator."""
@@ -157,16 +160,16 @@ class TestStreamChatColdStart:
                 events.append(json.loads(payload))
         return events
 
-    async def test_emits_waking_up_then_content_on_retry(self, _mock_tool_path):
-        """First call returns 503, second succeeds — client sees waking_up then content."""
+    async def test_emits_waking_up_then_fallback_content(self, _mock_tool_path):
+        """Primary 503 → waking_up event → fallback streams content."""
         call_count = 0
 
-        async def mock_stream_llm(messages, usage_out=None):
+        async def mock_stream_llm(messages, usage_out=None, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
                 raise ColdStartError()
-            yield "Hello!"
+            yield "Fallback reply!"
 
         mock_db = AsyncMock()
         mock_user = MagicMock()
@@ -178,10 +181,10 @@ class TestStreamChatColdStart:
 
         with (
             patch("app.services.ai_service._stream_llm", side_effect=mock_stream_llm),
+            patch("app.services.ai_service._fire_background_wake"),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
-            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
         ):
             events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
 
@@ -190,13 +193,13 @@ class TestStreamChatColdStart:
 
         assert len(statuses) == 1
         assert statuses[0]["status"] == "waking_up"
-        assert len(content) == 1
-        assert content[0]["content"] == "Hello!"
+        assert len(content) >= 1
+        assert content[0]["content"] == "Fallback reply!"
 
-    async def test_emits_error_after_all_retries_exhausted(self, _mock_tool_path):
-        """If every attempt raises ColdStartError, client sees error event."""
+    async def test_emits_error_when_fallback_also_fails(self, _mock_tool_path):
+        """If both primary and fallback 503, client sees error event."""
 
-        async def always_503(messages, usage_out=None):
+        async def always_503(messages, usage_out=None, **kwargs):
             raise ColdStartError()
             yield  # unreachable — required to make this an async generator
 
@@ -210,10 +213,10 @@ class TestStreamChatColdStart:
 
         with (
             patch("app.services.ai_service._stream_llm", side_effect=always_503),
+            patch("app.services.ai_service._fire_background_wake"),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
-            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
         ):
             events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
 
@@ -221,41 +224,10 @@ class TestStreamChatColdStart:
         assert len(errors) == 1
         assert "try again" in errors[0]["error"].lower()
 
-    async def test_waking_up_sent_only_once_across_retries(self, _mock_tool_path):
-        """Multiple 503 retries should only emit a single waking_up status."""
-        call_count = 0
-
-        async def fail_twice_then_succeed(messages, usage_out=None):
-            nonlocal call_count
-            call_count += 1
-            if call_count <= 2:
-                raise ColdStartError()
-            yield "Done"
-
-        mock_db = AsyncMock()
-        mock_user = MagicMock()
-        mock_user.id = "user-123"
-        mock_request = MagicMock()
-        mock_request.messages = [MagicMock(role="user", content="hi")]
-        mock_request.conversation_id = None
-        mock_request.hive_id = None
-
-        with (
-            patch("app.services.ai_service._stream_llm", side_effect=fail_twice_then_succeed),
-            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
-            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
-            patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
-            patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
-        ):
-            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
-
-        statuses = [e for e in events if "status" in e]
-        assert len(statuses) == 1
-
     async def test_no_cold_start_streams_normally(self, _mock_tool_path):
         """When the endpoint responds immediately, no waking_up event is emitted."""
 
-        async def instant_response(messages, usage_out=None):
+        async def instant_response(messages, usage_out=None, **kwargs):
             yield "Instant reply"
 
         mock_db = AsyncMock()
@@ -279,41 +251,6 @@ class TestStreamChatColdStart:
 
         assert len(statuses) == 0
         assert content[0]["content"] == "Instant reply"
-
-    async def test_retry_delays_match_config(self, _mock_tool_path):
-        """Sleep durations should match _COLD_START_DELAYS."""
-        call_count = 0
-
-        async def fail_three_times(messages, usage_out=None):
-            nonlocal call_count
-            call_count += 1
-            if call_count <= 3:
-                raise ColdStartError()
-            yield "OK"
-
-        mock_db = AsyncMock()
-        mock_user = MagicMock()
-        mock_user.id = "user-123"
-        mock_request = MagicMock()
-        mock_request.messages = [MagicMock(role="user", content="hi")]
-        mock_request.conversation_id = None
-        mock_request.hive_id = None
-
-        mock_sleep = AsyncMock()
-
-        with (
-            patch("app.services.ai_service._stream_llm", side_effect=fail_three_times),
-            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
-            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
-            patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
-            patch("app.services.ai_service.asyncio.sleep", mock_sleep),
-        ):
-            async for _ in stream_chat(mock_db, mock_user, mock_request):
-                pass
-
-        assert mock_sleep.call_count == 3
-        for i, call in enumerate(mock_sleep.call_args_list):
-            assert call.args[0] == _COLD_START_DELAYS[i]
 
 
 # ---------------------------------------------------------------------------

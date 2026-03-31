@@ -131,6 +131,16 @@ class Settings(BaseSettings):
     hf_warmup_keepalive_enabled: bool = False   # Celery Beat periodic ping
     hf_warmup_keepalive_interval: int = 240     # Seconds between keep-alive pings
 
+    # Endpoint identity (for HF SDK status checks & CLI)
+    hf_endpoint_namespace: str = "jsrobinson3"
+    hf_endpoint_name: str = "beebuddy-bee-gguf-jjo"
+    hf_wake_timeout_seconds: int = 360
+    hf_poll_interval_seconds: int = 5
+
+    # Cold-start fallback LLM (serves responses while HF endpoint wakes up)
+    hf_fallback_provider: LLMProvider = LLMProvider.ANTHROPIC
+    hf_fallback_model: str = "claude-haiku-4-5-20251001"
+
     # Agricultural data APIs
     usda_nass_api_key: str | None = None
 
@@ -236,6 +246,30 @@ class Settings(BaseSettings):
         if self.llm_provider == LLMProvider.HUGGINGFACE:
             return self.hf_token
         return "ollama"  # Ollama doesn't need a real key
+
+    @property
+    def hf_fallback_base_url(self) -> str:
+        """Base URL for the cold-start fallback LLM provider."""
+        p = self.hf_fallback_provider
+        if p == LLMProvider.OPENAI:
+            return "https://api.openai.com/v1"
+        if p == LLMProvider.ANTHROPIC:
+            return "https://api.anthropic.com/v1"
+        if p == LLMProvider.HUGGINGFACE:
+            return f"{self.hf_inference_endpoint_url.rstrip('/')}/v1"
+        return f"{self.ollama_base_url}/v1"
+
+    @property
+    def hf_fallback_api_key(self) -> str | None:
+        """API key for the cold-start fallback LLM provider."""
+        p = self.hf_fallback_provider
+        if p == LLMProvider.OPENAI:
+            return self.openai_api_key
+        if p == LLMProvider.ANTHROPIC:
+            return self.anthropic_api_key
+        if p == LLMProvider.HUGGINGFACE:
+            return self.hf_token
+        return "ollama"
 
 
 @lru_cache

@@ -103,8 +103,17 @@ class ColdStartError(Exception):
     """Raised when an inference endpoint is scaled to zero (503)."""
 
 
-# Retry delays for cold-start endpoints (scale-to-zero). ~120s total.
-_COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
+def _fire_background_wake() -> None:
+    """Trigger an async wake request for the HF endpoint (fire-and-forget)."""
+    try:
+        from app.services.endpoint import wake_endpoint
+        asyncio.get_event_loop().create_task(wake_endpoint(
+            settings.hf_endpoint_namespace,
+            settings.hf_endpoint_name,
+            settings.hf_token,
+        ))
+    except Exception:
+        logger.debug("Background wake request failed (non-critical)", exc_info=True)
 
 
 _PENDING_RE = re.compile(r'\[PENDING:([0-9a-f-]{36})\]')
@@ -152,29 +161,51 @@ async def _yield_tool_response(
 
 
 async def _yield_streaming_response(
-    messages: list[dict], usage_out: dict | None = None,
+    messages: list[dict],
+    usage_out: dict | None = None,
+    *,
+    provider: LLMProvider | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Stream LLM response with cold-start retry logic."""
-    sent_waking = False
-    for attempt in range(len(_COLD_START_DELAYS) + 1):
-        try:
-            async for chunk in _stream_llm(messages, usage_out):
-                yield f"data: {json.dumps({'content': chunk})}\n\n"
-            break
-        except ContextOverflowError:
-            yield _context_overflow_event()
+    """Stream LLM response, falling back to configured provider on cold start.
+
+    When *provider* / *model* / *api_key* / *base_url* are supplied they are
+    passed straight through to ``_stream_llm`` — this is used when
+    ``stream_chat`` retries the streaming path with the fallback provider.
+    """
+    try:
+        async for chunk in _stream_llm(
+            messages, usage_out,
+            provider=provider, model=model, api_key=api_key, base_url=base_url,
+        ):
+            yield f"data: {json.dumps({'content': chunk})}\n\n"
+    except ContextOverflowError:
+        yield _context_overflow_event()
+    except ColdStartError:
+        # If we're already on the fallback provider, don't recurse — give up.
+        if provider is not None:
+            msg = "Service is still starting up. Please try again shortly."
+            yield f"data: {json.dumps({'error': msg})}\n\n"
             return
+        # Fire wake request in the background
+        _fire_background_wake()
+        yield f"data: {json.dumps({'status': 'waking_up'})}\n\n"
+        # Stream via the configured fallback provider instead
+        fb = settings
+        try:
+            async for chunk in _stream_llm(
+                messages, usage_out,
+                provider=fb.hf_fallback_provider,
+                model=fb.hf_fallback_model,
+                api_key=fb.hf_fallback_api_key,
+                base_url=fb.hf_fallback_base_url,
+            ):
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
         except ColdStartError:
-            if not sent_waking:
-                yield f"data: {json.dumps({'status': 'waking_up'})}\n\n"
-                sent_waking = True
-            if attempt >= len(_COLD_START_DELAYS):
-                msg = "Service is still starting up. Please try again shortly."
-                yield f"data: {json.dumps({'error': msg})}\n\n"
-                return
-            delay = _COLD_START_DELAYS[attempt]
-            logger.info("Endpoint cold-starting, retry %d in %ds", attempt + 1, delay)
-            await asyncio.sleep(delay)
+            msg = "Service is still starting up. Please try again shortly."
+            yield f"data: {json.dumps({'error': msg})}\n\n"
 
 
 def _context_overflow_event() -> str:
@@ -214,10 +245,19 @@ async def _yield_canned_response(
 async def _handle_tool_path(
     db: AsyncSession, user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
+    *,
+    provider_override: LLMProvider | None = None,
+    model_override: str | None = None,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Phase 1: tool-augmented path with output guard."""
     final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
         messages, db, user.id,
+        provider_override=provider_override,
+        model_override=model_override,
+        api_key_override=api_key_override,
+        base_url_override=base_url_override,
     )
     if final_text is None:
         return
@@ -234,8 +274,9 @@ async def _handle_tool_path(
     )
     await record_chat_usage(
         db, user.id, conv.id, tool_usage,
-        settings.effective_tool_provider,
-        settings.effective_tool_model, "tool_chat",
+        provider_override or settings.effective_tool_provider,
+        model_override or settings.effective_tool_model,
+        "tool_chat_fallback" if provider_override else "tool_chat",
     )
     yield _conv_id_event(conv.id)
     yield "data: [DONE]\n\n"
@@ -244,11 +285,20 @@ async def _handle_tool_path(
 async def _handle_streaming_path(
     db: AsyncSession, user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
+    *,
+    provider_override: LLMProvider | None = None,
+    model_override: str | None = None,
+    api_key_override: str | None = None,
+    base_url_override: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Phase 2: streaming path with post-stream audit."""
     usage_out: dict = {}
     full_response: list[str] = []
-    async for chunk in _yield_streaming_response(messages, usage_out):
+    async for chunk in _yield_streaming_response(
+        messages, usage_out,
+        provider=provider_override, model=model_override,
+        api_key=api_key_override, base_url=base_url_override,
+    ):
         yield chunk
         if '"content"' in chunk:
             try:
@@ -265,7 +315,9 @@ async def _handle_streaming_path(
     conv = await _save_conversation(db, user.id, request, response_text)
     await record_chat_usage(
         db, user.id, conv.id, usage_out,
-        settings.llm_provider, settings.llm_model, "stream_chat",
+        provider_override or settings.llm_provider,
+        model_override or settings.llm_model,
+        "stream_chat_fallback" if provider_override else "stream_chat",
     )
     yield _conv_id_event(conv.id)
     yield "data: [DONE]\n\n"
@@ -276,7 +328,12 @@ async def stream_chat(
     user: User,
     request: ChatRequest,
 ) -> AsyncGenerator[str, None]:
-    """Stream a chat response with guardrails pipeline."""
+    """Stream a chat response with guardrails pipeline.
+
+    On cold-start (503), fires a background wake request and retries the
+    entire tool + streaming flow using the configured fallback LLM so the
+    user gets an immediate response with full tool access.
+    """
     user_msg = request.messages[-1].content if request.messages else ""
 
     # --- Input guard (saves an LLM call for blocked messages) ---
@@ -305,11 +362,39 @@ async def stream_chat(
         yield "data: [DONE]\n\n"
         return
     except ToolColdStartError:
-        logger.info("Tool path 503, falling back to streaming")
+        logger.info("Tool path 503, switching to fallback provider")
+        # Fire background wake and retry entire flow with fallback LLM
+        _fire_background_wake()
+        yield f"data: {json.dumps({'status': 'waking_up'})}\n\n"
+
+        fb_kwargs: dict = {
+            "provider_override": settings.hf_fallback_provider,
+            "model_override": settings.hf_fallback_model,
+            "api_key_override": settings.hf_fallback_api_key,
+            "base_url_override": settings.hf_fallback_base_url,
+        }
+
+        # Retry tool path with fallback provider (full tool access)
+        try:
+            async for chunk in _handle_tool_path(
+                db, user, request, messages, user_msg, **fb_kwargs,
+            ):
+                yield chunk
+                if '"conversation_id"' in chunk:
+                    return
+        except Exception:
+            logger.exception("Fallback tool path failed, trying streaming")
+
+        # Fallback streaming path
+        async for chunk in _handle_streaming_path(
+            db, user, request, messages, user_msg, **fb_kwargs,
+        ):
+            yield chunk
+        return
     except Exception:
         logger.exception("Tool path failed, falling back to streaming")
 
-    # Phase 2: Streaming path
+    # Phase 2: Streaming path (handles its own cold-start fallback internally)
     async for chunk in _handle_streaming_path(
         db, user, request, messages, user_msg,
     ):
@@ -317,14 +402,25 @@ async def stream_chat(
 
 
 async def _stream_llm(
-    messages: list[dict], usage_out: dict | None = None,
+    messages: list[dict],
+    usage_out: dict | None = None,
+    *,
+    provider: LLMProvider | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> AsyncGenerator[str, None]:
-    """Stream tokens from the configured LLM provider."""
-    if settings.llm_provider == LLMProvider.ANTHROPIC:
-        async for chunk in _stream_anthropic(messages, usage_out):
+    """Stream tokens from the configured (or overridden) LLM provider."""
+    effective_provider = provider or settings.llm_provider
+    if effective_provider == LLMProvider.ANTHROPIC:
+        async for chunk in _stream_anthropic(
+            messages, usage_out, model=model, api_key=api_key, base_url=base_url,
+        ):
             yield chunk
     else:
-        async for chunk in _stream_openai_compat(messages, usage_out):
+        async for chunk in _stream_openai_compat(
+            messages, usage_out, model=model, api_key=api_key, base_url=base_url,
+        ):
             yield chunk
 
 
@@ -352,17 +448,21 @@ async def _check_streaming_status(response: httpx.Response) -> None:
 async def _stream_openai_compat(
     messages: list[dict],
     usage_out: dict | None = None,
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from an OpenAI-compatible /v1/chat/completions endpoint."""
     body: dict = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
         "stream_options": {"include_usage": True},
     }
-    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
-    url = f"{settings.llm_base_url}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key or settings.llm_api_key}"}
+    url = f"{(base_url or settings.llm_base_url)}/chat/completions"
 
     client = _get_http_client()
     response = await client.send(
@@ -417,11 +517,15 @@ ANTHROPIC_VERSION = "2023-06-01"
 async def _stream_anthropic(
     messages: list[dict],
     usage_out: dict | None = None,
+    *,
+    model: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from the Anthropic Messages API."""
     system, chat = _split_system(messages)
     body = {
-        "model": settings.llm_model,
+        "model": model or settings.llm_model,
         "max_tokens": 4096,
         "system": system,
         "messages": chat,
@@ -429,11 +533,11 @@ async def _stream_anthropic(
         "temperature": 0.7,
     }
     headers = {
-        "x-api-key": settings.llm_api_key,
+        "x-api-key": api_key or settings.llm_api_key,
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
     }
-    url = f"{settings.llm_base_url}/messages"
+    url = f"{(base_url or settings.llm_base_url)}/messages"
 
     client = _get_http_client()
     response = await client.send(

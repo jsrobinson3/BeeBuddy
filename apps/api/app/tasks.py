@@ -280,13 +280,30 @@ def celery_worker_heartbeat():
     r.close()
 
 
+def _is_business_hours() -> bool:
+    """Return True if current time is Mon-Fri 8am-10pm US/Eastern."""
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(UTC).astimezone(ZoneInfo("America/New_York"))
+    # Monday=0 … Friday=4
+    if now.weekday() > 4:
+        return False
+    return 8 <= now.hour < 22
+
+
 @celery_app.task
 def hf_warmup_keepalive():
     """Periodic ping to prevent HF endpoint scale-to-zero.
 
     Disabled by default (HF_WARMUP_KEEPALIVE_ENABLED=false).
+    Only pings during business hours (Mon-Fri 8am-10pm ET).
     """
     import asyncio
+
+    if not _is_business_hours():
+        logger.info("HF keepalive skipped — outside business hours")
+        return
 
     from app.services import warmup_service
 
