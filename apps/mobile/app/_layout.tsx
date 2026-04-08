@@ -21,12 +21,18 @@ import { useThemeStore } from "../stores/theme";
 import { configureGoogleSignIn } from "../services/oauth";
 import { ThemeProvider, useTheme, typography } from "../theme";
 
-if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    tracesSampleRate: 0.2,
-    environment: __DEV__ ? "development" : "production",
-  });
+try {
+  if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+    Sentry.init({
+      dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+      tracesSampleRate: 0.2,
+      environment: __DEV__ ? "development" : "production",
+      enableNativeFramesTracking: !__DEV__,
+    });
+  }
+} catch {
+  // Sentry init failure must not crash the app
+  console.warn("Sentry initialization failed");
 }
 
 SplashScreen.preventAutoHideAsync();
