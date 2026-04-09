@@ -3,6 +3,7 @@
 import logging
 import socket
 
+import sentry_sdk
 from celery import Celery
 
 from app.config import get_settings
@@ -12,7 +13,13 @@ from app.redis_utils import celery_broker_ssl, redis_kwargs
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-init_sentry()
+
+# Only initialize Sentry in the Celery worker process (the API server
+# handles its own init in main.py).  celery_app.conf is populated before
+# worker_init, but the worker sets FORKED_BY_MULTIPROCESSING or similar
+# env flags.  A simpler check: if __main__ isn't uvicorn, we're in Celery.
+if not sentry_sdk.is_initialized():
+    init_sentry()
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
 celery_app.conf.broker_connection_retry_on_startup = True

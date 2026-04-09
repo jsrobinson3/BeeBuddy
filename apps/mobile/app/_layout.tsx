@@ -26,6 +26,17 @@ if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
     tracesSampleRate: 0.2,
     environment: __DEV__ ? "development" : "production",
+    beforeSend(event) {
+      // Strip auth headers and cookies from request data
+      const req = event.request;
+      if (req?.headers) {
+        delete req.headers["Authorization"];
+        delete req.headers["authorization"];
+        delete req.headers["Cookie"];
+        delete req.headers["cookie"];
+      }
+      return event;
+    },
   });
 }
 

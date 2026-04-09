@@ -170,6 +170,14 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.2
     sentry_environment: str = "development"
 
+    @field_validator("sentry_traces_sample_rate")
+    @classmethod
+    def validate_traces_sample_rate(cls, v: float) -> float:
+        """Ensure traces sample rate is between 0.0 and 1.0."""
+        if not 0.0 <= v <= 1.0:
+            raise ValueError("sentry_traces_sample_rate must be between 0.0 and 1.0")
+        return v
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8081", "http://localhost:19006"]
 
