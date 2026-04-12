@@ -7,8 +7,10 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import get_settings
 
+_sentry_initialized = False
 
-def _before_send(event, hint):
+
+def _strip_cookies(event, _hint):
     """Strip cookies from Sentry events to avoid leaking session data."""
     if "request" in event:
         req = event["request"]
@@ -21,7 +23,14 @@ def _before_send(event, hint):
 
 
 def init_sentry() -> None:
-    """Initialize Sentry SDK if a DSN is configured."""
+    """Initialize Sentry SDK if a DSN is configured.
+
+    Safe to call multiple times — only the first call with a valid DSN
+    actually initializes the SDK.
+    """
+    global _sentry_initialized
+    if _sentry_initialized:
+        return
     settings = get_settings()
     if not settings.sentry_dsn:
         return
@@ -30,11 +39,12 @@ def init_sentry() -> None:
         traces_sample_rate=settings.sentry_traces_sample_rate,
         environment=settings.sentry_environment,
         send_default_pii=False,
-        enable_tracing=True,
-        before_send=_before_send,
+        before_send=_strip_cookies,
+        before_send_transaction=_strip_cookies,
         integrations=[
             FastApiIntegration(),
             StarletteIntegration(),
             CeleryIntegration(),
         ],
     )
+    _sentry_initialized = True
