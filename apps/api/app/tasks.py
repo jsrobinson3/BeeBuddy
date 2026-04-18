@@ -35,6 +35,23 @@ celery_app.conf.broker_transport_options = {
     "retry_on_timeout": True,
 }
 
+# Recycle worker processes periodically to prevent stale state (file
+# descriptors, leaked connections) from accumulating and triggering cascade
+# failures (BlockingIOError → StopIteration → SIGTERM).
+celery_app.conf.worker_max_tasks_per_child = 50
+
+# Keep the broker connection healthy — detect dead Redis connections faster
+# than the managed Valkey/Redis idle timeout.
+celery_app.conf.broker_heartbeat = 30
+celery_app.conf.broker_connection_timeout = 30
+
+# Limit prefetch so a slow task doesn't starve the worker
+celery_app.conf.worker_prefetch_multiplier = 1
+
+# Ack tasks late so they're retried on worker crash rather than lost
+celery_app.conf.task_acks_late = True
+celery_app.conf.task_reject_on_worker_lost = True
+
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_inspection_summary(self, inspection_id: str):
@@ -52,10 +69,10 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import task_session
     from app.models.inspection import Inspection
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         inspection = await db.get(Inspection, UUID(inspection_id))
         if not inspection:
             logger.warning("Inspection %s not found for summary", inspection_id)
@@ -93,12 +110,12 @@ async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import task_session
     from app.models.user import User
 
     user_id = UUID(user_id_str)
 
-    async with AsyncSessionLocal() as db:
+    async with task_session() as db:
         user = await db.get(User, user_id)
         if user is None:
             logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
@@ -210,30 +227,53 @@ def _delete_s3_objects(s3_keys: list[str]) -> None:
 
 
 async def _generate_cadence_tasks_async() -> None:
-    """Async implementation of generate_cadence_tasks_for_all_users."""
-    from sqlalchemy import select
+    """Async implementation of generate_cadence_tasks_for_all_users.
 
-    from app.db.session import AsyncSessionLocal
+    Uses a single task-scoped engine for all DB work within this invocation,
+    preventing event-loop mismatch and connection exhaustion.
+    """
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.config import get_settings
     from app.models.user import User
+    from app.redis_utils import database_connect_args
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    settings = get_settings()
+    task_engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=2,
+        max_overflow=1,
+        pool_timeout=30,
+        pool_recycle=1800,
+        connect_args=database_connect_args(),
+    )
+    session_factory = async_sessionmaker(
+        task_engine, class_=AsyncSession, expire_on_commit=False,
+    )
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+    try:
+        async with session_factory() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
+
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(uid, cadence_service, session_factory)
+    finally:
+        await task_engine.dispose()
 
 
-async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
+async def _generate_cadence_tasks_for_user(uid, cadence_service, session_factory) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with session_factory() as db:
             user = await db.get(User, uid)
             if user is None:
                 return
@@ -257,8 +297,8 @@ async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
         logger.info("Generated %d cadence tasks for user %s", len(tasks_created), uid)
 
 
-@celery_app.task
-def generate_cadence_tasks_for_all_users():
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120)
+def generate_cadence_tasks_for_all_users(self):
     """Daily Celery beat task: generate due cadence tasks for every active user.
 
     Intended to be scheduled via Celery Beat (e.g. every day at 06:00 UTC).
@@ -266,7 +306,11 @@ def generate_cadence_tasks_for_all_users():
     """
     import asyncio
 
-    asyncio.run(_generate_cadence_tasks_async())
+    try:
+        asyncio.run(_generate_cadence_tasks_async())
+    except Exception as exc:
+        logger.exception("generate_cadence_tasks_for_all_users failed")
+        raise self.retry(exc=exc)
 
 
 @celery_app.task
