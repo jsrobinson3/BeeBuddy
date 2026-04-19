@@ -24,7 +24,7 @@ import { ThemeProvider, useTheme, typography } from "../theme";
 if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    tracesSampleRate: 0.2,
+    tracesSampleRate: __DEV__ ? 0 : 0.2,
     environment: __DEV__ ? "development" : "production",
   });
 }
