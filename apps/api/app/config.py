@@ -32,8 +32,8 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/beebuddy"
-    db_pool_size: int = 5
-    db_max_overflow: int = 3
+    db_pool_size: int = 3
+    db_max_overflow: int = 2
 
     @field_validator("database_url")
     @classmethod
