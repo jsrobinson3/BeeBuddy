@@ -78,7 +78,11 @@ async def get_dashboard_summary(
             generated_at=result.generated_at,
         )
 
-        if redis is not None and result.inspection_count > 0:
+        # Only cache stable states: successful generation, or the
+        # "no inspections" empty. Skip caching when generation failed
+        # (inspections present but summary empty) so pull-to-refresh retries.
+        should_cache = result.inspection_count == 0 or bool(result.summary)
+        if redis is not None and should_cache:
             await _write_cache(redis, key, response)
 
         return response
