@@ -802,6 +802,16 @@ class ApiClient {
     return this.request<void>(`/shares/${shareId}`, { method: "DELETE" });
   }
 
+  // ── Dashboard ─────────────────────────────────────────────────────────────
+
+  async getDashboardSummary() {
+    return this.request<{
+      summary: string;
+      inspectionCount: number;
+      generatedAt: string;
+    }>("/dashboard/summary");
+  }
+
   // ── Sync ──────────────────────────────────────────────────────────────────
 
   async syncPull(lastPulledAt: number | null) {

@@ -94,7 +94,7 @@ export interface UpdateApiaryInput {
 
 // ─── Hive Types ───────────────────────────────────────────────────────────────
 
-export type HiveType = "langstroth" | "top_bar" | "warre" | "flow" | "other";
+export type HiveType = "langstroth" | "top_bar" | "warre" | "flow" | "nuc" | "other";
 export type HiveStatus = "active" | "dead" | "combined" | "sold";
 export type HiveSource = "package" | "nuc" | "swarm" | "split" | "purchased";
 
@@ -198,7 +198,7 @@ export interface InspectionObservations {
   eggsSeen?: boolean | null;
   larvaeSeen?: boolean | null;
   cappedBrood?: boolean | null;
-  broodPatternScore?: number | null;
+  broodPatternScore?: string | number | null;
   honeyStores?: string | null;
   pollenStores?: string | null;
   diseaseSigns?: string[] | null;

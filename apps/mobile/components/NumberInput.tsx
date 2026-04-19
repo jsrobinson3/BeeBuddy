@@ -113,14 +113,19 @@ export function NumberInput({
   const styles = useStyles(createStyles);
   const { colors } = useTheme();
 
+  // Round to step to avoid floating-point drift like 0.1 + 0.2.
+  function roundToStep(n: number): number {
+    return Math.round(n / step) * step;
+  }
+
   function handleDecrement() {
-    const next = (value ?? 0) - step;
+    const next = roundToStep((value ?? 0) - step);
     if (min !== undefined && next < min) return;
     onChange(next);
   }
 
   function handleIncrement() {
-    const next = (value ?? 0) + step;
+    const next = roundToStep((value ?? 0) + step);
     if (max !== undefined && next > max) return;
     onChange(next);
   }

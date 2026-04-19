@@ -6,7 +6,10 @@ import { ErrorDisplay } from "../../../../components/ErrorDisplay";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
 import { PhotoPicker } from "../../../../components/PhotoPicker";
 import { useInspection } from "../../../../hooks/useInspections";
-import { BACKEND_TO_TEMPLATE } from "../../../../components/inspection/InspectionFields";
+import {
+  BACKEND_TO_TEMPLATE,
+  broodPatternLabel,
+} from "../../../../components/inspection/InspectionFields";
 import type {
   Inspection,
   InspectionObservations,
@@ -91,7 +94,10 @@ function DetailedObservationRows({ obs }: { obs: InspectionObservations }) {
   return (
     <>
       {obs.broodPatternScore != null && (
-        <InfoRow label="Brood Pattern" value={`${obs.broodPatternScore}/5`} />
+        <InfoRow
+          label="Brood Pattern"
+          value={broodPatternLabel(obs.broodPatternScore) ?? String(obs.broodPatternScore)}
+        />
       )}
       {obs.framesOfBees != null && (
         <InfoRow label="Frames of Bees" value={String(obs.framesOfBees)} />

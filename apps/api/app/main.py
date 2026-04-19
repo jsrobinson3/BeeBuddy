@@ -19,6 +19,7 @@ from app.routers import (
     apiaries,
     auth,
     cadences,
+    dashboard,
     events,
     harvests,
     health,
@@ -32,6 +33,7 @@ from app.routers import (
     tasks,
     treatments,
     users,
+    webhooks,
 )
 from app.routers.mcp import mcp_app
 from app.services import s3_service
@@ -97,6 +99,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include routers
 app.include_router(health.router, tags=["health"])
+app.include_router(webhooks.router, tags=["webhooks"])
 app.include_router(apiaries.router, prefix=settings.api_v1_prefix, tags=["apiaries"])
 app.include_router(hives.router, prefix=settings.api_v1_prefix, tags=["hives"])
 app.include_router(inspections.router, prefix=settings.api_v1_prefix, tags=["inspections"])
@@ -114,6 +117,7 @@ app.include_router(ai.router, prefix=settings.api_v1_prefix, tags=["ai"])
 app.include_router(oauth2_server.router, prefix=settings.api_v1_prefix, tags=["oauth2"])
 app.include_router(admin.router, prefix=settings.api_v1_prefix, tags=["admin"])
 app.include_router(shares.router, prefix=settings.api_v1_prefix, tags=["shares"])
+app.include_router(dashboard.router, prefix=settings.api_v1_prefix, tags=["dashboard"])
 
 # Mount FastMCP Streamable-HTTP sub-app (handles its own auth via JWTVerifier)
 app.mount("/", mcp_app)

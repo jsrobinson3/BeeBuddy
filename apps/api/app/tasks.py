@@ -53,6 +53,8 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     from uuid import UUID
 
     from app.db.session import AsyncSessionLocal
+    from app.models.apiary import Apiary
+    from app.models.hive import Hive
     from app.models.inspection import Inspection
 
     async with AsyncSessionLocal() as db:
@@ -69,8 +71,17 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
             notes=inspection.notes,
         )
         inspection.ai_summary = summary
+
+        # Resolve owning user so we can invalidate their dashboard cache.
+        hive = await db.get(Hive, inspection.hive_id)
+        apiary = await db.get(Apiary, hive.apiary_id) if hive else None
         await db.commit()
         logger.info("Generated AI summary for inspection %s", inspection_id)
+
+        if apiary is not None:
+            from app.services.dashboard_summary import invalidate_dashboard_summary
+
+            await invalidate_dashboard_summary(apiary.user_id)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)

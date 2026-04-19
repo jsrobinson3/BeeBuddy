@@ -29,6 +29,7 @@ const HIVE_TYPES: { label: string; value: HiveType }[] = [
   { label: "Top Bar", value: "top_bar" },
   { label: "Warre", value: "warre" },
   { label: "Flow", value: "flow" },
+  { label: "Nuc", value: "nuc" },
   { label: "Other", value: "other" },
 ];
 

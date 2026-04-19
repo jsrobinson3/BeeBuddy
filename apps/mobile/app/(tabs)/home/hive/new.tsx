@@ -34,6 +34,7 @@ const HIVE_TYPES: { label: string; value: HiveType }[] = [
   { label: "Top Bar", value: "top_bar" },
   { label: "Warre", value: "warre" },
   { label: "Flow", value: "flow" },
+  { label: "Nuc", value: "nuc" },
   { label: "Other", value: "other" },
 ];
 
@@ -268,6 +269,7 @@ function ReviewSummary({ styles }: { styles: ReturnType<typeof createStyles> }) 
     top_bar: "Top Bar",
     warre: "Warre",
     flow: "Flow",
+    nuc: "Nuc",
     other: "Other",
   };
   const sourceLabelMap: Record<HiveSource, string> = {

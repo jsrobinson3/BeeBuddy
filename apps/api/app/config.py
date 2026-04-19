@@ -170,6 +170,11 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.2
     sentry_environment: str = "development"
 
+    # EAS → GitHub dispatch relay (powers mobile-sentry-upload.yml)
+    eas_webhook_secret: str | None = None
+    github_dispatch_token: str | None = None
+    github_dispatch_repo: str = "jsrobinson3/BeeBuddy"
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:8081", "http://localhost:19006"]
 

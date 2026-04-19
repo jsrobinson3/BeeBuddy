@@ -114,5 +114,7 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      # Build is fire-and-forget. Sentry release + dSYM upload runs in
+      # mobile-sentry-upload.yml, triggered by the EAS webhook → API relay.
       - name: Build iOS (production)
         run: eas build --platform ios --profile production --non-interactive --no-wait

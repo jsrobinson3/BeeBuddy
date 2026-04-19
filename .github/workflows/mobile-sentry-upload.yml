@@ -1,0 +1,73 @@
+name: Mobile Sentry Upload
+
+# Triggered by workflow_dispatch from the api.beebuddyai.com EAS webhook
+# relay (apps/api/app/routers/webhooks.py). Receives metadata for a finished
+# EAS build, downloads dSYMs, creates a Sentry release, and uploads symbols.
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: EAS build UUID
+        required: true
+        type: string
+      platform:
+        description: ios or android
+        required: true
+        type: string
+      app_version:
+        description: App version (e.g. 0.1.0)
+        required: true
+        type: string
+      build_number:
+        description: Build number (e.g. 12)
+        required: true
+        type: string
+      artifacts_url:
+        description: Signed URL for the dSYM tarball (buildArtifactsUrl)
+        required: true
+        type: string
+
+jobs:
+  upload:
+    name: Upload symbols & create release
+    runs-on: ubuntu-latest
+    if: inputs.platform == 'ios'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # full history so sentry-cli set-commits --auto works
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Download dSYMs from EAS artifacts URL
+        id: dsym
+        env:
+          ARTIFACTS_URL: ${{ inputs.artifacts_url }}
+        run: |
+          if [ -z "$ARTIFACTS_URL" ]; then
+            echo "::warning::No artifacts_url in dispatch inputs — nothing to upload"
+            echo "skip=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          mkdir -p dsyms
+          curl -sSL -o dsyms/artifacts.tar.gz "$ARTIFACTS_URL"
+          tar -xzf dsyms/artifacts.tar.gz -C dsyms/
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Create Sentry release & upload dSYMs
+        if: steps.dsym.outputs.skip == 'false'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: beebuddy
+          SENTRY_PROJECT: react-native
+          APP_VERSION: ${{ inputs.app_version }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          RELEASE="com.beebuddyai.app@${APP_VERSION}+${BUILD_NUMBER}"
+          npx --yes @sentry/cli releases new "$RELEASE"
+          npx --yes @sentry/cli releases set-commits "$RELEASE" --auto
+          npx --yes @sentry/cli debug-files upload --include-sources ./dsyms
+          npx --yes @sentry/cli releases finalize "$RELEASE"
+          npx --yes @sentry/cli deploys new -r "$RELEASE" -e production
