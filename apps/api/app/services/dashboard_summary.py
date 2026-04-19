@@ -11,18 +11,20 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
+import redis.asyncio as aioredis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import LLMProvider, get_settings
+from app.config import get_settings
 from app.models.apiary import Apiary
 from app.models.hive import Hive
+from app.redis_utils import redis_kwargs
 from app.services import inspection_service
-from app.services.ai_summary import _generate_anthropic, _generate_openai_compat
+from app.services.ai_summary import generate_completion
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,28 @@ class DashboardSummaryResult:
     summary: str
     inspection_count: int
     generated_at: datetime
+
+
+# ── Cache invalidation ───────────────────────────────────────────────────────
+
+
+async def invalidate_dashboard_summary(user_id) -> None:
+    """Drop the cached summary for a user. Called when a new inspection lands."""
+    settings = get_settings()
+    try:
+        r = aioredis.from_url(settings.redis_url, **redis_kwargs())
+    except Exception:
+        logger.warning("Redis unavailable for dashboard cache invalidation", exc_info=True)
+        return
+    try:
+        await r.delete(f"dashboard:summary:{user_id}")
+    except Exception:
+        logger.warning("Failed to invalidate dashboard summary cache", exc_info=True)
+    finally:
+        await r.aclose()
+
+
+# ── Internal helpers ─────────────────────────────────────────────────────────
 
 
 async def _primary_apiary_location(
@@ -77,6 +101,11 @@ async def _fetch_forecast_summary(lat: float, lng: float) -> str | None:
         logger.warning("Forecast fetch failed for %s,%s", lat, lng, exc_info=True)
         return None
 
+    return _format_forecast(data)
+
+
+def _format_forecast(data: dict) -> str | None:
+    """Turn raw open-meteo response into a compact string for the LLM prompt."""
     days = data.get("daily", {})
     times = days.get("time", []) or []
     if not times:
@@ -85,7 +114,7 @@ async def _fetch_forecast_summary(lat: float, lng: float) -> str | None:
     parts: list[str] = []
     current_t = data.get("current", {}).get("temperature_2m")
     if current_t is not None:
-        parts.append(f"now ~{round(current_t)}°C")
+        parts.append(f"now ~{round(current_t)}\u00b0C")
 
     for i, date in enumerate(times):
         precip = (days.get("precipitation_sum") or [None] * len(times))[i]
@@ -93,7 +122,7 @@ async def _fetch_forecast_summary(lat: float, lng: float) -> str | None:
         tmin = (days.get("temperature_2m_min") or [None] * len(times))[i]
         bits: list[str] = [date]
         if tmin is not None and tmax is not None:
-            bits.append(f"{round(tmin)}-{round(tmax)}°C")
+            bits.append(f"{round(tmin)}-{round(tmax)}\u00b0C")
         if precip is not None:
             bits.append(f"{precip:.1f}mm rain")
         parts.append(" ".join(bits))
@@ -101,7 +130,7 @@ async def _fetch_forecast_summary(lat: float, lng: float) -> str | None:
 
 
 def _condense_inspection(insp, hive_name: str) -> dict:
-    """Produce a compact dict suitable for prompt injection."""
+    """Produce a compact dict for the LLM prompt."""
     return {
         "hive": hive_name,
         "inspected_at": insp.inspected_at.isoformat() if insp.inspected_at else None,
@@ -109,6 +138,34 @@ def _condense_inspection(insp, hive_name: str) -> dict:
         "observations": insp.observations,
         "notes": insp.notes,
     }
+
+
+def _build_prompt(condensed: list[dict], forecast: str | None) -> list[dict]:
+    """Assemble the LLM messages list for the dashboard digest."""
+    user_parts = [
+        "Summarise what's been going on across this beekeeper's recent hive "
+        "inspections. Surface trends, concerns, and what to keep an eye on. "
+        "If a forecast is provided, weave in any actionable advice "
+        "(e.g. inspection windows, feeding decisions). "
+        "Keep it to 3-5 sentences, friendly and direct, no bullet lists.",
+        f"\nRecent inspections (newest first):\n{json.dumps(condensed, default=str)}",
+    ]
+    if forecast:
+        user_parts.append(f"\n3-day forecast: {forecast}")
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a beekeeping assistant writing a one-paragraph "
+                "dashboard digest. Be concise and concrete."
+            ),
+        },
+        {"role": "user", "content": "\n".join(user_parts)},
+    ]
+
+
+# ── Main entry point ─────────────────────────────────────────────────────────
 
 
 async def generate_dashboard_summary(
@@ -122,9 +179,7 @@ async def generate_dashboard_summary(
     )
     if not inspections:
         return DashboardSummaryResult(
-            summary="",
-            inspection_count=0,
-            generated_at=datetime.utcnow(),
+            summary="", inspection_count=0, generated_at=datetime.now(UTC),
         )
 
     # Bulk load hive names so we don't trigger N lazy loads.
@@ -141,37 +196,12 @@ async def generate_dashboard_summary(
 
     location = await _primary_apiary_location(db, user_id)
     forecast = await _fetch_forecast_summary(*location) if location else None
+    messages = _build_prompt(condensed, forecast)
 
-    user_prompt_parts = [
-        "Summarise what's been going on across this beekeeper's recent hive "
-        "inspections. Surface trends, concerns, and what to keep an eye on. "
-        "If a forecast is provided, weave in any actionable advice "
-        "(e.g. inspection windows, feeding decisions). "
-        "Keep it to 3-5 sentences, friendly and direct, no bullet lists.",
-        f"\nRecent inspections (newest first):\n{json.dumps(condensed, default=str)}",
-    ]
-    if forecast:
-        user_prompt_parts.append(f"\n3-day forecast: {forecast}")
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a beekeeping assistant writing a one-paragraph "
-                "dashboard digest. Be concise and concrete."
-            ),
-        },
-        {"role": "user", "content": "\n".join(user_prompt_parts)},
-    ]
-
-    settings = get_settings()
-    if settings.llm_provider == LLMProvider.ANTHROPIC:
-        text = await _generate_anthropic(messages)
-    else:
-        text = await _generate_openai_compat(messages)
+    text = await generate_completion(messages)
 
     return DashboardSummaryResult(
         summary=text.strip(),
         inspection_count=len(inspections),
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(UTC),
     )

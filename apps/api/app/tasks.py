@@ -79,7 +79,7 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
         logger.info("Generated AI summary for inspection %s", inspection_id)
 
         if apiary is not None:
-            from app.routers.dashboard import invalidate_dashboard_summary
+            from app.services.dashboard_summary import invalidate_dashboard_summary
 
             await invalidate_dashboard_summary(apiary.user_id)
 

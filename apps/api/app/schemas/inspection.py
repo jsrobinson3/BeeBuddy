@@ -4,7 +4,12 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from pydantic import field_validator
+
 from app.schemas.common import BaseResponse, CamelBase
+
+_VALID_BROOD_PATTERNS = frozenset({"excellent", "good", "spotty", "poor", "failing"})
+_VALID_BROOD_SCORES = frozenset({1, 2, 3, 4, 5})
 
 
 class ExperienceLevel(StrEnum):
@@ -31,6 +36,18 @@ class InspectionObservations(CamelBase):
     # Accepts new string values (excellent/good/spotty/poor/failing) or
     # legacy ints (1-5) from older clients.
     brood_pattern_score: str | int | None = None
+
+    @field_validator("brood_pattern_score", mode="before")
+    @classmethod
+    def validate_brood_pattern(cls, v):  # noqa: N805
+        if v is None:
+            return v
+        if isinstance(v, str) and v in _VALID_BROOD_PATTERNS:
+            return v
+        if isinstance(v, int) and v in _VALID_BROOD_SCORES:
+            return v
+        msg = f"Invalid brood_pattern_score: {v!r}"
+        raise ValueError(msg)
 
     # Stores
     honey_stores: str | None = None  # low/adequate/abundant

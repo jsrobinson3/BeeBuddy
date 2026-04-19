@@ -32,11 +32,19 @@ async def generate_summary(
     ]
 
     if settings.llm_provider == LLMProvider.ANTHROPIC:
-        return await _generate_anthropic(messages)
-    return await _generate_openai_compat(messages)
+        return await generate_anthropic(messages)
+    return await generate_openai_compat(messages)
 
 
-async def _generate_openai_compat(messages: list[dict]) -> str:
+async def generate_completion(messages: list[dict]) -> str:
+    """Route a chat completion to the configured LLM provider."""
+    settings = get_settings()
+    if settings.llm_provider == LLMProvider.ANTHROPIC:
+        return await generate_anthropic(messages)
+    return await generate_openai_compat(messages)
+
+
+async def generate_openai_compat(messages: list[dict]) -> str:
     """Non-streaming completion via OpenAI-compatible endpoint."""
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
@@ -49,7 +57,7 @@ async def _generate_openai_compat(messages: list[dict]) -> str:
     return data["choices"][0]["message"]["content"]
 
 
-async def _generate_anthropic(messages: list[dict]) -> str:
+async def generate_anthropic(messages: list[dict]) -> str:
     """Non-streaming completion via Anthropic Messages API."""
     system, chat = _split_system(messages)
     async with httpx.AsyncClient(timeout=60) as client:
