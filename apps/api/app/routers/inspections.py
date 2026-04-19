@@ -37,6 +37,7 @@ _TEMPERAMENT_OPTS = ["calm", "nervous", "aggressive"]
 _POP_OPTS = ["weak", "moderate", "strong"]
 _PEST_OPTS = ["varroa", "hive_beetles", "wax_moths", "ants", "none"]
 _DISEASE_OPTS = ["afb", "efb", "chalkbrood", "nosema", "dwv", "none"]
+_BROOD_PATTERN_OPTS = ["excellent", "good", "spotty", "poor", "failing"]
 
 _BEGINNER_FIELDS: list[dict] = [
     {"name": "queen_seen", "label": "Did you see the queen?",
@@ -62,8 +63,8 @@ _INTERMEDIATE_FIELDS: list[dict] = [
      "type": "boolean"},
     {"name": "capped_brood", "label": "Capped brood present?",
      "type": "boolean"},
-    {"name": "brood_pattern_score", "label": "Brood pattern (1-5)",
-     "type": "number", "min": 1, "max": 5},
+    {"name": "brood_pattern_score", "label": "Brood pattern",
+     "type": "select", "options": _BROOD_PATTERN_OPTS},
     {"name": "frames_of_bees", "label": "Frames of bees",
      "type": "number"},
     {"name": "frames_of_brood", "label": "Frames of brood",
@@ -84,8 +85,8 @@ _ADVANCED_FIELDS: list[dict] = [
     {"name": "larvae_seen", "label": "Larvae", "type": "boolean"},
     {"name": "capped_brood", "label": "Capped brood",
      "type": "boolean"},
-    {"name": "brood_pattern_score", "label": "Brood pattern (1-5)",
-     "type": "number", "min": 1, "max": 5},
+    {"name": "brood_pattern_score", "label": "Brood pattern",
+     "type": "select", "options": _BROOD_PATTERN_OPTS},
     {"name": "frames_of_bees", "label": "Frames of bees",
      "type": "number"},
     {"name": "frames_of_brood", "label": "Frames of brood",

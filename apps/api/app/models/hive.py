@@ -17,6 +17,7 @@ class HiveType(enum.StrEnum):
     TOP_BAR = "top_bar"
     WARRE = "warre"
     FLOW = "flow"
+    NUC = "nuc"
     OTHER = "other"
 
 

@@ -19,6 +19,7 @@ from app.routers import (
     apiaries,
     auth,
     cadences,
+    dashboard,
     events,
     harvests,
     health,
@@ -114,6 +115,7 @@ app.include_router(ai.router, prefix=settings.api_v1_prefix, tags=["ai"])
 app.include_router(oauth2_server.router, prefix=settings.api_v1_prefix, tags=["oauth2"])
 app.include_router(admin.router, prefix=settings.api_v1_prefix, tags=["admin"])
 app.include_router(shares.router, prefix=settings.api_v1_prefix, tags=["shares"])
+app.include_router(dashboard.router, prefix=settings.api_v1_prefix, tags=["dashboard"])
 
 # Mount FastMCP Streamable-HTTP sub-app (handles its own auth via JWTVerifier)
 app.mount("/", mcp_app)

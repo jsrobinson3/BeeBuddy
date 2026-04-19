@@ -17,10 +17,12 @@ import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { InvitationBanner } from "../../../components/sharing/InvitationBanner";
 import { SharedBadge } from "../../../components/sharing/SharedBadge";
 import { InvitationCard } from "../../../components/sharing/InvitationCard";
+import { DashboardSummaryCard } from "../../../components/DashboardSummaryCard";
 import { WeatherForecastCard } from "../../../components/WeatherForecastCard";
 import { WeatherInsightCard } from "../../../components/WeatherInsightCard";
 import { useApiaries } from "../../../hooks/useApiaries";
 import { useHives } from "../../../hooks/useHives";
+import { useInspections } from "../../../hooks/useInspections";
 import { useTasks } from "../../../hooks/useTasks";
 import {
   useMyPendingShares,
@@ -466,6 +468,7 @@ export default function ApiariesScreen() {
   const { data: pendingShares = [] } = useMyPendingShares();
   const acceptShare = useAcceptShare();
   const declineShare = useDeclineShare();
+  const { data: inspections } = useInspections();
   const s = useStyles(createLayoutStyles);
 
   // Use the first apiary with location for weather forecast
@@ -533,6 +536,7 @@ export default function ApiariesScreen() {
           city={locatedApiary?.city}
         />
       )}
+      <DashboardSummaryCard hasInspections={(inspections ?? []).length > 0} />
       <WeatherInsightCard insights={insights} />
       {pendingShares.length > 0 && (
         <View style={s.sectionPadded}>

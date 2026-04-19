@@ -39,6 +39,30 @@ const POLLEN_OPTIONS = [
   { label: "Abundant", value: "abundant" },
 ];
 
+export const BROOD_PATTERN_OPTIONS = [
+  { label: "Excellent", value: "excellent" },
+  { label: "Good", value: "good" },
+  { label: "Spotty", value: "spotty" },
+  { label: "Poor", value: "poor" },
+  { label: "Failing", value: "failing" },
+];
+
+const NUMERIC_TO_BROOD_PATTERN: Record<number, string> = {
+  5: "excellent",
+  4: "good",
+  3: "spotty",
+  2: "poor",
+  1: "failing",
+};
+
+export function broodPatternLabel(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const stringValue =
+    typeof value === "number" ? NUMERIC_TO_BROOD_PATTERN[value] ?? String(value) : value;
+  const match = BROOD_PATTERN_OPTIONS.find((o) => o.value === stringValue);
+  return match ? match.label : stringValue;
+}
+
 const PEST_OPTIONS = [
   "none", "varroa", "wax_moth", "hive_beetle", "ants", "other",
 ];
@@ -89,7 +113,7 @@ export interface FormState {
   honeyStores: string | null;
   temperament: string | null;
   pollenStores: string | null;
-  broodPatternScore: number | null;
+  broodPatternScore: string | null;
   framesOfBees: number | null;
   framesOfBrood: number | null;
   pestSigns: string[];
@@ -181,35 +205,34 @@ export function IntermediateFields({ s, set }: SectionProps) {
           onValueChange={(v) => set("cappedBrood", v)}
         />
       </ResponsiveFormRow>
+      <PickerField
+        label="Brood Pattern"
+        options={BROOD_PATTERN_OPTIONS}
+        selected={s.broodPatternScore}
+        onSelect={(v) => set("broodPatternScore", v)}
+      />
       <ResponsiveFormRow>
-        <NumberInput
-          label="Brood Pattern (1-5)"
-          value={s.broodPatternScore}
-          onChange={(v) => set("broodPatternScore", v)}
-          min={1}
-          max={5}
-        />
         <NumberInput
           label="Frames of Bees"
           value={s.framesOfBees}
           onChange={(v) => set("framesOfBees", v)}
           min={0}
+          step={0.5}
         />
-      </ResponsiveFormRow>
-      <ResponsiveFormRow>
         <NumberInput
           label="Frames of Brood"
           value={s.framesOfBrood}
           onChange={(v) => set("framesOfBrood", v)}
           min={0}
-        />
-        <PickerField
-          label="Pollen Stores"
-          options={POLLEN_OPTIONS}
-          selected={s.pollenStores}
-          onSelect={(v) => set("pollenStores", v)}
+          step={0.5}
         />
       </ResponsiveFormRow>
+      <PickerField
+        label="Pollen Stores"
+        options={POLLEN_OPTIONS}
+        selected={s.pollenStores}
+        onSelect={(v) => set("pollenStores", v)}
+      />
       <MultiSelect
         label="Pest Signs"
         options={PEST_OPTIONS}
@@ -732,7 +755,10 @@ export function inspectionToFormState(inspection: WMInspection): FormState {
     honeyStores: obs.honeyStores ?? null,
     temperament: obs.temperament ?? null,
     pollenStores: obs.pollenStores ?? null,
-    broodPatternScore: obs.broodPatternScore ?? null,
+    broodPatternScore:
+      typeof obs.broodPatternScore === "number"
+        ? NUMERIC_TO_BROOD_PATTERN[obs.broodPatternScore] ?? null
+        : obs.broodPatternScore ?? null,
     framesOfBees: obs.framesOfBees ?? null,
     framesOfBrood: obs.framesOfBrood ?? null,
     pestSigns: obs.pestSigns ?? [],
