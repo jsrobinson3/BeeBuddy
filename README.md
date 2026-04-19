@@ -221,8 +221,6 @@ TimescaleDB for time-series, MQTT sensor ingestion (BEEP-compatible), sensor das
 ### Phase 4: Polish + Scale
 Harvest QR codes, PDF reports, multi-language, audio queen detection, predictive analytics, self-hosting guide, public launch.
 
-See [.claude/plans/openbeehive-plan.md](.claude/plans/openbeehive-plan.md) for the full plan with completion status.
-
 ## License
 
 Apache-2.0
