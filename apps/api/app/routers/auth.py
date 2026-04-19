@@ -27,7 +27,7 @@ from app.schemas.verification import (
     ResetPasswordRequest,
     VerifyEmailRequest,
 )
-from app.services import auth_service, cadence_service, oauth_service
+from app.services import auth_service, cadence_service, oauth_service, share_service
 from app.tasks import send_email_task
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,8 @@ async def register(
         "verify_email.html",
         {"token": verify_token, "name": user.name or "Beekeeper"},
     )
+    # Claim any pending share invitations sent to this email before registration
+    await share_service.claim_pending_shares(db, user)
     access, refresh = auth_service.issue_tokens(user.id)
     set_auth_cookies(response, access, refresh)
     return TokenResponse(access_token=access, refresh_token=refresh)

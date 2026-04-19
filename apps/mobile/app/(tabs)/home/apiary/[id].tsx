@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Plus } from "lucide-react-native";
+import { Plus, Users } from "lucide-react-native";
 import { FlatList, Pressable, Text, View } from "react-native";
 
 import { Card } from "../../../../components/Card";
@@ -7,6 +7,8 @@ import { EmptyState } from "../../../../components/EmptyState";
 import { ErrorDisplay } from "../../../../components/ErrorDisplay";
 import { HexIcon } from "../../../../components/HexIcon";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
+import { PermissionGate } from "../../../../components/sharing/PermissionGate";
+import { useResourcePermission } from "../../../../hooks/usePermissions";
 import { WeatherForecastCard } from "../../../../components/WeatherForecastCard";
 import { useApiary } from "../../../../hooks/useApiaries";
 import { useHives } from "../../../../hooks/useHives";
@@ -54,6 +56,12 @@ const createStyles = (c: ThemeColors) => ({
     alignItems: "center" as const, marginHorizontal: 16, marginTop: 12,
   },
   editButtonText: { color: c.textOnPrimary, fontSize: 16, fontFamily: typography.families.bodySemiBold },
+  shareButton: {
+    flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "center" as const,
+    borderRadius: 16, padding: 14, marginHorizontal: 16, marginTop: 8, gap: 8,
+    borderWidth: 1, borderColor: c.honey, backgroundColor: "transparent",
+  },
+  shareButtonText: { color: c.honey, fontSize: 16, fontFamily: typography.families.bodySemiBold },
 });
 
 function useStatusColor() {
@@ -173,6 +181,7 @@ export default function ApiaryDetailScreen() {
     apiary?.longitude,
   );
   const styles = useStyles(createStyles);
+  const { canManageSharing } = useResourcePermission(apiary?.myRole);
 
   if (apiaryLoading || hivesLoading) return <LoadingSpinner fullscreen />;
 
@@ -220,11 +229,22 @@ export default function ApiaryDetailScreen() {
         {weatherCard && (
           <View style={styles.weatherSection}>{weatherCard}</View>
         )}
+        <PermissionGate myRole={apiary?.myRole} require="canEdit">
+          <Pressable
+            style={styles.editButton}
+            onPress={() => router.push(`/home/apiary/edit?id=${id}` as any)}
+          >
+            <Text style={styles.editButtonText}>Edit Apiary</Text>
+          </Pressable>
+        </PermissionGate>
         <Pressable
-          style={styles.editButton}
-          onPress={() => router.push(`/home/apiary/edit?id=${id}` as any)}
+          style={styles.shareButton}
+          onPress={() => router.push(`/home/sharing/${id}?type=apiary` as any)}
         >
-          <Text style={styles.editButtonText}>Edit Apiary</Text>
+          <Users size={18} color={styles.shareButtonText.color} />
+          <Text style={styles.shareButtonText}>
+            {canManageSharing ? "Manage Sharing" : "View Collaborators"}
+          </Text>
         </Pressable>
         <FlatList
           data={hives ?? []}
@@ -236,7 +256,9 @@ export default function ApiaryDetailScreen() {
           onRefresh={onRefresh}
         />
       </ResponsiveContainer>
-      <AddHiveFab onPress={() => router.push(`/home/hive/new?apiary_id=${id}` as any)} />
+      <PermissionGate myRole={apiary?.myRole} require="canEdit">
+        <AddHiveFab onPress={() => router.push(`/home/hive/new?apiary_id=${id}` as any)} />
+      </PermissionGate>
     </View>
   );
 }

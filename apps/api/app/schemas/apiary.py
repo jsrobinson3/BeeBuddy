@@ -43,3 +43,6 @@ class ApiaryResponse(BaseResponse):
     notes: str | None = None
     created_at: datetime
     hive_count: int = 0
+    my_role: str | None = None
+    share_count: int = 0
+    shared_by: str | None = None

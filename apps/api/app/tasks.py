@@ -136,7 +136,7 @@ async def _anonymize_user(db, user, user_id_str: str) -> None:
     from app.models.user_oauth_link import UserOAuthLink
 
     user.name = None
-    user.email = f"deleted_{uuid4().hex}@anon.beebuddy.app"
+    user.email = f"deleted_{uuid4().hex}@anon.beebuddyai.com"
     user.password_hash = None
     user.preferences = None
     user.locale = None

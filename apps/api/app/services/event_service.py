@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.event import Event
 from app.models.hive import Hive
+from app.services.access_service import hive_access_filter
 
 
 async def get_events(
@@ -23,7 +24,7 @@ async def get_events(
         select(Event)
         .join(Hive, Event.hive_id == Hive.id)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Event.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Event.deleted_at.is_(None), hive_access_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -53,7 +54,7 @@ async def get_event(db: AsyncSession, event_id: UUID, user_id: UUID) -> Event | 
         .where(
             Event.id == event_id,
             Event.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            hive_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

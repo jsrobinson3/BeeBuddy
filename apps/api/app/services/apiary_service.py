@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.apiary import Apiary
 from app.models.hive import Hive
+from app.services.access_service import apiary_access_filter
 
 
 async def get_apiaries(
@@ -23,7 +24,7 @@ async def get_apiaries(
             func.count(Hive.id).label("hive_count"),
         )
         .outerjoin(Hive, (Hive.apiary_id == Apiary.id) & Hive.deleted_at.is_(None))
-        .where(Apiary.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Apiary.deleted_at.is_(None), apiary_access_filter(user_id))
         .group_by(Apiary.id)
         .offset(offset)
         .limit(limit)

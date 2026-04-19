@@ -6,6 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import (
+    Permission,
+    check_apiary_permission,
+    check_hive_permission,
+    require_permission,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
@@ -40,7 +46,13 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new task."""
+    """Create a new task. Checks editor+ if scoped to a shared resource."""
+    if data.hive_id:
+        perm = await check_hive_permission(db, data.hive_id, current_user.id)
+        require_permission(perm, Permission.EDITOR, "Hive not found")
+    elif data.apiary_id:
+        perm = await check_apiary_permission(db, data.apiary_id, current_user.id)
+        require_permission(perm, Permission.EDITOR, "Apiary not found")
     return await task_service.create_task(db, data.model_dump(), user_id=current_user.id)
 
 
@@ -64,10 +76,17 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an existing task."""
+    """Update an existing task. Owner or editor+ on the resource."""
     task = await task_service.get_task(db, task_id, user_id=current_user.id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.user_id != current_user.id:
+        perm = None
+        if task.hive_id:
+            perm = await check_hive_permission(db, task.hive_id, current_user.id)
+        elif task.apiary_id:
+            perm = await check_apiary_permission(db, task.apiary_id, current_user.id)
+        require_permission(perm, Permission.EDITOR, "Task not found")
     return await task_service.update_task(db, task, data.model_dump(exclude_unset=True))
 
 
@@ -77,8 +96,15 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a task."""
+    """Delete a task. Only the task creator or resource owner can delete."""
     task = await task_service.get_task(db, task_id, user_id=current_user.id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.user_id != current_user.id:
+        perm = None
+        if task.hive_id:
+            perm = await check_hive_permission(db, task.hive_id, current_user.id)
+        elif task.apiary_id:
+            perm = await check_apiary_permission(db, task.apiary_id, current_user.id)
+        require_permission(perm, Permission.OWNER, "Task not found")
     await task_service.delete_task(db, task)

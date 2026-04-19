@@ -16,6 +16,7 @@ from app.models.oauth2_client import OAuth2Client
 from app.models.oauth2_code import OAuth2Code
 from app.models.pending_action import ActionStatus, PendingAction
 from app.models.queen import Queen, QueenOrigin, QueenStatus
+from app.models.share import Share, ShareRole, ShareStatus
 from app.models.task import Task, TaskSource
 from app.models.task_cadence import TaskCadence
 from app.models.treatment import Treatment
@@ -52,5 +53,8 @@ __all__ = [
     "TaskCadence",
     "ActionStatus",
     "PendingAction",
+    "Share",
+    "ShareRole",
+    "ShareStatus",
     "UserOAuthLink",
 ]

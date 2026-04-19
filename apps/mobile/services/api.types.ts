@@ -67,6 +67,9 @@ export interface Apiary {
   notes: string | null;
   createdAt: string;
   hiveCount: number;
+  myRole?: ShareRole | null;
+  shareCount?: number;
+  sharedBy?: string | null;
 }
 
 export interface CreateApiaryInput {
@@ -107,6 +110,9 @@ export interface Hive {
   order: number | null;
   notes: string | null;
   createdAt: string;
+  myRole?: ShareRole | null;
+  shareCount?: number;
+  sharedBy?: string | null;
 }
 
 export interface CreateHiveInput {
@@ -583,6 +589,38 @@ export interface PendingActionResponse {
   expiresAt: string;
   executedAt?: string;
   resultId?: string;
+}
+
+// ─── Share Types ──────────────────────────────────────────────────────────────
+
+export type ShareRole = "owner" | "editor" | "viewer";
+export type ShareStatus = "pending" | "accepted" | "declined" | "revoked";
+
+export interface Share {
+  id: string;
+  ownerId: string;
+  ownerName: string | null;
+  sharedWithUserId: string | null;
+  sharedWithName: string | null;
+  inviteEmail: string | null;
+  apiaryId: string | null;
+  apiaryName: string | null;
+  hiveId: string | null;
+  hiveName: string | null;
+  role: ShareRole;
+  status: ShareStatus;
+  createdAt: string;
+}
+
+export interface CreateShareInput {
+  email: string;
+  apiaryId?: string;
+  hiveId?: string;
+  role: "editor" | "viewer";
+}
+
+export interface UpdateShareInput {
+  role: "editor" | "viewer";
 }
 
 // ─── Admin Types ──────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.harvest import Harvest
 from app.models.hive import Hive
+from app.services.access_service import hive_access_filter
 
 
 async def get_harvests(
@@ -23,7 +24,7 @@ async def get_harvests(
         select(Harvest)
         .join(Hive, Harvest.hive_id == Hive.id)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Harvest.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Harvest.deleted_at.is_(None), hive_access_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -55,7 +56,7 @@ async def get_harvest(
         .where(
             Harvest.id == harvest_id,
             Harvest.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            hive_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

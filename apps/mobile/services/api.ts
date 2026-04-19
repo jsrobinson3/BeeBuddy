@@ -73,6 +73,11 @@ export type {
   OAuth2Client,
   OAuth2ClientCreate,
   OAuth2ClientUpdate,
+  ShareRole,
+  ShareStatus,
+  Share,
+  CreateShareInput,
+  UpdateShareInput,
 } from "./api.types";
 
 import type {
@@ -128,6 +133,9 @@ import type {
   OAuth2Client,
   OAuth2ClientCreate,
   OAuth2ClientUpdate,
+  Share,
+  CreateShareInput,
+  UpdateShareInput,
 } from "./api.types";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -751,6 +759,47 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify(data),
     });
+  }
+
+  // ── Shares ─────────────────────────────────────────────────────────────────
+
+  async getShares(params?: { apiaryId?: string; hiveId?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.apiaryId) qs.set("apiary_id", params.apiaryId);
+    if (params?.hiveId) qs.set("hive_id", params.hiveId);
+    const query = qs.toString();
+    const path = query ? `/shares/asset?${query}` : "/shares";
+    return this.request<Share[]>(path);
+  }
+
+  async getMyPendingShares() {
+    return this.request<Share[]>("/shares?direction=incoming&status=pending");
+  }
+
+  async createShare(data: CreateShareInput) {
+    return this.request<Share>("/shares", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async acceptShare(shareId: string) {
+    return this.request<Share>(`/shares/${shareId}/accept`, { method: "POST" });
+  }
+
+  async declineShare(shareId: string) {
+    return this.request<Share>(`/shares/${shareId}/decline`, { method: "POST" });
+  }
+
+  async updateShareRole(shareId: string, data: UpdateShareInput) {
+    return this.request<Share>(`/shares/${shareId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeShare(shareId: string) {
+    return this.request<void>(`/shares/${shareId}`, { method: "DELETE" });
   }
 
   // ── Sync ──────────────────────────────────────────────────────────────────

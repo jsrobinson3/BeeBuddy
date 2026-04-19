@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.treatment import Treatment
+from app.services.access_service import hive_access_filter
 
 
 async def get_treatments(
@@ -23,7 +24,7 @@ async def get_treatments(
         select(Treatment)
         .join(Hive, Treatment.hive_id == Hive.id)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Treatment.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Treatment.deleted_at.is_(None), hive_access_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -55,7 +56,7 @@ async def get_treatment(
         .where(
             Treatment.id == treatment_id,
             Treatment.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            hive_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()
