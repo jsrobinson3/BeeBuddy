@@ -62,6 +62,7 @@ yarn-error.log*
 *.whl
 
 # Local data
+backups/
 data/ml_models/
 data/datasets/
 data/processed/
