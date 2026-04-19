@@ -1,7 +1,7 @@
 """add nuc to hive_type enum
 
 Revision ID: n0o1p2q3r4s5
-Revises: 0089231dedc7
+Revises: a080fea34fe1
 Create Date: 2026-04-19 00:00:00.000000
 
 """
@@ -11,7 +11,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "n0o1p2q3r4s5"
-down_revision: str | None = "0089231dedc7"
+down_revision: str | None = "a080fea34fe1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
