@@ -6,4 +6,9 @@ module.exports = {
   ],
   setupFiles: ["./jest.setup.js"],
   moduleFileExtensions: ["ts", "tsx", "js", "jsx"],
+  moduleNameMapper: {
+    // expo-modules-core is nested under expo/ in SDK 55; Jest can't resolve it
+    "^expo-modules-core(.*)$":
+      "<rootDir>/node_modules/expo/node_modules/expo-modules-core$1",
+  },
 };
