@@ -52,25 +52,26 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import scoped_async_session
     from app.models.inspection import Inspection
 
-    async with AsyncSessionLocal() as db:
-        inspection = await db.get(Inspection, UUID(inspection_id))
-        if not inspection:
-            logger.warning("Inspection %s not found for summary", inspection_id)
-            return
+    async with scoped_async_session() as SessionLocal:
+        async with SessionLocal() as db:
+            inspection = await db.get(Inspection, UUID(inspection_id))
+            if not inspection:
+                logger.warning("Inspection %s not found for summary", inspection_id)
+                return
 
-        from app.services.ai_summary import generate_summary
+            from app.services.ai_summary import generate_summary
 
-        summary = await generate_summary(
-            observations=inspection.observations,
-            weather=inspection.weather,
-            notes=inspection.notes,
-        )
-        inspection.ai_summary = summary
-        await db.commit()
-        logger.info("Generated AI summary for inspection %s", inspection_id)
+            summary = await generate_summary(
+                observations=inspection.observations,
+                weather=inspection.weather,
+                notes=inspection.notes,
+            )
+            inspection.ai_summary = summary
+            await db.commit()
+            logger.info("Generated AI summary for inspection %s", inspection_id)
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -93,29 +94,30 @@ async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import scoped_async_session
     from app.models.user import User
 
     user_id = UUID(user_id_str)
 
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, user_id)
-        if user is None:
-            logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
-            return
-        if user.deleted_at is None:
-            logger.info(
-                "hard_delete_user: user %s deletion was cancelled, skipping",
-                user_id_str,
-            )
-            return
+    async with scoped_async_session() as SessionLocal:
+        async with SessionLocal() as db:
+            user = await db.get(User, user_id)
+            if user is None:
+                logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
+                return
+            if user.deleted_at is None:
+                logger.info(
+                    "hard_delete_user: user %s deletion was cancelled, skipping",
+                    user_id_str,
+                )
+                return
 
-        delete_data = (user.preferences or {}).get("_delete_data", False)
+            delete_data = (user.preferences or {}).get("_delete_data", False)
 
-        if delete_data:
-            await _full_delete_user(db, user, user_id, user_id_str)
-        else:
-            await _anonymize_user(db, user, user_id_str)
+            if delete_data:
+                await _full_delete_user(db, user, user_id, user_id_str)
+            else:
+                await _anonymize_user(db, user, user_id_str)
 
 
 async def _full_delete_user(db, user, user_id, user_id_str: str) -> None:
@@ -213,27 +215,27 @@ async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.session import scoped_async_session
     from app.models.user import User
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    async with scoped_async_session() as SessionLocal:
+        async with SessionLocal() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(uid, SessionLocal, cadence_service)
 
 
-async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
+async def _generate_cadence_tasks_for_user(uid, SessionLocal, cadence_service) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with SessionLocal() as db:
             user = await db.get(User, uid)
             if user is None:
                 return
@@ -257,8 +259,8 @@ async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
         logger.info("Generated %d cadence tasks for user %s", len(tasks_created), uid)
 
 
-@celery_app.task
-def generate_cadence_tasks_for_all_users():
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120)
+def generate_cadence_tasks_for_all_users(self):
     """Daily Celery beat task: generate due cadence tasks for every active user.
 
     Intended to be scheduled via Celery Beat (e.g. every day at 06:00 UTC).
@@ -266,7 +268,11 @@ def generate_cadence_tasks_for_all_users():
     """
     import asyncio
 
-    asyncio.run(_generate_cadence_tasks_async())
+    try:
+        asyncio.run(_generate_cadence_tasks_async())
+    except Exception as exc:
+        logger.exception("generate_cadence_tasks_for_all_users failed")
+        raise self.retry(exc=exc)
 
 
 @celery_app.task
