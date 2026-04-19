@@ -66,6 +66,22 @@ def _mock_response(status_code: int = 200, lines: list[str] | None = None):
     return resp
 
 
+def _mock_session_local() -> MagicMock:
+    """Mock ``AsyncSessionLocal`` factory as an async context manager.
+
+    ``stream_chat`` now opens its own sessions via ``AsyncSessionLocal()``
+    instead of receiving one from the request scope, so tests that don't
+    want to hit a real DB need this patch on top of the existing
+    ``_save_conversation`` / ``record_chat_usage`` patches.
+    """
+    factory = MagicMock()
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=AsyncMock())
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    factory.return_value = ctx
+    return factory
+
+
 # ---------------------------------------------------------------------------
 # _parse_openai_sse
 # ---------------------------------------------------------------------------
@@ -168,7 +184,6 @@ class TestStreamChatColdStart:
                 raise ColdStartError()
             yield "Hello!"
 
-        mock_db = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = "user-123"
         mock_request = MagicMock()
@@ -179,11 +194,12 @@ class TestStreamChatColdStart:
         with (
             patch("app.services.ai_service._stream_llm", side_effect=mock_stream_llm),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
             patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
         ):
-            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+            events = await self._collect_events(stream_chat(mock_user, mock_request))
 
         statuses = [e for e in events if "status" in e]
         content = [e for e in events if "content" in e]
@@ -200,7 +216,6 @@ class TestStreamChatColdStart:
             raise ColdStartError()
             yield  # unreachable — required to make this an async generator
 
-        mock_db = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = "user-123"
         mock_request = MagicMock()
@@ -211,11 +226,12 @@ class TestStreamChatColdStart:
         with (
             patch("app.services.ai_service._stream_llm", side_effect=always_503),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
             patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
         ):
-            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+            events = await self._collect_events(stream_chat(mock_user, mock_request))
 
         errors = [e for e in events if "error" in e]
         assert len(errors) == 1
@@ -232,7 +248,6 @@ class TestStreamChatColdStart:
                 raise ColdStartError()
             yield "Done"
 
-        mock_db = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = "user-123"
         mock_request = MagicMock()
@@ -243,11 +258,12 @@ class TestStreamChatColdStart:
         with (
             patch("app.services.ai_service._stream_llm", side_effect=fail_twice_then_succeed),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
             patch("app.services.ai_service.asyncio.sleep", new_callable=AsyncMock),
         ):
-            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+            events = await self._collect_events(stream_chat(mock_user, mock_request))
 
         statuses = [e for e in events if "status" in e]
         assert len(statuses) == 1
@@ -258,7 +274,6 @@ class TestStreamChatColdStart:
         async def instant_response(messages, usage_out=None):
             yield "Instant reply"
 
-        mock_db = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = "user-123"
         mock_request = MagicMock()
@@ -269,10 +284,11 @@ class TestStreamChatColdStart:
         with (
             patch("app.services.ai_service._stream_llm", side_effect=instant_response),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
         ):
-            events = await self._collect_events(stream_chat(mock_db, mock_user, mock_request))
+            events = await self._collect_events(stream_chat(mock_user, mock_request))
 
         statuses = [e for e in events if "status" in e]
         content = [e for e in events if "content" in e]
@@ -291,7 +307,6 @@ class TestStreamChatColdStart:
                 raise ColdStartError()
             yield "OK"
 
-        mock_db = AsyncMock()
         mock_user = MagicMock()
         mock_user.id = "user-123"
         mock_request = MagicMock()
@@ -304,11 +319,12 @@ class TestStreamChatColdStart:
         with (
             patch("app.services.ai_service._stream_llm", side_effect=fail_three_times),
             patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
             patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
             patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
             patch("app.services.ai_service.asyncio.sleep", mock_sleep),
         ):
-            async for _ in stream_chat(mock_db, mock_user, mock_request):
+            async for _ in stream_chat(mock_user, mock_request):
                 pass
 
         assert mock_sleep.call_count == 3
