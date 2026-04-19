@@ -9,6 +9,7 @@ import {
   useUpdatePreferences,
 } from "../../../hooks/useUser";
 import { useAuthStore } from "../../../stores/auth";
+import { useSyncStore } from "../../../stores/sync";
 import { useThemeStore } from "../../../stores/theme";
 import { ResponsiveContainer } from "../../../components/ResponsiveContainer";
 import { useStyles, typography, type ThemeColors } from "../../../theme";
@@ -295,12 +296,33 @@ function NotificationsSection() {
   );
 }
 
+function formatSyncTime(ts: number | null): string {
+  if (!ts) return "Never";
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 10) return "Just now";
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
 function DataSection() {
   const layout = useStyles(createLayoutStyles);
+  const lastSyncedAt = useSyncStore((s) => s.lastSyncedAt);
+  // Re-render periodically to keep the relative time fresh
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <View style={layout.section}>
       <Text style={layout.sectionTitle}>Data</Text>
-      <SettingsItem title="Sync Status" subtitle="Last synced: Just now" />
+      <SettingsItem
+        title="Sync Status"
+        subtitle={`Last synced: ${formatSyncTime(lastSyncedAt)}`}
+      />
       <SettingsItem title="Export Data" subtitle="CSV, JSON" />
     </View>
   );

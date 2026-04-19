@@ -198,7 +198,18 @@ async def generate_dashboard_summary(
     forecast = await _fetch_forecast_summary(*location) if location else None
     messages = _build_prompt(condensed, forecast)
 
-    text = await generate_completion(messages)
+    try:
+        text = await generate_completion(messages)
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        # HF Inference endpoint scales to zero; 503s and connect errors are
+        # expected. Return an empty summary so the mobile tile hides itself —
+        # the client will regenerate on pull-to-refresh.
+        logger.info("Dashboard summary unavailable, returning empty: %s", exc)
+        return DashboardSummaryResult(
+            summary="",
+            inspection_count=len(inspections),
+            generated_at=datetime.now(UTC),
+        )
 
     return DashboardSummaryResult(
         summary=text.strip(),

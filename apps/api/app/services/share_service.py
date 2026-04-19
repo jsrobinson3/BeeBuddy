@@ -48,7 +48,7 @@ async def create_share(
         await db.rollback()
         raise ValueError("A share already exists for this user and asset")
     await db.refresh(share)
-    await _notify_invitee(db, owner_id, email, apiary_id, asset_name, role)
+    await _notify_invitee(db, owner_id, email, apiary_id, asset_name, role, share.id)
 
     # Reload with eager-loaded relationships for the response
     return await get_share(db, share.id)  # type: ignore[return-value]
@@ -301,6 +301,7 @@ async def _notify_invitee(
     apiary_id: UUID | None,
     asset_name: str,
     role: ShareRole,
+    share_id: UUID,
 ) -> None:
     """Send the invitation email to the invitee."""
     owner = await db.get(User, owner_id)
@@ -312,6 +313,7 @@ async def _notify_invitee(
         resource_type=resource_type,
         resource_name=asset_name,
         role=role.value,
+        share_id=str(share_id),
     )
 
 
@@ -341,16 +343,22 @@ async def _send_share_invitation_email(
     resource_type: str,
     resource_name: str,
     role: str,
+    share_id: str,
 ) -> None:
-    """Send a share invitation email."""
+    """Send a share invitation email with a deep link to accept."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    accept_url = f"{settings.frontend_url}/share/{share_id}"
     html = email_service._render_template(
         "share_invitation.html",
         {
-            "app_name": "BeeBuddy",
+            "app_name": settings.app_name,
             "inviter_name": inviter_name,
             "resource_type": resource_type,
             "resource_name": resource_name,
             "role": role,
+            "accept_url": accept_url,
         },
     )
     await email_service._send_email(

@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { FlatList, Pressable, Text, View } from "react-native";
 import {
   Warehouse,
@@ -29,6 +30,7 @@ import {
   useAcceptShare,
   useDeclineShare,
 } from "../../../hooks/useShares";
+import { useSharedApiaries } from "../../../hooks/useSharedApiaries";
 import { useUnits } from "../../../hooks/useUnits";
 import { useWeatherForecast } from "../../../hooks/useWeather";
 import type Apiary from "../../../database/models/Apiary";
@@ -461,11 +463,21 @@ function ErrorScreen({
 
 export default function ApiariesScreen() {
   const router = useRouter();
-  const { refreshing, onRefresh } = useRefreshSync();
+  const qc = useQueryClient();
+  const { refreshing, onRefresh: syncRefresh } = useRefreshSync();
+  const onRefresh = useCallback(async () => {
+    await Promise.all([
+      syncRefresh(),
+      qc.invalidateQueries({ queryKey: ["shares"] }),
+      qc.invalidateQueries({ queryKey: ["apiaries"] }),
+      qc.invalidateQueries({ queryKey: ["dashboard", "summary"] }),
+    ]);
+  }, [syncRefresh, qc]);
   const { data: apiaries, isLoading, error, refetch } = useApiaries();
   const { data: hives } = useHives();
   const { data: tasks } = useTasks();
   const { data: pendingShares = [] } = useMyPendingShares();
+  const { data: sharedApiaries = [] } = useSharedApiaries();
   const acceptShare = useAcceptShare();
   const declineShare = useDeclineShare();
   const { data: inspections } = useInspections();
@@ -550,6 +562,19 @@ export default function ApiariesScreen() {
             />
           ))}
         </View>
+      )}
+      {sharedApiaries.length > 0 && (
+        <>
+          <SectionHeading icon={MapPin} title="Shared with Me" />
+          {sharedApiaries.map((a) => (
+            <ApiaryCard
+              key={a.id}
+              apiary={a as any}
+              hiveCount={a.hiveCount ?? 0}
+              onPress={() => router.push(`/home/apiary/${a.id}` as any)}
+            />
+          ))}
+        </>
       )}
       {allApiaries.length > 0 && (
         <SectionHeading icon={MapPin} title="Your Apiaries" />
