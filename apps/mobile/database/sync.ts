@@ -3,6 +3,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { database } from "./index";
 import { api } from "../services/api";
 import type { SyncChangesMap } from "../services/api.types";
+import { useSyncStore } from "../stores/sync";
 
 let isSyncing = false;
 const MAX_RETRIES = 2;
@@ -67,6 +68,7 @@ export async function syncDatabase(): Promise<void> {
   isSyncing = true;
   try {
     await syncWithRetry();
+    useSyncStore.getState().setLastSyncedAt(Date.now());
   } finally {
     isSyncing = false;
   }
