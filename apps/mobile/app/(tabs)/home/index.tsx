@@ -14,11 +14,19 @@ import { EmptyState } from "../../../components/EmptyState";
 import { ErrorDisplay } from "../../../components/ErrorDisplay";
 import { HexIcon } from "../../../components/HexIcon";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
+import { InvitationBanner } from "../../../components/sharing/InvitationBanner";
+import { SharedBadge } from "../../../components/sharing/SharedBadge";
+import { InvitationCard } from "../../../components/sharing/InvitationCard";
 import { WeatherForecastCard } from "../../../components/WeatherForecastCard";
 import { WeatherInsightCard } from "../../../components/WeatherInsightCard";
 import { useApiaries } from "../../../hooks/useApiaries";
 import { useHives } from "../../../hooks/useHives";
 import { useTasks } from "../../../hooks/useTasks";
+import {
+  useMyPendingShares,
+  useAcceptShare,
+  useDeclineShare,
+} from "../../../hooks/useShares";
 import { useUnits } from "../../../hooks/useUnits";
 import { useWeatherForecast } from "../../../hooks/useWeather";
 import type Apiary from "../../../database/models/Apiary";
@@ -56,6 +64,9 @@ const createLayoutStyles = (c: ThemeColors) => ({
   list: {
     padding: spacing.md,
     paddingBottom: 80,
+  },
+  sectionPadded: {
+    paddingHorizontal: spacing.md,
   },
   sectionHeader: {
     flexDirection: "row" as const,
@@ -452,6 +463,9 @@ export default function ApiariesScreen() {
   const { data: apiaries, isLoading, error, refetch } = useApiaries();
   const { data: hives } = useHives();
   const { data: tasks } = useTasks();
+  const { data: pendingShares = [] } = useMyPendingShares();
+  const acceptShare = useAcceptShare();
+  const declineShare = useDeclineShare();
   const s = useStyles(createLayoutStyles);
 
   // Use the first apiary with location for weather forecast
@@ -520,6 +534,19 @@ export default function ApiariesScreen() {
         />
       )}
       <WeatherInsightCard insights={insights} />
+      {pendingShares.length > 0 && (
+        <View style={s.sectionPadded}>
+          <SectionHeading icon={MapPin} title="Pending Invitations" />
+          {pendingShares.map((share) => (
+            <InvitationCard
+              key={share.id}
+              share={share}
+              onAccept={(id) => acceptShare.mutate(id)}
+              onDecline={(id) => declineShare.mutate(id)}
+            />
+          ))}
+        </View>
+      )}
       {allApiaries.length > 0 && (
         <SectionHeading icon={MapPin} title="Your Apiaries" />
       )}

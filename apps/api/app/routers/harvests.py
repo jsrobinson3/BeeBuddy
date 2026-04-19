@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import Permission, check_hive_permission, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.harvest import HarvestCreate, HarvestResponse, HarvestUpdate
@@ -34,7 +35,9 @@ async def create_harvest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new harvest record."""
+    """Create a new harvest. Requires editor+ on the hive."""
+    perm = await check_hive_permission(db, data.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Hive not found")
     return await harvest_service.create_harvest(db, data.model_dump())
 
 
@@ -60,12 +63,14 @@ async def update_harvest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an existing harvest."""
+    """Update an existing harvest. Requires editor+."""
     harvest = await harvest_service.get_harvest(
         db, harvest_id, user_id=current_user.id
     )
     if not harvest:
         raise HTTPException(status_code=404, detail="Harvest not found")
+    perm = await check_hive_permission(db, harvest.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Harvest not found")
     return await harvest_service.update_harvest(db, harvest, data.model_dump(exclude_unset=True))
 
 
@@ -75,10 +80,12 @@ async def delete_harvest(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a harvest."""
+    """Delete a harvest. Owner only."""
     harvest = await harvest_service.get_harvest(
         db, harvest_id, user_id=current_user.id
     )
     if not harvest:
         raise HTTPException(status_code=404, detail="Harvest not found")
+    perm = await check_hive_permission(db, harvest.hive_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Harvest not found")
     await harvest_service.delete_harvest(db, harvest)

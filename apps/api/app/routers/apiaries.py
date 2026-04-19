@@ -2,10 +2,11 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import Permission, check_apiary_permission, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.apiary import ApiaryCreate, ApiaryResponse, ApiaryUpdate
@@ -44,9 +45,9 @@ async def get_apiary(
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific apiary by ID."""
+    perm = await check_apiary_permission(db, apiary_id, current_user.id)
+    require_permission(perm, Permission.VIEWER, "Apiary not found")
     apiary = await apiary_service.get_apiary(db, apiary_id)
-    if not apiary or apiary.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Apiary not found")
     return apiary
 
 
@@ -58,9 +59,9 @@ async def update_apiary(
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing apiary."""
+    perm = await check_apiary_permission(db, apiary_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Apiary not found")
     apiary = await apiary_service.get_apiary(db, apiary_id)
-    if not apiary or apiary.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Apiary not found")
     return await apiary_service.update_apiary(db, apiary, data.model_dump(exclude_unset=True))
 
 
@@ -70,8 +71,8 @@ async def delete_apiary(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete an apiary."""
+    """Delete an apiary. Owner only."""
+    perm = await check_apiary_permission(db, apiary_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Apiary not found")
     apiary = await apiary_service.get_apiary(db, apiary_id)
-    if not apiary or apiary.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Apiary not found")
     await apiary_service.delete_apiary(db, apiary)

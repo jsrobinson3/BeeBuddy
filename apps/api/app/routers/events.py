@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import Permission, check_hive_permission, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.event import EventCreate, EventResponse, EventUpdate
@@ -34,7 +35,9 @@ async def create_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new hive event."""
+    """Create a new hive event. Requires editor+ on the hive."""
+    perm = await check_hive_permission(db, data.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Hive not found")
     return await event_service.create_event(db, data.model_dump())
 
 
@@ -60,12 +63,14 @@ async def update_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an existing event."""
+    """Update an existing event. Requires editor+."""
     event = await event_service.get_event(
         db, event_id, user_id=current_user.id
     )
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    perm = await check_hive_permission(db, event.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Event not found")
     return await event_service.update_event(db, event, data.model_dump(exclude_unset=True))
 
 
@@ -75,10 +80,12 @@ async def delete_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete an event."""
+    """Delete an event. Owner only."""
     event = await event_service.get_event(
         db, event_id, user_id=current_user.id
     )
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+    perm = await check_hive_permission(db, event.hive_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Event not found")
     await event_service.delete_event(db, event)

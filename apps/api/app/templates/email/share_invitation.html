@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+
+{% block title %}You've been invited - {{ app_name }}{% endblock %}
+
+{% block content %}
+<p class="greeting">You've been invited!</p>
+<p><strong>{{ inviter_name }}</strong> has shared their {{ resource_type }} <strong>"{{ resource_name }}"</strong> with you as {{ "an" if role == "editor" else "a" }} <strong>{{ role }}</strong> on {{ app_name }}.</p>
+<p>Open the {{ app_name }} app to view and {{ "manage" if role == "editor" else "browse" }} this {{ resource_type }}.</p>
+<p class="subtext" style="margin-top: 20px;">If you don't have a {{ app_name }} account yet, download the app and sign up with this email address to get access automatically.</p>
+{% endblock %}

@@ -3,10 +3,40 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.share import Share, ShareStatus
 from app.models.task import Task
+
+
+def _shared_task_filter(user_id: UUID):
+    """Tasks the user can see via shared apiaries/hives."""
+    shared_apiary_subq = (
+        select(Share.apiary_id)
+        .where(
+            Share.shared_with_user_id == user_id,
+            Share.status == ShareStatus.ACCEPTED,
+            Share.apiary_id.isnot(None),
+            Share.deleted_at.is_(None),
+        )
+        .correlate_except(Share)
+    )
+    shared_hive_subq = (
+        select(Share.hive_id)
+        .where(
+            Share.shared_with_user_id == user_id,
+            Share.status == ShareStatus.ACCEPTED,
+            Share.hive_id.isnot(None),
+            Share.deleted_at.is_(None),
+        )
+        .correlate_except(Share)
+    )
+    return or_(
+        Task.user_id == user_id,
+        and_(Task.apiary_id.isnot(None), Task.apiary_id.in_(shared_apiary_subq)),
+        and_(Task.hive_id.isnot(None), Task.hive_id.in_(shared_hive_subq)),
+    )
 
 
 async def get_tasks(
@@ -17,10 +47,10 @@ async def get_tasks(
     limit: int = 50,
     offset: int = 0,
 ) -> list[Task]:
-    """Return all non-deleted tasks for a user, optionally filtered by hive or apiary."""
+    """Return non-deleted tasks the user owns or can see via shared resources."""
     stmt = (
         select(Task)
-        .where(Task.deleted_at.is_(None), Task.user_id == user_id)
+        .where(Task.deleted_at.is_(None), _shared_task_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -43,12 +73,12 @@ async def create_task(db: AsyncSession, data: dict, user_id: UUID) -> Task:
 
 
 async def get_task(db: AsyncSession, task_id: UUID, user_id: UUID) -> Task | None:
-    """Get a single non-deleted task owned by the user."""
+    """Get a single non-deleted task the user owns or can see via sharing."""
     result = await db.execute(
         select(Task).where(
             Task.id == task_id,
             Task.deleted_at.is_(None),
-            Task.user_id == user_id,
+            _shared_task_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

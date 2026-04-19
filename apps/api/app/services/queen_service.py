@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.queen import Queen
+from app.services.access_service import hive_access_filter
 
 
 async def get_queens(
@@ -23,7 +24,7 @@ async def get_queens(
         select(Queen)
         .join(Hive, Queen.hive_id == Hive.id)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Queen.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Queen.deleted_at.is_(None), hive_access_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -51,7 +52,7 @@ async def get_queen(db: AsyncSession, queen_id: UUID, user_id: UUID) -> Queen | 
         .where(
             Queen.id == queen_id,
             Queen.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            hive_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

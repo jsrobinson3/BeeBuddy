@@ -20,6 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import LLMProvider, get_settings
+from app.db.session import AsyncSessionLocal
 from app.models.ai_conversation import AIConversation
 from app.models.user import User
 from app.schemas.ai import ChatRequest
@@ -211,6 +212,23 @@ async def _yield_canned_response(
         yield f"data: {json.dumps({'content': message[i:i + 80]})}\n\n"
 
 
+async def _run_tool_phase(
+    user: User, request: ChatRequest,
+    messages: list[dict], user_msg: str,
+) -> AsyncGenerator[str, None]:
+    """Run the tool-augmented phase inside a scoped DB session.
+
+    The session is opened only for this phase and released before the
+    streaming fallback runs, so the LLM stream itself never holds a DB
+    connection.
+    """
+    async with AsyncSessionLocal() as db:
+        async for chunk in _handle_tool_path(
+            db, user, request, messages, user_msg,
+        ):
+            yield chunk
+
+
 async def _handle_tool_path(
     db: AsyncSession, user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
@@ -242,10 +260,17 @@ async def _handle_tool_path(
 
 
 async def _handle_streaming_path(
-    db: AsyncSession, user: User, request: ChatRequest,
+    user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
 ) -> AsyncGenerator[str, None]:
-    """Phase 2: streaming path with post-stream audit."""
+    """Phase 2: streaming path with post-stream audit.
+
+    No DB session is held during token streaming — a fresh short-lived
+    session is opened only for the post-stream writes (audit + save +
+    usage). This prevents the request from holding an idle transaction
+    across a multi-minute HF cold-start, which would otherwise be killed
+    by Postgres' ``idle_in_transaction_session_timeout``.
+    """
     usage_out: dict = {}
     full_response: list[str] = []
     async for chunk in _yield_streaming_response(messages, usage_out):
@@ -259,24 +284,29 @@ async def _handle_streaming_path(
 
     response_text = "".join(full_response)
 
-    # --- Audit guard (post-stream, persists to DB) ---
-    await guardrail_pipeline.audit(db, response_text, user_msg, user.id)
+    async with AsyncSessionLocal() as db:
+        # --- Audit guard (post-stream, persists to DB) ---
+        await guardrail_pipeline.audit(db, response_text, user_msg, user.id)
 
-    conv = await _save_conversation(db, user.id, request, response_text)
-    await record_chat_usage(
-        db, user.id, conv.id, usage_out,
-        settings.llm_provider, settings.llm_model, "stream_chat",
-    )
+        conv = await _save_conversation(db, user.id, request, response_text)
+        await record_chat_usage(
+            db, user.id, conv.id, usage_out,
+            settings.llm_provider, settings.llm_model, "stream_chat",
+        )
     yield _conv_id_event(conv.id)
     yield "data: [DONE]\n\n"
 
 
 async def stream_chat(
-    db: AsyncSession,
     user: User,
     request: ChatRequest,
 ) -> AsyncGenerator[str, None]:
-    """Stream a chat response with guardrails pipeline."""
+    """Stream a chat response with guardrails pipeline.
+
+    Sessions are opened per-phase via ``AsyncSessionLocal()`` rather than
+    inherited from the request scope. This keeps the DB out of the way
+    while waiting on the LLM provider.
+    """
     user_msg = request.messages[-1].content if request.messages else ""
 
     # --- Input guard (saves an LLM call for blocked messages) ---
@@ -291,11 +321,9 @@ async def stream_chat(
     system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
     messages = _build_chat_messages(request, system)
 
-    # Phase 1: Try tool-augmented path
+    # Phase 1: Try tool-augmented path (session scoped to this phase)
     try:
-        async for chunk in _handle_tool_path(
-            db, user, request, messages, user_msg,
-        ):
+        async for chunk in _run_tool_phase(user, request, messages, user_msg):
             yield chunk
             if '"conversation_id"' in chunk:
                 return
@@ -309,9 +337,9 @@ async def stream_chat(
     except Exception:
         logger.exception("Tool path failed, falling back to streaming")
 
-    # Phase 2: Streaming path
+    # Phase 2: Streaming path (no session held during the stream)
     async for chunk in _handle_streaming_path(
-        db, user, request, messages, user_msg,
+        user, request, messages, user_msg,
     ):
         yield chunk
 

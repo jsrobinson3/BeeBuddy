@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.inspection import Inspection
+from app.services.access_service import hive_access_filter
 
 
 async def get_inspections(
@@ -25,7 +26,7 @@ async def get_inspections(
         .join(Hive, Inspection.hive_id == Hive.id)
         .join(Apiary, Hive.apiary_id == Apiary.id)
         .options(selectinload(Inspection.photos))
-        .where(Inspection.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Inspection.deleted_at.is_(None), hive_access_filter(user_id))
         .order_by(Inspection.inspected_at.desc())
         .offset(offset)
         .limit(limit)
@@ -59,7 +60,7 @@ async def get_inspection(
         .where(
             Inspection.id == inspection_id,
             Inspection.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            hive_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

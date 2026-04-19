@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.task_cadence import TaskCadence
+from app.services.access_service import hive_access_filter
 
 
 async def get_hives(
@@ -22,7 +23,7 @@ async def get_hives(
     stmt = (
         select(Hive)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Hive.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Hive.deleted_at.is_(None), hive_access_filter(user_id))
         .offset(offset)
         .limit(limit)
     )
@@ -42,11 +43,11 @@ async def create_hive(db: AsyncSession, data: dict) -> Hive:
 
 
 async def get_hive(db: AsyncSession, hive_id: UUID, user_id: UUID) -> Hive | None:
-    """Get a single non-deleted hive owned by the user."""
+    """Get a single non-deleted hive the user can access (owned or shared)."""
     result = await db.execute(
         select(Hive)
         .join(Apiary, Hive.apiary_id == Apiary.id)
-        .where(Hive.id == hive_id, Hive.deleted_at.is_(None), Apiary.user_id == user_id)
+        .where(Hive.id == hive_id, Hive.deleted_at.is_(None), hive_access_filter(user_id))
     )
     return result.scalar_one_or_none()
 

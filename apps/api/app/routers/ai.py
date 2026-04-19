@@ -32,12 +32,16 @@ router = APIRouter(prefix="/ai")
 async def chat(
     request: Request,
     data: ChatRequest,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_verified_user),
 ):
-    """Stream a chat response from the beekeeping AI assistant."""
+    """Stream a chat response from the beekeeping AI assistant.
+
+    No ``db`` dependency here — ``stream_chat`` opens short-lived
+    sessions per phase so the request doesn't hold a DB transaction
+    across the LLM call.
+    """
     return StreamingResponse(
-        ai_service.stream_chat(db, current_user, data),
+        ai_service.stream_chat(current_user, data),
         media_type="text/event-stream",
     )
 

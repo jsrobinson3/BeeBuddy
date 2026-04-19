@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import Permission, check_hive_permission, require_permission
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.treatment import TreatmentCreate, TreatmentResponse, TreatmentUpdate
@@ -34,7 +35,9 @@ async def create_treatment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new treatment."""
+    """Create a new treatment. Requires editor+ on the hive."""
+    perm = await check_hive_permission(db, data.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Hive not found")
     return await treatment_service.create_treatment(db, data.model_dump())
 
 
@@ -60,12 +63,14 @@ async def update_treatment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an existing treatment."""
+    """Update an existing treatment. Requires editor+."""
     treatment = await treatment_service.get_treatment(
         db, treatment_id, user_id=current_user.id
     )
     if not treatment:
         raise HTTPException(status_code=404, detail="Treatment not found")
+    perm = await check_hive_permission(db, treatment.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Treatment not found")
     return await treatment_service.update_treatment(
         db, treatment, data.model_dump(exclude_unset=True)
     )
@@ -77,10 +82,12 @@ async def delete_treatment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a treatment."""
+    """Delete a treatment. Owner only."""
     treatment = await treatment_service.get_treatment(
         db, treatment_id, user_id=current_user.id
     )
     if not treatment:
         raise HTTPException(status_code=404, detail="Treatment not found")
+    perm = await check_hive_permission(db, treatment.hive_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Treatment not found")
     await treatment_service.delete_treatment(db, treatment)

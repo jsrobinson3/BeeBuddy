@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { Platform } from "react-native";
+import * as Sentry from "@sentry/react-native";
 import { api } from "../services/api";
 import { API_BASE_URL } from "../services/config";
 import { queryClient } from "../services/queryClient";
@@ -245,6 +246,7 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     } catch {
       // Network error or server down — still clear client state below
     } finally {
+      Sentry.setUser(null);
       api.setToken(undefined);
       set({ token: null, refreshToken: null, user: null, isAuthenticated: false });
       queryClient.clear();
@@ -307,5 +309,6 @@ export const useAuthStore = create<AuthState & AuthActions>()((set, get) => {
     if (!data) return;
     const user = parseUser(data as unknown as Record<string, unknown>);
     set({ user });
+    Sentry.setUser({ id: user.id });
   },
 };});

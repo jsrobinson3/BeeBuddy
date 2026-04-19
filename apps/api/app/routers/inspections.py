@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
+from app.auth.permissions import Permission, check_hive_permission, require_permission
 from app.db.session import get_db
 from app.models.inspection import Inspection
 from app.models.user import User
@@ -149,7 +150,9 @@ async def create_inspection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new inspection."""
+    """Create a new inspection. Requires editor+ on the hive."""
+    perm = await check_hive_permission(db, data.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Hive not found")
     payload = data.model_dump()
     if payload.get("inspected_at") is None:
         payload["inspected_at"] = datetime.now(UTC)
@@ -212,7 +215,7 @@ async def update_inspection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an existing inspection."""
+    """Update an existing inspection. Requires editor+."""
     inspection = await inspection_service.get_inspection(
         db, inspection_id, user_id=current_user.id
     )
@@ -220,6 +223,8 @@ async def update_inspection(
         raise HTTPException(
             status_code=404, detail="Inspection not found"
         )
+    perm = await check_hive_permission(db, inspection.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Inspection not found")
     payload = data.model_dump(exclude_unset=True)
     if "observations" in payload and payload["observations"] is not None:
         payload["observations"] = data.observations.model_dump()
@@ -255,7 +260,7 @@ async def delete_inspection(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete an inspection."""
+    """Delete an inspection. Owner only."""
     inspection = await inspection_service.get_inspection(
         db, inspection_id, user_id=current_user.id
     )
@@ -263,4 +268,6 @@ async def delete_inspection(
         raise HTTPException(
             status_code=404, detail="Inspection not found"
         )
+    perm = await check_hive_permission(db, inspection.hive_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Inspection not found")
     await inspection_service.delete_inspection(db, inspection)

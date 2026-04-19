@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     microsoft_client_secret: str | None = None
 
     # Email
-    email_from_address: str = "noreply@beebuddy.app"
+    email_from_address: str = "noreply@beebuddyai.com"
     email_from_name: str = "BeeBuddy"
     email_suppress: bool = False  # True in dev — logs email instead of sending
     sendgrid_api_key: str | None = None

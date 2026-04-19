@@ -170,16 +170,18 @@ function Hexagon({ size = 48, fill = '#fdbc48', children }) {
 
 | Element              | Shape                | Notes                                    |
 | -------------------- | -------------------- | ---------------------------------------- |
-| Primary buttons      | `hex-wide`           | Full hex silhouette, honey fill          |
+| Text action buttons  | Standard `rounded-16`| Honey fill, forest text — hex-wide slopes eat padding on variable-width labels |
 | Icon buttons / FABs  | `hex`                | Square-proportioned hexagon              |
+| Tab bar icons        | `hex`                | Flat-top hex frame around Lucide icon    |
 | Avatars              | `hex`                | User photos / hive thumbnails            |
-| Status badges        | `hex` (small)        | Color-coded health indicators            |
-| Cards                | `hex-subtle`         | Very slight hex corner cut               |
+| Status badges        | `hex` (small)        | Icon-only, color + shape + glyph         |
+| Voice / mic button   | `hex`                | Animated fill during listening state     |
+| Cards                | Standard `rounded-16`| Warm shadow, no corner clipping          |
 | Input fields         | Standard `rounded`   | Hexes on inputs hurt usability — skip    |
 | Navigation tabs      | Standard `rounded`   | Hex tabs would feel forced               |
 | Modals / sheets      | Standard `rounded`   | Keep standard for system-feel elements   |
 
-**Rule of thumb:** Hex shapes for *things you tap* and *things that represent entities* (hives, inspections, users). Standard shapes for *containers* and *system UI*.
+**Rule of thumb:** Hex shapes for *symbolic, icon-only surfaces that represent entities* (hives, users, status, nav icons). Standard rounded shapes for *text-bearing actions and containers*. The line is "does it hold variable-width text?" — if yes, keep it rounded.
 
 ---
 
@@ -224,17 +226,21 @@ For non-dashboard content (forms, settings, articles):
 
 ### Buttons
 
+Text action buttons use standard rounded rectangles (`borderRadius: 16`, `radii.xl`). Hex-wide clipping was considered but rejected: sloped left/right edges steal horizontal padding near the vertical center, which looks fine for short labels but clips longer ones ("Delete hive", "Add Apiary"). Rounded rects keep padding uniform regardless of label length.
+
 ```
-Primary:    hex-wide shape, honey fill, forest text, 600 weight
-Secondary:  hex-wide shape, transparent fill, honey 2px border, honey text
-Ghost:      no hex shape, forest text, hover underline
-Danger:     hex-wide shape, danger fill, white text
-Disabled:   hex-wide shape, forest-pale fill, forest-light text, 50% opacity
+Primary:    rounded-16, honey fill, forest text (textOnPrimary), semibold
+Secondary:  rounded-16, transparent fill, honey 2px border, honey text
+Ghost:      no shape, forest text, hover underline
+Danger:     rounded-16, danger fill, white text
+Disabled:   rounded-16, honey fill at 70% opacity, same text color
 ```
 
-**Hover:** Honey buttons darken to `honey-dark`. Border shifts 2px outward (grows slightly).
+**Hover (web):** Honey buttons darken to `honey-dark`.
 **Press:** Scale down to 97%. Brief haptic on mobile.
 **Focus:** 3px `honey` ring offset by 2px (a11y).
+
+**Where the hex still shows up in the button family:** icon-only buttons (FAB, voice mic, tab bar icons) keep the `hex` shape — they carry a single glyph, not text, so edge slopes don't fight variable content.
 
 ### Cards
 

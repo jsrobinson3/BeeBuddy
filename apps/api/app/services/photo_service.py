@@ -11,6 +11,7 @@ from app.models.inspection import Inspection
 from app.models.inspection_photo import InspectionPhoto
 from app.schemas.photo import PhotoResponse
 from app.services import s3_service
+from app.services.access_service import apiary_access_filter
 
 
 async def get_photos_for_inspection(
@@ -51,7 +52,7 @@ async def create_photo(db: AsyncSession, data: dict) -> InspectionPhoto:
 async def get_photo_for_user(
     db: AsyncSession, photo_id: UUID, user_id: UUID
 ) -> InspectionPhoto | None:
-    """Get a photo only if the requesting user owns it (via inspection->hive->apiary)."""
+    """Get a photo if the user has access (owns or is shared on the parent apiary)."""
     result = await db.execute(
         select(InspectionPhoto)
         .join(Inspection, InspectionPhoto.inspection_id == Inspection.id)
@@ -60,7 +61,7 @@ async def get_photo_for_user(
         .where(
             InspectionPhoto.id == photo_id,
             InspectionPhoto.deleted_at.is_(None),
-            Apiary.user_id == user_id,
+            apiary_access_filter(user_id),
         )
     )
     return result.scalar_one_or_none()

@@ -22,6 +22,7 @@ from .inspection import (
     WeatherSnapshot,
 )
 from .queen import QueenCreate, QueenOrigin, QueenResponse, QueenStatus, QueenUpdate
+from .share import ShareCreate, ShareResponse, ShareUpdate
 from .task import (
     TaskCreate,
     TaskPriority,
@@ -88,4 +89,8 @@ __all__ = [
     "CadenceResponse",
     "CadenceTemplateResponse",
     "CadenceUpdate",
+    # Share
+    "ShareCreate",
+    "ShareResponse",
+    "ShareUpdate",
 ]

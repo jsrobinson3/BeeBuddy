@@ -14,6 +14,7 @@ from starlette.responses import StreamingResponse
 
 from app.auth.dependencies import get_current_user
 from app.auth.jwt import decode_token
+from app.auth.permissions import Permission, check_hive_permission, require_permission
 from app.auth.token_blocklist import is_blocked
 from app.db.session import get_db
 from app.models.user import User
@@ -44,10 +45,12 @@ async def upload_photo(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Upload a photo and attach it to an inspection."""
+    """Upload a photo and attach it to an inspection. Requires editor+."""
     inspection = await inspection_service.get_inspection(db, inspection_id, current_user.id)
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found")
+    perm = await check_hive_permission(db, inspection.hive_id, current_user.id)
+    require_permission(perm, Permission.EDITOR, "Inspection not found")
 
     # Validate file type
     ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename else ""
@@ -157,10 +160,12 @@ async def delete_photo(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete a photo from S3 and the database."""
+    """Delete a photo from S3 and the database. Owner only."""
     inspection = await inspection_service.get_inspection(db, inspection_id, current_user.id)
     if not inspection:
         raise HTTPException(status_code=404, detail="Inspection not found")
+    perm = await check_hive_permission(db, inspection.hive_id, current_user.id)
+    require_permission(perm, Permission.OWNER, "Inspection not found")
     photo = await photo_service.get_photo(db, photo_id)
     if not photo or photo.inspection_id != inspection_id:
         raise HTTPException(status_code=404, detail="Photo not found")

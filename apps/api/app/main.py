@@ -27,6 +27,7 @@ from app.routers import (
     oauth2_server,
     photos,
     queens,
+    shares,
     sync,
     tasks,
     treatments,
@@ -112,6 +113,7 @@ app.include_router(sync.router, prefix=settings.api_v1_prefix, tags=["sync"])
 app.include_router(ai.router, prefix=settings.api_v1_prefix, tags=["ai"])
 app.include_router(oauth2_server.router, prefix=settings.api_v1_prefix, tags=["oauth2"])
 app.include_router(admin.router, prefix=settings.api_v1_prefix, tags=["admin"])
+app.include_router(shares.router, prefix=settings.api_v1_prefix, tags=["shares"])
 
 # Mount FastMCP Streamable-HTTP sub-app (handles its own auth via JWTVerifier)
 app.mount("/", mcp_app)

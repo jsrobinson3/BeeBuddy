@@ -77,3 +77,6 @@ class HiveResponse(BaseResponse):
     order: int | None = None
     notes: str | None = None
     created_at: datetime
+    my_role: str | None = None
+    share_count: int = 0
+    shared_by: str | None = None

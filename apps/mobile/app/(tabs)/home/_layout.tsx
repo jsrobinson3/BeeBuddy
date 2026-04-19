@@ -34,6 +34,7 @@ export default function HomeLayout() {
       <Stack.Screen name="event/new" options={{ title: "New Event" }} />
       <Stack.Screen name="event/[id]" options={{ title: "Event" }} />
       <Stack.Screen name="event/edit" options={{ title: "Edit Event" }} />
+      <Stack.Screen name="sharing/[id]" options={{ title: "Manage Sharing" }} />
     </Stack>
   );
 }
