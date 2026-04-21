@@ -52,10 +52,10 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import task_sessionmaker
     from app.models.inspection import Inspection
 
-    async with AsyncSessionLocal() as db:
+    async with task_sessionmaker() as Session, Session() as db:
         inspection = await db.get(Inspection, UUID(inspection_id))
         if not inspection:
             logger.warning("Inspection %s not found for summary", inspection_id)
@@ -93,12 +93,12 @@ async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import task_sessionmaker
     from app.models.user import User
 
     user_id = UUID(user_id_str)
 
-    async with AsyncSessionLocal() as db:
+    async with task_sessionmaker() as Session, Session() as db:
         user = await db.get(User, user_id)
         if user is None:
             logger.warning("hard_delete_user: user %s not found, skipping", user_id_str)
@@ -213,27 +213,27 @@ async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import task_sessionmaker
     from app.models.user import User
     from app.services import cadence_service
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User.id).where(User.deleted_at.is_(None))
-        )
-        user_ids = [row[0] for row in result.all()]
+    async with task_sessionmaker() as Session:
+        async with Session() as db:
+            result = await db.execute(
+                select(User.id).where(User.deleted_at.is_(None))
+            )
+            user_ids = [row[0] for row in result.all()]
 
-    for uid in user_ids:
-        await _generate_cadence_tasks_for_user(uid, cadence_service)
+        for uid in user_ids:
+            await _generate_cadence_tasks_for_user(Session, uid, cadence_service)
 
 
-async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
+async def _generate_cadence_tasks_for_user(Session, uid, cadence_service) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
     from app.models.user import User
 
     try:
-        async with AsyncSessionLocal() as db:
+        async with Session() as db:
             user = await db.get(User, uid)
             if user is None:
                 return
