@@ -36,13 +36,34 @@ celery_app.conf.broker_transport_options = {
 }
 
 
+def _run_async_task(coro):
+    """Run ``coro`` in a fresh event loop and dispose the DB engine afterwards.
+
+    Celery executes each task in this module via ``asyncio.run()``, which
+    creates a brand-new event loop per invocation. SQLAlchemy's async engine
+    caches pooled connections bound to the loop that first used them; reusing
+    them from a later task's loop raises ``RuntimeError: ... got Future ...
+    attached to a different loop``. Disposing the engine in ``finally``
+    forces the pool to be rebuilt against the next task's loop.
+    """
+    import asyncio
+
+    async def _runner():
+        try:
+            return await coro
+        finally:
+            from app.db.session import engine
+
+            await engine.dispose()
+
+    return asyncio.run(_runner())
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_inspection_summary(self, inspection_id: str):
     """Generate AI summary for an inspection using the configured LLM."""
-    import asyncio
-
     try:
-        asyncio.run(_generate_inspection_summary_async(inspection_id))
+        _run_async_task(_generate_inspection_summary_async(inspection_id))
     except Exception as exc:
         logger.exception("generate_inspection_summary failed for %s", inspection_id)
         raise self.retry(exc=exc)
@@ -166,10 +187,8 @@ def hard_delete_user(self, user_id_str: str):
     Reads ``_delete_data`` from the user's preferences to decide between
     anonymisation (default) and full deletion with S3 cleanup.
     """
-    import asyncio
-
     try:
-        asyncio.run(_hard_delete_user_async(user_id_str))
+        _run_async_task(_hard_delete_user_async(user_id_str))
     except Exception as exc:
         logger.exception("hard_delete_user failed for user %s", user_id_str)
         raise self.retry(exc=exc)
@@ -275,9 +294,7 @@ def generate_cadence_tasks_for_all_users():
     Intended to be scheduled via Celery Beat (e.g. every day at 06:00 UTC).
     Runs synchronously inside the Celery worker using a one-shot async loop.
     """
-    import asyncio
-
-    asyncio.run(_generate_cadence_tasks_async())
+    _run_async_task(_generate_cadence_tasks_async())
 
 
 @celery_app.task
@@ -297,11 +314,9 @@ def hf_warmup_keepalive():
 
     Disabled by default (HF_WARMUP_KEEPALIVE_ENABLED=false).
     """
-    import asyncio
-
     from app.services import warmup_service
 
-    result = asyncio.run(warmup_service.warm_endpoints())
+    result = _run_async_task(warmup_service.warm_endpoints())
     logger.info("HF keepalive warmup: %s", result)
 
 
