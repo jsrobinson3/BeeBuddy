@@ -71,11 +71,11 @@ const DISEASE_OPTIONS = [
 ];
 
 const CONDITIONS_OPTIONS = [
-  { label: "Sunny", value: "sunny" },
-  { label: "Partly Cloudy", value: "partly_cloudy" },
-  { label: "Cloudy", value: "cloudy" },
-  { label: "Rainy", value: "rainy" },
-  { label: "Windy", value: "windy" },
+  "sunny",
+  "partly_cloudy",
+  "cloudy",
+  "rainy",
+  "windy",
 ];
 
 export type InlineFormType =
@@ -136,7 +136,7 @@ export interface FormState {
   notes: string;
   tempC: string;
   humidityPercent: string;
-  conditions: string | null;
+  conditions: string[];
   reminder: string;
   reminderDate: Date | null;
 }
@@ -429,11 +429,11 @@ export function WeatherFields({
           placeholder="e.g. 65"
         />
       </ResponsiveFormRow>
-      <PickerField
+      <MultiSelect
         label="Conditions"
         options={CONDITIONS_OPTIONS}
         selected={s.conditions}
-        onSelect={(v) => set("conditions", v)}
+        onChange={(v) => set("conditions", v)}
       />
     </>
   );
@@ -542,13 +542,13 @@ export function buildWeather(s: FormState): WeatherSnapshot | undefined {
   const hum = s.humidityPercent.trim()
     ? Number(s.humidityPercent)
     : null;
-  if (temp === null && hum === null && !s.conditions) {
+  if (temp === null && hum === null && s.conditions.length === 0) {
     return undefined;
   }
   return {
     tempC: temp,
     humidityPercent: hum,
-    conditions: s.conditions,
+    conditions: s.conditions.length ? s.conditions : null,
   };
 }
 
@@ -730,7 +730,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   notes: "",
   tempC: "",
   humidityPercent: "",
-  conditions: null,
+  conditions: [],
   reminder: "",
   reminderDate: null,
 };
@@ -780,7 +780,11 @@ export function inspectionToFormState(inspection: WMInspection): FormState {
       weather.humidityPercent != null
         ? String(weather.humidityPercent)
         : "",
-    conditions: weather.conditions ?? null,
+    conditions: Array.isArray(weather.conditions)
+      ? weather.conditions
+      : weather.conditions
+        ? [weather.conditions]
+        : [],
     reminder: inspection.reminder ?? "",
     reminderDate: inspection.reminderDate
       ? new Date(inspection.reminderDate)

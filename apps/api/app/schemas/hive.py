@@ -37,6 +37,13 @@ class HiveSource(StrEnum):
     PURCHASED = "purchased"
 
 
+class HiveInstallKind(StrEnum):
+    """Whether the colony was freshly installed or moved from an existing one."""
+
+    INSTALLED = "installed"
+    TRANSFERRED = "transferred"
+
+
 class HiveCreate(CamelBase):
     """Request model for creating a hive."""
 
@@ -45,6 +52,9 @@ class HiveCreate(CamelBase):
     hive_type: HiveType = HiveType.LANGSTROTH
     source: HiveSource | None = None
     installation_date: datetime | None = None
+    install_kind: HiveInstallKind | None = None
+    initial_frames: int | None = None
+    queen_introduced: bool | None = None
     color: str | None = None
     order: int | None = None
     notes: str | None = None
@@ -59,6 +69,9 @@ class HiveUpdate(CamelBase):
     status: HiveStatus | None = None
     source: HiveSource | None = None
     installation_date: datetime | None = None
+    install_kind: HiveInstallKind | None = None
+    initial_frames: int | None = None
+    queen_introduced: bool | None = None
     color: str | None = None
     order: int | None = None
     notes: str | None = None
@@ -74,6 +87,9 @@ class HiveResponse(BaseResponse):
     status: HiveStatus
     source: HiveSource | None = None
     installation_date: datetime | None = None
+    install_kind: HiveInstallKind | None = None
+    initial_frames: int | None = None
+    queen_introduced: bool | None = None
     color: str | None = None
     order: int | None = None
     notes: str | None = None

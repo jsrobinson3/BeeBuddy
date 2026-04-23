@@ -1,11 +1,15 @@
 import { create } from "zustand";
-import type { HiveType, HiveSource } from "../services/api";
+import type { HiveType, HiveSource, HiveInstallKind } from "../services/api";
 
 type HiveSetupState = {
   step: number;
   name: string;
   hiveType: HiveType | null;
   source: HiveSource | null;
+  installKind: HiveInstallKind | null;
+  installationDate: Date | null;
+  initialFrames: number | null;
+  queenIntroduced: boolean;
   notes: string;
 };
 
@@ -13,6 +17,10 @@ type HiveSetupActions = {
   setName: (name: string) => void;
   setHiveType: (hiveType: HiveType | null) => void;
   setSource: (source: HiveSource | null) => void;
+  setInstallKind: (installKind: HiveInstallKind | null) => void;
+  setInstallationDate: (installationDate: Date | null) => void;
+  setInitialFrames: (initialFrames: number | null) => void;
+  setQueenIntroduced: (queenIntroduced: boolean) => void;
   setNotes: (notes: string) => void;
   nextStep: () => void;
   prevStep: () => void;
@@ -26,6 +34,10 @@ const initialState: HiveSetupState = {
   name: "",
   hiveType: null,
   source: null,
+  installKind: null,
+  installationDate: null,
+  initialFrames: null,
+  queenIntroduced: false,
   notes: "",
 };
 
@@ -36,6 +48,10 @@ export const useHiveSetupStore = create<HiveSetupState & HiveSetupActions>()(
     setName: (name) => set({ name }),
     setHiveType: (hiveType) => set({ hiveType }),
     setSource: (source) => set({ source }),
+    setInstallKind: (installKind) => set({ installKind }),
+    setInstallationDate: (installationDate) => set({ installationDate }),
+    setInitialFrames: (initialFrames) => set({ initialFrames }),
+    setQueenIntroduced: (queenIntroduced) => set({ queenIntroduced }),
     setNotes: (notes) => set({ notes }),
 
     nextStep: () =>

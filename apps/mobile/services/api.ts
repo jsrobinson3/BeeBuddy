@@ -155,6 +155,28 @@ type RefreshCallback = () => Promise<void>;
 /** Callback the auth store registers so the API client can force a logout. */
 type LogoutCallback = () => Promise<void>;
 
+/**
+ * Render a FastAPI error body into a human-readable message.
+ * FastAPI returns 422 validation errors as `{detail: [{loc, msg, type}, ...]}`;
+ * naively passing `detail` to `new Error()` produces "[object Object]".
+ */
+function formatUploadError(body: string, status: number): string {
+  try {
+    const parsed = JSON.parse(body);
+    const detail = parsed?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0];
+      const loc = Array.isArray(first?.loc) ? first.loc.join(".") : "";
+      const msg = first?.msg || "Validation error";
+      return loc ? `${loc}: ${msg}` : msg;
+    }
+  } catch {
+    // non-JSON body — fall through
+  }
+  return `Upload failed: ${status}`;
+}
+
 class ApiClient {
   private config: ApiConfig;
   private onRefresh: RefreshCallback | null = null;
@@ -576,8 +598,7 @@ class ApiClient {
       });
 
       if (result.status < 200 || result.status >= 300) {
-        const error = JSON.parse(result.body).detail ?? `Upload failed: ${result.status}`;
-        throw new Error(error);
+        throw new Error(formatUploadError(result.body, result.status));
       }
       return JSON.parse(result.body) as InspectionPhoto;
     }
@@ -601,8 +622,8 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || `Upload failed: ${response.status}`);
+      const body = await response.text();
+      throw new Error(formatUploadError(body, response.status));
     }
 
     return response.json() as Promise<InspectionPhoto>;

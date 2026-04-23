@@ -31,6 +31,9 @@ export default class Hive extends Model {
   @text("status") status!: string;
   @text("source") source!: string | null;
   @text("installation_date") installationDate!: string | null;
+  @text("install_kind") installKind!: string | null;
+  @field("initial_frames") initialFrames!: number | null;
+  @field("queen_introduced") queenIntroduced!: boolean | null;
   @text("color") color!: string | null;
   @field("position_order") order!: number | null;
   @text("notes") notes!: string | null;

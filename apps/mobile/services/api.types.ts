@@ -97,6 +97,7 @@ export interface UpdateApiaryInput {
 export type HiveType = "langstroth" | "top_bar" | "warre" | "flow" | "nuc" | "other";
 export type HiveStatus = "active" | "dead" | "combined" | "sold";
 export type HiveSource = "package" | "nuc" | "swarm" | "split" | "purchased";
+export type HiveInstallKind = "installed" | "transferred";
 
 export interface Hive {
   id: string;
@@ -106,6 +107,9 @@ export interface Hive {
   status: HiveStatus;
   source: HiveSource | null;
   installationDate: string | null;
+  installKind: HiveInstallKind | null;
+  initialFrames: number | null;
+  queenIntroduced: boolean | null;
   color: string | null;
   order: number | null;
   notes: string | null;
@@ -121,6 +125,9 @@ export interface CreateHiveInput {
   hiveType?: HiveType;
   source?: HiveSource;
   installationDate?: string;
+  installKind?: HiveInstallKind;
+  initialFrames?: number;
+  queenIntroduced?: boolean;
   notes?: string;
 }
 
@@ -129,7 +136,10 @@ export interface UpdateHiveInput {
   hiveType?: HiveType;
   status?: HiveStatus;
   source?: HiveSource;
-  installationDate?: string;
+  installationDate?: string | null;
+  installKind?: HiveInstallKind | null;
+  initialFrames?: number | null;
+  queenIntroduced?: boolean | null;
   color?: string;
   order?: number;
   notes?: string;
@@ -221,7 +231,8 @@ export interface WeatherSnapshot {
   tempC?: number | null;
   humidityPercent?: number | null;
   windSpeedKmh?: number | null;
-  conditions?: string | null;
+  // Multi-select; legacy rows may still hold a single string value.
+  conditions?: string[] | string | null;
 }
 
 export interface InspectionPhoto {

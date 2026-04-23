@@ -62,7 +62,9 @@ _WRITABLE_FIELDS: dict[str, set[str]] = {
     },
     "hives": {
         "apiary_id", "name", "hive_type", "status",
-        "source", "installation_date", "color", "order", "notes",
+        "source", "installation_date", "install_kind",
+        "initial_frames", "queen_introduced",
+        "color", "order", "notes",
     },
     "queens": {
         "hive_id", "marking_color", "marking_year", "origin",
