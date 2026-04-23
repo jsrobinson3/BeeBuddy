@@ -36,13 +36,37 @@ celery_app.conf.broker_transport_options = {
 }
 
 
+def _run_async_db_task(coro_factory):
+    """Run an async DB coroutine from a Celery task in a fresh event loop.
+
+    The module-level SQLAlchemy async engine caches asyncpg connections that
+    are bound to the loop which created them. If ``asyncio.run`` closes the
+    loop while the pool still holds those connections, SQLAlchemy's later
+    attempts to terminate them call ``loop.call_later`` on the dead loop,
+    raising ``RuntimeError: Event loop is closed`` and leaking server-side
+    connections (which eventually triggers ``TooManyConnectionsError``).
+    Disposing the engine inside the same loop keeps cleanup on the live loop.
+    """
+    import asyncio
+
+    from app.db.session import engine
+
+    async def _wrapper():
+        try:
+            await coro_factory()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_wrapper())
+
+
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def generate_inspection_summary(self, inspection_id: str):
     """Generate AI summary for an inspection using the configured LLM."""
-    import asyncio
-
     try:
-        asyncio.run(_generate_inspection_summary_async(inspection_id))
+        _run_async_db_task(
+            lambda: _generate_inspection_summary_async(inspection_id)
+        )
     except Exception as exc:
         logger.exception("generate_inspection_summary failed for %s", inspection_id)
         raise self.retry(exc=exc)
@@ -155,10 +179,8 @@ def hard_delete_user(self, user_id_str: str):
     Reads ``_delete_data`` from the user's preferences to decide between
     anonymisation (default) and full deletion with S3 cleanup.
     """
-    import asyncio
-
     try:
-        asyncio.run(_hard_delete_user_async(user_id_str))
+        _run_async_db_task(lambda: _hard_delete_user_async(user_id_str))
     except Exception as exc:
         logger.exception("hard_delete_user failed for user %s", user_id_str)
         raise self.retry(exc=exc)
@@ -264,9 +286,7 @@ def generate_cadence_tasks_for_all_users():
     Intended to be scheduled via Celery Beat (e.g. every day at 06:00 UTC).
     Runs synchronously inside the Celery worker using a one-shot async loop.
     """
-    import asyncio
-
-    asyncio.run(_generate_cadence_tasks_async())
+    _run_async_db_task(_generate_cadence_tasks_async)
 
 
 @celery_app.task
