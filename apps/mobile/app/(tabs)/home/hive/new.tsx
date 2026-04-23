@@ -10,11 +10,14 @@ import {
   View,
 } from "react-native";
 
+import { BooleanToggle } from "../../../../components/BooleanToggle";
+import { DatePickerField } from "../../../../components/DatePickerField";
 import { FormInput } from "../../../../components/FormInput";
+import { NumberInput } from "../../../../components/NumberInput";
 import { ProgressDots } from "../../../../components/ProgressDots";
 import { WizardFooter } from "../../../../components/WizardFooter";
 import { useCreateHive } from "../../../../hooks/useHives";
-import type { HiveType, HiveSource } from "../../../../services/api";
+import type { HiveType, HiveSource, HiveInstallKind } from "../../../../services/api";
 import { useHiveSetupStore } from "../../../../stores/hiveSetup";
 import {
   useStyles,
@@ -44,6 +47,11 @@ const SOURCES: { label: string; value: HiveSource }[] = [
   { label: "Swarm", value: "swarm" },
   { label: "Split", value: "split" },
   { label: "Purchased", value: "purchased" },
+];
+
+const INSTALL_KINDS: { label: string; value: HiveInstallKind }[] = [
+  { label: "Installed", value: "installed" },
+  { label: "Transferred", value: "transferred" },
 ];
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
@@ -210,14 +218,27 @@ function StepDetails({
 }: {
   styles: ReturnType<typeof createStyles>;
 }) {
-  const { hiveType, source, setHiveType, setSource } = useHiveSetupStore();
+  const {
+    hiveType,
+    source,
+    installKind,
+    installationDate,
+    initialFrames,
+    queenIntroduced,
+    setHiveType,
+    setSource,
+    setInstallKind,
+    setInstallationDate,
+    setInitialFrames,
+    setQueenIntroduced,
+  } = useHiveSetupStore();
 
   return (
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Hive details</Text>
       <Text style={styles.stepSubtitle}>
-        What type of hive is this and where did the bees come from? Both are
-        optional.
+        What type of hive is this and how were the bees set up? Everything here
+        is optional.
       </Text>
 
       <Text style={styles.sectionLabel}>Hive Type</Text>
@@ -228,12 +249,41 @@ function StepDetails({
         styles={styles}
       />
 
+      <Text style={styles.sectionLabel}>Setup</Text>
+      <PickerChips
+        options={INSTALL_KINDS}
+        selected={installKind}
+        onSelect={setInstallKind}
+        styles={styles}
+      />
+
       <Text style={styles.sectionLabel}>Source</Text>
       <PickerChips
         options={SOURCES}
         selected={source}
         onSelect={setSource}
         styles={styles}
+      />
+
+      <DatePickerField
+        label="Installation Date"
+        value={installationDate}
+        onChange={setInstallationDate}
+        placeholder="No date"
+      />
+
+      <NumberInput
+        label="Initial Frames"
+        value={initialFrames}
+        onChange={setInitialFrames}
+        min={0}
+        step={0.5}
+      />
+
+      <BooleanToggle
+        label="Queen Introduced"
+        value={queenIntroduced}
+        onValueChange={setQueenIntroduced}
       />
     </View>
   );
@@ -262,7 +312,15 @@ function ReviewRow({
 }
 
 function ReviewSummary({ styles }: { styles: ReturnType<typeof createStyles> }) {
-  const { name, hiveType, source } = useHiveSetupStore();
+  const {
+    name,
+    hiveType,
+    source,
+    installKind,
+    installationDate,
+    initialFrames,
+    queenIntroduced,
+  } = useHiveSetupStore();
 
   const typeLabelMap: Record<HiveType, string> = {
     langstroth: "Langstroth",
@@ -279,6 +337,16 @@ function ReviewSummary({ styles }: { styles: ReturnType<typeof createStyles> }) 
     split: "Split",
     purchased: "Purchased",
   };
+  const installKindLabelMap: Record<HiveInstallKind, string> = {
+    installed: "Installed",
+    transferred: "Transferred",
+  };
+
+  const hasInstallDetails =
+    installKind !== null ||
+    installationDate !== null ||
+    initialFrames !== null ||
+    queenIntroduced;
 
   return (
     <View style={styles.reviewCard}>
@@ -297,9 +365,45 @@ function ReviewSummary({ styles }: { styles: ReturnType<typeof createStyles> }) 
       <ReviewRow
         label="Source"
         value={source ? sourceLabelMap[source] : "Not set"}
-        showDivider={false}
+        showDivider={hasInstallDetails}
         styles={styles}
       />
+      {installKind && (
+        <ReviewRow
+          label="Setup"
+          value={installKindLabelMap[installKind]}
+          showDivider={
+            installationDate !== null ||
+            initialFrames !== null ||
+            queenIntroduced
+          }
+          styles={styles}
+        />
+      )}
+      {installationDate && (
+        <ReviewRow
+          label="Installed On"
+          value={installationDate.toLocaleDateString()}
+          showDivider={initialFrames !== null || queenIntroduced}
+          styles={styles}
+        />
+      )}
+      {initialFrames !== null && (
+        <ReviewRow
+          label="Initial Frames"
+          value={String(initialFrames)}
+          showDivider={queenIntroduced}
+          styles={styles}
+        />
+      )}
+      {queenIntroduced && (
+        <ReviewRow
+          label="Queen Introduced"
+          value="Yes"
+          showDivider={false}
+          styles={styles}
+        />
+      )}
     </View>
   );
 }
@@ -342,8 +446,20 @@ export default function CreateHiveScreen() {
   const createHive = useCreateHive();
   const styles = useStyles(createStyles);
 
-  const { step, name, hiveType, source, notes, nextStep, prevStep, reset } =
-    useHiveSetupStore();
+  const {
+    step,
+    name,
+    hiveType,
+    source,
+    installKind,
+    installationDate,
+    initialFrames,
+    queenIntroduced,
+    notes,
+    nextStep,
+    prevStep,
+    reset,
+  } = useHiveSetupStore();
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
@@ -357,6 +473,12 @@ export default function CreateHiveScreen() {
         apiaryId: apiary_id!,
         hiveType: hiveType ?? undefined,
         source: source ?? undefined,
+        installKind: installKind ?? undefined,
+        installationDate: installationDate
+          ? installationDate.toISOString().split("T")[0]
+          : undefined,
+        initialFrames: initialFrames ?? undefined,
+        queenIntroduced: queenIntroduced || undefined,
         notes: notes.trim() || undefined,
       });
       reset();
@@ -364,7 +486,20 @@ export default function CreateHiveScreen() {
     } catch (err: unknown) {
       Alert.alert("Error", getErrorMessage(err));
     }
-  }, [name, apiary_id, hiveType, source, notes, createHive, reset, router]);
+  }, [
+    name,
+    apiary_id,
+    hiveType,
+    source,
+    installKind,
+    installationDate,
+    initialFrames,
+    queenIntroduced,
+    notes,
+    createHive,
+    reset,
+    router,
+  ]);
 
   const handleNext = useCallback(() => {
     if (step === 0 && !name.trim()) {

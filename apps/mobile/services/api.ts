@@ -16,6 +16,7 @@ export type {
   HiveType,
   HiveStatus,
   HiveSource,
+  HiveInstallKind,
   Hive,
   CreateHiveInput,
   UpdateHiveInput,
