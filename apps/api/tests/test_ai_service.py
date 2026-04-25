@@ -7,12 +7,14 @@ access, running API server, or LLM endpoint.
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from app.config import LLMProvider
 from app.services.ai_service import (
     _COLD_START_DELAYS,
     ColdStartError,
+    _check_streaming_status,
     _parse_anthropic_sse,
     _parse_openai_sse,
     _stream_openai_compat,
@@ -130,6 +132,29 @@ class TestStreamOpenAiCompat:
         ):
             async for _ in _stream_openai_compat([{"role": "user", "content": "hi"}]):
                 pass
+
+    async def test_paused_endpoint_400_raises_cold_start(self):
+        """HF returns 400 + 'paused' when endpoint is paused — treat as cold-start."""
+        body = (
+            b'{"error":"Bad Request: The endpoint is paused, ask a maintainer'
+            b' to restart it","code":"BAD_REQUEST"}'
+        )
+        resp = AsyncMock()
+        resp.status_code = 400
+        resp.aread = AsyncMock(return_value=body)
+        resp.request = MagicMock()
+        with pytest.raises(ColdStartError):
+            await _check_streaming_status(resp)
+
+    async def test_other_400_raises_http_status_error(self):
+        """A 400 without the paused marker still raises HTTPStatusError."""
+        body = b'{"error":"validation failed"}'
+        resp = AsyncMock()
+        resp.status_code = 400
+        resp.aread = AsyncMock(return_value=body)
+        resp.request = MagicMock()
+        with pytest.raises(httpx.HTTPStatusError):
+            await _check_streaming_status(resp)
 
     @patch("app.services.ai_service.settings", _fake_settings())
     async def test_streams_content_on_200(self):
@@ -267,6 +292,40 @@ class TestStreamChatColdStart:
 
         statuses = [e for e in events if "status" in e]
         assert len(statuses) == 1
+
+    async def test_unhandled_http_status_error_emits_clean_error(self, _mock_tool_path):
+        """An unexpected HTTPStatusError must close the SSE stream cleanly.
+
+        Regression test for BEEBUDDY-BACKEND-1F: a 4xx that wasn't ColdStart /
+        ContextOverflow / paused-endpoint used to propagate up through
+        Starlette's streaming response and surface as an unhandled 500.
+        """
+
+        async def raise_http_error(messages, usage_out=None):
+            req = httpx.Request("POST", "https://llm.example/chat/completions")
+            resp = httpx.Response(400, request=req)
+            raise httpx.HTTPStatusError("HTTP 400", request=req, response=resp)
+            yield  # unreachable — required to make this an async generator
+
+        mock_user = MagicMock()
+        mock_user.id = "user-123"
+        mock_request = MagicMock()
+        mock_request.messages = [MagicMock(role="user", content="hi")]
+        mock_request.conversation_id = None
+        mock_request.hive_id = None
+
+        with (
+            patch("app.services.ai_service._stream_llm", side_effect=raise_http_error),
+            patch("app.services.ai_service.ag_data_service.build_context_block", return_value=""),
+            patch("app.services.ai_service.AsyncSessionLocal", _mock_session_local()),
+            patch("app.services.ai_service._save_conversation", new_callable=AsyncMock),
+            patch("app.services.ai_service.record_chat_usage", new_callable=AsyncMock),
+        ):
+            events = await self._collect_events(stream_chat(mock_user, mock_request))
+
+        errors = [e for e in events if "error" in e]
+        assert len(errors) == 1
+        assert errors[0]["error"] == "llm_unavailable"
 
     async def test_no_cold_start_streams_normally(self, _mock_tool_path):
         """When the endpoint responds immediately, no waking_up event is emitted."""
