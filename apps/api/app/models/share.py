@@ -83,17 +83,25 @@ class Share(Base):
         nullable=True,
     )
 
+    # The Postgres enum types `share_role` and `share_status` store
+    # lowercase values (see migration a080fea34fe1). `values_callable` makes
+    # SQLAlchemy bind the enum's `.value` ("pending") instead of the default
+    # `.name` ("PENDING"), which would raise InvalidTextRepresentationError.
     role: Mapped[ShareRole] = mapped_column(
         SAEnum(
-            "editor", "viewer",
-            name="share_role", create_constraint=False,
+            ShareRole,
+            name="share_role",
+            create_constraint=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
         ),
         nullable=False,
     )
     status: Mapped[ShareStatus] = mapped_column(
         SAEnum(
-            "pending", "accepted", "declined", "revoked",
-            name="share_status", create_constraint=False,
+            ShareStatus,
+            name="share_status",
+            create_constraint=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
         ),
         default=ShareStatus.PENDING,
         server_default="pending",
