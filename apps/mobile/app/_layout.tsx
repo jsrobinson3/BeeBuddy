@@ -21,11 +21,11 @@ import { useThemeStore } from "../stores/theme";
 import { configureGoogleSignIn } from "../services/oauth";
 import { ThemeProvider, useTheme, typography } from "../theme";
 
-if (process.env.EXPO_PUBLIC_SENTRY_DSN) {
+if (process.env.EXPO_PUBLIC_SENTRY_DSN && !__DEV__) {
   Sentry.init({
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
-    tracesSampleRate: __DEV__ ? 0 : 0.2,
-    environment: __DEV__ ? "development" : "production",
+    tracesSampleRate: 0.2,
+    environment: "production",
   });
 }
 
