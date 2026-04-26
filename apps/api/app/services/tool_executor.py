@@ -222,11 +222,17 @@ def _check_error_response(resp: httpx.Response) -> None:
     if resp.status_code < 400:
         return
     body = resp.text[:500]
-    logger.error("Tool LLM error %s: %s", resp.status_code, body)
+    # HF Inference Endpoints return 400 (not 503) when a maintainer has
+    # paused the endpoint. Surface as cold-start so stream_chat falls into
+    # the "waking up" retry path instead of treating it as a hard error.
+    if resp.status_code == 400 and "paused" in body.lower():
+        logger.warning("Tool LLM endpoint paused, surfacing as cold-start")
+        raise ColdStartError("Endpoint is paused")
     if "exceed" in body and "context" in body:
         raise ContextOverflowError(
             "This conversation is too long. Please start a new conversation."
         )
+    logger.error("Tool LLM error %s: %s", resp.status_code, body)
     resp.raise_for_status()
 
 
