@@ -69,7 +69,18 @@ class WeatherSnapshot(CamelBase):
     temp_c: float | None = None
     humidity_percent: float | None = None
     wind_speed_kmh: float | None = None
-    conditions: str | None = None  # sunny/cloudy/overcast/rainy
+    # Multi-select tags: e.g. ["partly_cloudy", "windy"]. Legacy single-string
+    # values are coerced to a one-element list for backward compatibility.
+    conditions: list[str] | None = None
+
+    @field_validator("conditions", mode="before")
+    @classmethod
+    def _coerce_conditions(cls, v):  # noqa: N805
+        if v is None or v == "":
+            return None
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class InspectionCreate(CamelBase):

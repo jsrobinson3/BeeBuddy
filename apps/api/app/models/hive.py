@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -36,6 +36,11 @@ class HiveSource(enum.StrEnum):
     PURCHASED = "purchased"
 
 
+class HiveInstallKind(enum.StrEnum):
+    INSTALLED = "installed"
+    TRANSFERRED = "transferred"
+
+
 class Hive(Base):
     __tablename__ = "hives"
 
@@ -60,6 +65,11 @@ class Hive(Base):
         SAEnum(HiveSource, name="hive_source"), nullable=True
     )
     installation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    install_kind: Mapped[HiveInstallKind | None] = mapped_column(
+        SAEnum(HiveInstallKind, name="hive_install_kind"), nullable=True
+    )
+    initial_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queen_introduced: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     color: Mapped[str | None] = mapped_column(String(50), nullable=True)
     order: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,6 +1,6 @@
 import { appSchema, tableSchema } from "@nozbe/watermelondb";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export default appSchema({
   version: SCHEMA_VERSION,
@@ -29,6 +29,9 @@ export default appSchema({
         { name: "status", type: "string" },
         { name: "source", type: "string", isOptional: true },
         { name: "installation_date", type: "string", isOptional: true },
+        { name: "install_kind", type: "string", isOptional: true },
+        { name: "initial_frames", type: "number", isOptional: true },
+        { name: "queen_introduced", type: "boolean", isOptional: true },
         { name: "color", type: "string", isOptional: true },
         { name: "position_order", type: "number", isOptional: true },
         { name: "notes", type: "string", isOptional: true },

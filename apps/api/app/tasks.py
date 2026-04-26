@@ -37,14 +37,14 @@ celery_app.conf.broker_transport_options = {
 
 
 def _run_async_task(coro):
-    """Run ``coro`` in a fresh event loop and dispose the DB engine afterwards.
+    """Run ``coro`` in a fresh event loop.
 
     Celery executes each task in this module via ``asyncio.run()``, which
-    creates a brand-new event loop per invocation. SQLAlchemy's async engine
-    caches pooled connections bound to the loop that first used them; reusing
-    them from a later task's loop raises ``RuntimeError: ... got Future ...
-    attached to a different loop``. Disposing the engine in ``finally``
-    forces the pool to be rebuilt against the next task's loop.
+    creates a new event loop per invocation. Tasks use
+    ``CeleryAsyncSessionLocal`` (backed by a ``NullPool`` engine) so every
+    connection is created and closed inside the same loop — no pooled state
+    leaks across tasks. The ``finally`` dispose is belt-and-braces cleanup
+    that clears any stray engine-level state before the loop closes.
     """
     import asyncio
 
@@ -52,9 +52,9 @@ def _run_async_task(coro):
         try:
             return await coro
         finally:
-            from app.db.session import engine
+            from app.db.celery_session import celery_engine
 
-            await engine.dispose()
+            await celery_engine.dispose()
 
     return asyncio.run(_runner())
 
@@ -73,7 +73,7 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
     """Async implementation of inspection summary generation."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import CeleryAsyncSessionLocal as AsyncSessionLocal
     from app.models.apiary import Apiary
     from app.models.hive import Hive
     from app.models.inspection import Inspection
@@ -125,7 +125,7 @@ async def _hard_delete_user_async(user_id_str: str) -> None:
     """Async implementation of hard_delete_user."""
     from uuid import UUID
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import CeleryAsyncSessionLocal as AsyncSessionLocal
     from app.models.user import User
 
     user_id = UUID(user_id_str)
@@ -243,7 +243,7 @@ async def _generate_cadence_tasks_async() -> None:
     """Async implementation of generate_cadence_tasks_for_all_users."""
     from sqlalchemy import select
 
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import CeleryAsyncSessionLocal as AsyncSessionLocal
     from app.models.user import User
     from app.services import cadence_service
 
@@ -259,7 +259,7 @@ async def _generate_cadence_tasks_async() -> None:
 
 async def _generate_cadence_tasks_for_user(uid, cadence_service) -> None:
     """Generate cadence tasks for a single user."""
-    from app.db.session import AsyncSessionLocal
+    from app.db.celery_session import CeleryAsyncSessionLocal as AsyncSessionLocal
     from app.models.user import User
 
     try:

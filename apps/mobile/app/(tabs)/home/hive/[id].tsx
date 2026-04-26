@@ -364,6 +364,18 @@ export default function HiveDetailScreen() {
           label="Installed"
           value={formatDate(hive?.installationDate)}
         />
+        {hive?.installKind && (
+          <InfoRow
+            label="Setup"
+            value={hive.installKind === "transferred" ? "Transferred" : "Installed"}
+          />
+        )}
+        {hive?.initialFrames != null && (
+          <InfoRow label="Initial Frames" value={String(hive.initialFrames)} />
+        )}
+        {hive?.queenIntroduced === true && (
+          <InfoRow label="Queen Introduced" value="Yes" />
+        )}
       </Card>
 
       <TaskSchedulingCard

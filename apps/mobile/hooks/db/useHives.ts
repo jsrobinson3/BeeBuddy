@@ -15,6 +15,9 @@ interface HiveRaw extends RawRecord {
   status: string;
   source: string | null;
   installation_date: string | null;
+  install_kind: string | null;
+  initial_frames: number | null;
+  queen_introduced: boolean | null;
   color: string | null;
   position_order: number | null;
   notes: string | null;
@@ -52,6 +55,9 @@ export function useCreateHive() {
         raw.status = "active";
         if (data.source) raw.source = data.source;
         if (data.installationDate) raw.installation_date = data.installationDate;
+        if (data.installKind) raw.install_kind = data.installKind;
+        if (data.initialFrames != null) raw.initial_frames = data.initialFrames;
+        if (data.queenIntroduced != null) raw.queen_introduced = data.queenIntroduced;
         if (data.notes) raw.notes = data.notes;
       });
     });
@@ -77,6 +83,12 @@ export function useUpdateHive() {
           if (data.source !== undefined) raw.source = data.source ?? null;
           if (data.installationDate !== undefined)
             raw.installation_date = data.installationDate ?? null;
+          if (data.installKind !== undefined)
+            raw.install_kind = data.installKind ?? null;
+          if (data.initialFrames !== undefined)
+            raw.initial_frames = data.initialFrames ?? null;
+          if (data.queenIntroduced !== undefined)
+            raw.queen_introduced = data.queenIntroduced ?? null;
           if (data.color !== undefined) raw.color = data.color ?? null;
           if (data.order !== undefined) raw.position_order = data.order ?? null;
           if (data.notes !== undefined) raw.notes = data.notes ?? null;

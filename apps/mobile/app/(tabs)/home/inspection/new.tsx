@@ -183,11 +183,11 @@ export default function CreateInspectionScreen() {
   useEffect(() => {
     if (!weather || weatherFilled.current) return;
     // Only prefill if user hasn't already entered values
-    if (s.tempC === "" && s.humidityPercent === "" && s.conditions === null) {
+    if (s.tempC === "" && s.humidityPercent === "" && s.conditions.length === 0) {
       const displayTemp = units.toDisplayTemp(weather.tempC);
       set("tempC", String(Math.round(displayTemp)));
       set("humidityPercent", String(weather.humidityPercent));
-      set("conditions", weather.conditions);
+      set("conditions", [weather.conditions]);
       weatherFilled.current = true;
       setWeatherAutoFilled(true);
     }

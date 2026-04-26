@@ -10,10 +10,18 @@ import {
   View,
 } from "react-native";
 
+import { BooleanToggle } from "../../../../components/BooleanToggle";
+import { DatePickerField } from "../../../../components/DatePickerField";
 import { FormInput } from "../../../../components/FormInput";
 import { LoadingSpinner } from "../../../../components/LoadingSpinner";
+import { NumberInput } from "../../../../components/NumberInput";
 import { useHive, useUpdateHive, useDeleteHive } from "../../../../hooks/useHives";
-import type { HiveType, HiveSource, HiveStatus } from "../../../../services/api";
+import type {
+  HiveInstallKind,
+  HiveSource,
+  HiveStatus,
+  HiveType,
+} from "../../../../services/api";
 import {
   useStyles,
   type ThemeColors,
@@ -48,6 +56,11 @@ const STATUSES: { label: string; value: HiveStatus }[] = [
   { label: "Sold", value: "sold" },
 ];
 
+const INSTALL_KINDS: { label: string; value: HiveInstallKind }[] = [
+  { label: "Installed", value: "installed" },
+  { label: "Transferred", value: "transferred" },
+];
+
 const createStyles = (c: ThemeColors) => ({
   ...formContainerStyles(c),
   ...formSubmitStyles(c),
@@ -67,6 +80,10 @@ export default function EditHiveScreen() {
   const [hiveType, setHiveType] = useState<HiveType | null>(null);
   const [source, setSource] = useState<HiveSource | null>(null);
   const [status, setStatus] = useState<HiveStatus | null>(null);
+  const [installKind, setInstallKind] = useState<HiveInstallKind | null>(null);
+  const [installationDate, setInstallationDate] = useState<Date | null>(null);
+  const [initialFrames, setInitialFrames] = useState<number | null>(null);
+  const [queenIntroduced, setQueenIntroduced] = useState<boolean>(false);
   const [notes, setNotes] = useState("");
   const [initialized, setInitialized] = useState(false);
 
@@ -76,6 +93,11 @@ export default function EditHiveScreen() {
       setHiveType(hive.hive_type ?? null);
       setSource(hive.source ?? null);
       setStatus(hive.status ?? null);
+      setInstallKind(((hive as { installKind?: HiveInstallKind | null }).installKind) ?? null);
+      const installedStr = (hive as { installationDate?: string | null }).installationDate;
+      setInstallationDate(installedStr ? new Date(installedStr) : null);
+      setInitialFrames(((hive as { initialFrames?: number | null }).initialFrames) ?? null);
+      setQueenIntroduced(((hive as { queenIntroduced?: boolean | null }).queenIntroduced) ?? false);
       setNotes(hive.notes ?? "");
       setInitialized(true);
     }
@@ -112,6 +134,12 @@ export default function EditHiveScreen() {
           hiveType: hiveType ?? undefined,
           source: source ?? undefined,
           status: status ?? undefined,
+          installKind,
+          installationDate: installationDate
+            ? installationDate.toISOString().split("T")[0]
+            : null,
+          initialFrames,
+          queenIntroduced,
           notes: notes.trim() || undefined,
         },
       });
@@ -202,6 +230,52 @@ export default function EditHiveScreen() {
             </Pressable>
           ))}
         </View>
+
+        <Text style={styles.pickerLabel}>Setup</Text>
+        <View style={styles.pickerRow}>
+          {INSTALL_KINDS.map((opt) => (
+            <Pressable
+              key={opt.value}
+              style={[
+                styles.pickerOption,
+                installKind === opt.value && styles.pickerOptionSelected,
+              ]}
+              onPress={() =>
+                setInstallKind(installKind === opt.value ? null : opt.value)
+              }
+            >
+              <Text
+                style={[
+                  styles.pickerOptionText,
+                  installKind === opt.value && styles.pickerOptionTextSelected,
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <DatePickerField
+          label="Installation Date"
+          value={installationDate}
+          onChange={setInstallationDate}
+          placeholder="No date"
+        />
+
+        <NumberInput
+          label="Initial Frames"
+          value={initialFrames}
+          onChange={setInitialFrames}
+          min={0}
+          step={0.5}
+        />
+
+        <BooleanToggle
+          label="Queen Introduced"
+          value={queenIntroduced}
+          onValueChange={setQueenIntroduced}
+        />
 
         <FormInput
           label="Notes"

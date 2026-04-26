@@ -8,8 +8,13 @@ import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
+import pytest
+
 from app.config import LLMProvider
 from app.services.tool_executor import (
+    ColdStartError,
+    _check_error_response,
     _convert_tools,
     _extract_anthropic_tool_calls,
     _extract_mcp_result,
@@ -18,6 +23,37 @@ from app.services.tool_executor import (
     _extract_text,
     try_tool_path,
 )
+
+
+def _mock_resp(status_code: int, body: str) -> httpx.Response:
+    """Build an httpx.Response with the given status and body text."""
+    return httpx.Response(
+        status_code=status_code,
+        request=httpx.Request("POST", "https://llm.example/chat/completions"),
+        content=body.encode(),
+    )
+
+
+class TestCheckErrorResponse:
+    """Tests for _check_error_response — error classification."""
+
+    def test_paused_endpoint_400_raises_cold_start(self):
+        """HF returns 400 + 'paused' when paused — surface as ColdStartError."""
+        body = (
+            '{"error":"Bad Request: The endpoint is paused, ask a maintainer'
+            ' to restart it","code":"BAD_REQUEST"}'
+        )
+        with pytest.raises(ColdStartError):
+            _check_error_response(_mock_resp(400, body))
+
+    def test_other_400_raises_http_status_error(self):
+        """A 400 without 'paused' marker still raises HTTPStatusError."""
+        with pytest.raises(httpx.HTTPStatusError):
+            _check_error_response(_mock_resp(400, '{"error":"validation"}'))
+
+    def test_2xx_does_not_raise(self):
+        """Successful responses pass through without raising."""
+        _check_error_response(_mock_resp(200, "{}"))
 
 # ---------------------------------------------------------------------------
 # Helpers

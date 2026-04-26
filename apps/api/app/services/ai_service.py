@@ -165,6 +165,17 @@ async def _yield_streaming_response(
         except ContextOverflowError:
             yield _context_overflow_event()
             return
+        except httpx.HTTPStatusError:
+            # Defensive: any 4xx that wasn't a known transient condition
+            # (cold-start, context overflow, paused endpoint) would otherwise
+            # propagate up through the SSE response and surface as a 500.
+            logger.exception("Unhandled LLM HTTPStatusError; closing SSE stream")
+            err = {
+                "error": "llm_unavailable",
+                "message": "Buddy is temporarily unavailable. Please try again.",
+            }
+            yield f"data: {json.dumps(err)}\n\n"
+            return
         except ColdStartError:
             if not sent_waking:
                 yield f"data: {json.dumps({'status': 'waking_up'})}\n\n"
@@ -335,7 +346,11 @@ async def stream_chat(
     except ToolColdStartError:
         logger.info("Tool path 503, falling back to streaming")
     except Exception:
-        logger.exception("Tool path failed, falling back to streaming")
+        # Falling back to streaming is intentional behavior, not an error —
+        # log at warning so Sentry doesn't open a new issue per occurrence.
+        logger.warning(
+            "Tool path failed, falling back to streaming", exc_info=True,
+        )
 
     # Phase 2: Streaming path (no session held during the stream)
     async for chunk in _handle_streaming_path(
@@ -367,9 +382,15 @@ async def _check_streaming_status(response: httpx.Response) -> None:
         raise ColdStartError()
     if response.status_code >= 400:
         body = (await response.aread()).decode(errors="replace")[:500]
-        logger.error("Streaming LLM error %s: %s", response.status_code, body)
+        # HF Inference Endpoints return 400 (not 503) when a maintainer has
+        # paused the endpoint. Surface as cold-start so the user sees the
+        # "waking up" UI rather than an unhandled stream failure.
+        if response.status_code == 400 and "paused" in body.lower():
+            logger.warning("LLM endpoint paused, surfacing as cold-start")
+            raise ColdStartError()
         if "exceed" in body and "context" in body:
             raise ContextOverflowError("Conversation exceeds context window.")
+        logger.error("Streaming LLM error %s: %s", response.status_code, body)
         raise httpx.HTTPStatusError(
             f"HTTP {response.status_code}",
             request=response.request,
