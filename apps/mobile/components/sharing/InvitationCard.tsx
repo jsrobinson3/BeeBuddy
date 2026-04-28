@@ -45,7 +45,7 @@ const createStyles = (c: ThemeColors) => ({
   roleText: {
     fontSize: 12,
     fontFamily: typography.families.bodySemiBold,
-    color: c.textOnPrimary,
+    color: c.textPrimary,
     textTransform: "capitalize" as const,
   },
   actions: {
@@ -69,7 +69,9 @@ const createStyles = (c: ThemeColors) => ({
     borderRadius: 16,
     paddingVertical: 10,
     alignItems: "center" as const,
-    backgroundColor: c.bgInputSoft,
+    borderWidth: 1.5,
+    borderColor: c.danger,
+    backgroundColor: "transparent",
   },
   declineText: {
     fontFamily: typography.families.bodySemiBold,
