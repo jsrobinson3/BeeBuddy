@@ -23,7 +23,7 @@ const createStyles = (c: ThemeColors) => ({
   avatarText: {
     fontSize: 15,
     fontFamily: typography.families.displaySemiBold,
-    color: c.textOnPrimary,
+    color: c.textPrimary,
   },
   info: {
     flex: 1,
