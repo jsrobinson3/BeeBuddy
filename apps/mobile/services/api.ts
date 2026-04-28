@@ -157,25 +157,29 @@ type RefreshCallback = () => Promise<void>;
 type LogoutCallback = () => Promise<void>;
 
 /**
- * Render a FastAPI error body into a human-readable message.
- * FastAPI returns 422 validation errors as `{detail: [{loc, msg, type}, ...]}`;
- * naively passing `detail` to `new Error()` produces "[object Object]".
+ * Extract a human-readable message from a FastAPI error `detail` field.
+ * 422 validation errors return `detail` as `[{loc, msg, type}, ...]`;
+ * passing that directly to `new Error()` produces "[object Object]".
+ * Returns null when the detail is empty/unrecognized so callers can supply a fallback.
  */
+function formatApiErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] as { loc?: unknown; msg?: string };
+    const loc = Array.isArray(first?.loc) ? first.loc.join(".") : "";
+    const msg = first?.msg || "Validation error";
+    return loc ? `${loc}: ${msg}` : msg;
+  }
+  return null;
+}
+
 function formatUploadError(body: string, status: number): string {
   try {
     const parsed = JSON.parse(body);
-    const detail = parsed?.detail;
-    if (typeof detail === "string") return detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0];
-      const loc = Array.isArray(first?.loc) ? first.loc.join(".") : "";
-      const msg = first?.msg || "Validation error";
-      return loc ? `${loc}: ${msg}` : msg;
-    }
+    return formatApiErrorDetail(parsed?.detail) ?? `Upload failed: ${status}`;
   } catch {
-    // non-JSON body — fall through
+    return `Upload failed: ${status}`;
   }
-  return `Upload failed: ${status}`;
 }
 
 class ApiClient {
@@ -248,7 +252,9 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || `HTTP ${response.status}`);
+      throw new Error(
+        formatApiErrorDetail(error?.detail) ?? `HTTP ${response.status}`,
+      );
     }
 
     if (response.status === 204) {
