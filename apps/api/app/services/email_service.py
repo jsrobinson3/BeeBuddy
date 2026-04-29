@@ -30,8 +30,8 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
-async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
+def _should_skip_send(to: str, subject: str, html_body: str) -> bool:
+    """Return True if the send should be short-circuited (suppressed or unconfigured)."""
     settings = get_settings()
 
     if settings.email_suppress:
@@ -40,12 +40,42 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
             "  To: %s\n  Subject: %s\n  Body:\n%s",
             to, subject, html_body,
         )
-        return
+        return True
 
     if not settings.sendgrid_api_key:
         logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
+        return True
+
+    return False
+
+
+def _log_send_failure(exc: BaseException, to: str, subject: str) -> None:
+    """Log an email-send failure, downgrading credential errors to warnings.
+
+    SendGrid auth/permission errors (401/403) indicate a configuration problem
+    (missing/expired/revoked API key) that won't be resolved by retrying. Every
+    queued verification, password-reset, and share-invite email would otherwise
+    log an exception and flood Sentry with hundreds of duplicate error events
+    (see BEEBUDDY-BACKEND-1) without surfacing any new information beyond the
+    first one. Log these as warnings so the misconfiguration is still visible
+    in logs but does not drown out genuine errors.
+    """
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403):
+        logger.warning(
+            "SendGrid rejected credentials (HTTP %s) sending to %s: %s — "
+            "check SENDGRID_API_KEY",
+            exc.response.status_code, to, subject,
+        )
+        return
+    logger.exception("Failed to send email to %s: %s", to, subject)
+
+
+async def _send_email(to: str, subject: str, html_body: str) -> None:
+    """Send an email via SendGrid API or log it when suppressed."""
+    if _should_skip_send(to, subject, html_body):
         return
 
+    settings = get_settings()
     payload = _build_payload(to, subject, html_body)
 
     try:
@@ -58,26 +88,16 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
             )
             resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(exc, to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
     """Synchronous email send for use in Celery workers."""
+    if _should_skip_send(to, subject, html_body):
+        return
+
     settings = get_settings()
-
-    if settings.email_suppress:
-        logger.info(
-            "Email suppressed (email_suppress=True)\n"
-            "  To: %s\n  Subject: %s\n  Body:\n%s",
-            to, subject, html_body,
-        )
-        return
-
-    if not settings.sendgrid_api_key:
-        logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
-        return
-
     payload = _build_payload(to, subject, html_body)
 
     try:
@@ -89,8 +109,8 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
         )
         resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(exc, to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
