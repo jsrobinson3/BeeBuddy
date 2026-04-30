@@ -30,8 +30,46 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _is_permanent_failure(exc: BaseException) -> bool:
+    """Return True for SendGrid responses where retrying will not help."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return 400 <= status < 500 and status != 429
+    return False
+
+
+def _log_send_failure(exc: BaseException, to: str) -> None:
+    """Log a send failure at the right severity for Sentry's LoggingIntegration.
+
+    Permanent 4xx responses (bad API key, suppressed recipient, etc.) are
+    operational issues — log at warning so they show up as breadcrumbs but
+    don't flood Sentry as exception events. Everything else stays at error.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        body = exc.response.text[:500]
+        if _is_permanent_failure(exc):
+            logger.warning(
+                "SendGrid rejected email to %s (%s); not retrying: %s",
+                to, status, body,
+            )
+        else:
+            logger.warning(
+                "SendGrid transient error %s sending to %s; will retry: %s",
+                status, to, body,
+            )
+    elif isinstance(exc, httpx.RequestError):
+        logger.warning("SendGrid network error sending to %s: %s", to, exc)
+    else:
+        logger.exception("Unexpected error sending email to %s", to)
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
+    """Send an email via SendGrid API or log it when suppressed.
+
+    Re-raises transient/unexpected errors so the caller (Celery task) can retry.
+    Swallows permanent 4xx failures since retrying will not help.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -57,13 +95,20 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 timeout=10.0,
             )
             resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(exc, to)
+        if not _is_permanent_failure(exc):
+            raise
+        return
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Re-raises transient/unexpected errors so the caller (Celery task) can retry.
+    Swallows permanent 4xx failures since retrying will not help.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +133,12 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(exc, to)
+        if not _is_permanent_failure(exc):
+            raise
+        return
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
