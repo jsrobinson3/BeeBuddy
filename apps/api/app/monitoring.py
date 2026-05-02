@@ -8,8 +8,31 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from app.config import get_settings
 
 
+def _is_transient_celery_broker_retry(event) -> bool:
+    """Detect Celery's auto-retrying broker connection log lines.
+
+    Celery is configured with ``broker_connection_retry_on_startup = True`` and
+    retries up to 100 times. The first ERROR-level log fires before retries
+    succeed, so each transient blip surfaces as a Sentry issue even though the
+    consumer recovers on its own. If retries genuinely exhaust, a separate
+    fatal log/exception will still reach Sentry.
+    """
+    if event.get("logger") != "celery.worker.consumer.consumer":
+        return False
+    logentry = event.get("logentry") or {}
+    message = (
+        logentry.get("formatted")
+        or logentry.get("message")
+        or event.get("message")
+        or ""
+    )
+    return "Trying again in" in message
+
+
 def _before_send(event, hint):
-    """Strip cookies from Sentry events to avoid leaking session data."""
+    """Strip cookies and drop transient Celery broker retries."""
+    if _is_transient_celery_broker_retry(event):
+        return None
     if "request" in event:
         req = event["request"]
         req.pop("cookies", None)
