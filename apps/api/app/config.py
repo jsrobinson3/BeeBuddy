@@ -148,6 +148,9 @@ class Settings(BaseSettings):
     guardrails_max_words_yes_no: int = 30
     guardrails_max_words_how_to: int = 150
     guardrails_max_words_explain: int = 250
+    # Tool-use guard: force search_knowledge_base for knowledge questions
+    guardrails_tools_enabled: bool = True
+    guardrails_tools_force_search: bool = True  # Retry with tool_choice on miss
 
     # RAG Knowledge Base
     rag_enabled: bool = True

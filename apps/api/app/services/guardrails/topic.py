@@ -145,6 +145,17 @@ _DATA_PATTERNS = [
     re.compile(r"\bi\s+have\b", re.I),
 ]
 
+# Knowledge-question stems take priority over data patterns. A question like
+# "why are drones around my hive" mentions "my hive" but is asking about bee
+# biology, not user-specific data — so it should route to search_knowledge_base.
+_KNOWLEDGE_PATTERNS = [
+    re.compile(r"\bwhy\s+(do|does|are|is|did|would|am)\b", re.I),
+    re.compile(r"\bwhat\s+(causes|makes|happens)\b", re.I),
+    re.compile(r"\bis\s+(it|this|that)\s+(normal|safe|okay|ok|bad|good|fine|right)\b", re.I),
+    re.compile(r"\bhow\s+(do|does)\s+(i|you)\s+(treat|prevent|spot|tell)\b", re.I),
+    re.compile(r"\bhow\s+long\s+(does|do|until)\b", re.I),
+]
+
 _OPINION_PATTERNS = [
     re.compile(r"\bbest\s+(type|kind|brand|way)\b", re.I),
     re.compile(r"\bwhat\s+do\s+you\s+(think|recommend|suggest)\b", re.I),
@@ -159,11 +170,19 @@ def classify_question_intent(message: str) -> str:
 
     Returns: ``"knowledge"`` | ``"data"`` | ``"conversational"``
     | ``"opinion"``
+
+    Priority: conversational → knowledge stems → data → opinion → knowledge
+    fallback. Knowledge stems (``why does``, ``is it normal``, ``what causes``)
+    win over data patterns so questions about phenomena that incidentally
+    mention "my hive" don't get misrouted as data lookups.
     """
     stripped = message.strip().lower()
 
     if _is_conversational(stripped):
         return "conversational"
+
+    if any(p.search(stripped) for p in _KNOWLEDGE_PATTERNS):
+        return "knowledge"
 
     if any(p.search(stripped) for p in _DATA_PATTERNS):
         return "data"

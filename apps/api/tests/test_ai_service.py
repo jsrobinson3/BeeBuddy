@@ -20,6 +20,7 @@ from app.services.ai_service import (
     _stream_openai_compat,
     stream_chat,
 )
+from app.services.tool_executor import NoToolsAvailable
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -182,10 +183,15 @@ class TestStreamOpenAiCompat:
 @patch(
     "app.services.ai_service.tool_executor.try_tool_path",
     new_callable=AsyncMock,
-    return_value=(None, [], {}),
+    side_effect=NoToolsAvailable("test fixture: forcing streaming path"),
 )
 class TestStreamChatColdStart:
-    """Tests for the top-level stream_chat retry logic."""
+    """Tests for the top-level stream_chat retry logic.
+
+    These tests cover the streaming-recovery path. We force the tool path
+    to raise NoToolsAvailable so stream_chat falls through to
+    _handle_streaming_path, which is what these tests exercise.
+    """
 
     async def _collect_events(self, gen) -> list[dict]:
         """Collect and parse SSE events from the generator."""

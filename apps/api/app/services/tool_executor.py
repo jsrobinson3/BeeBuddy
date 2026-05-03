@@ -23,6 +23,16 @@ settings = get_settings()
 class ContextOverflowError(Exception):
     """Raised when the conversation exceeds the LLM's context window."""
 
+
+class NoToolsAvailable(Exception):
+    """Raised when the MCP server has no tools registered.
+
+    Distinct from a graceful "no tool was needed" outcome — this means the
+    tool path is structurally unavailable and the caller should fall back
+    to the streaming path.
+    """
+
+
 MAX_TOOL_ROUNDS = 3
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -34,6 +44,21 @@ class ToolCall:
     id: str
     name: str
     arguments: dict
+
+
+@dataclass
+class ToolPathResult:
+    """Outcome of a tool-augmented chat turn.
+
+    ``final_text`` is always populated. When no tool was called we still
+    return the model's plain response — the caller (with the tool-use
+    guard) decides whether to accept it, force a retry, or fall through.
+    """
+
+    final_text: str
+    tool_messages: list[dict]
+    usage: dict
+    tools_called: list[str]
 
 
 async def _execute_tool_call(
@@ -73,12 +98,13 @@ async def _run_tool_loop(
     provider: LLMProvider,
     initial_response: dict,
     initial_tool_calls: list[ToolCall],
-) -> tuple[str, list[dict], dict]:
+) -> tuple[str, list[dict], dict, list[str]]:
     """Run the tool call → LLM loop for up to MAX_TOOL_ROUNDS.
 
-    Returns (final_text, tool_messages, accumulated_usage).
+    Returns (final_text, tool_messages, accumulated_usage, tool_names_called).
     """
     tool_messages: list[dict] = []
+    tools_called: list[str] = [tc.name for tc in initial_tool_calls]
     augmented = list(messages)
     response = initial_response
     tool_calls = initial_tool_calls
@@ -100,42 +126,62 @@ async def _run_tool_loop(
         response = await _call_llm_with_tools(augmented, llm_tools, provider)
         _add_usage(response)
         tool_calls = _extract_tool_calls(response, provider)
+        tools_called.extend(tc.name for tc in tool_calls)
 
         if not tool_calls:
-            return _extract_text(response, provider), tool_messages, usage
+            return (
+                _extract_text(response, provider),
+                tool_messages,
+                usage,
+                tools_called,
+            )
 
-    return _extract_text(response, provider), tool_messages, usage
+    return _extract_text(response, provider), tool_messages, usage, tools_called
+
+
+def _no_tool_result(response: dict, provider: LLMProvider) -> ToolPathResult:
+    """Build a ToolPathResult for a response that called no tools."""
+    return ToolPathResult(
+        final_text=_extract_text(response, provider),
+        tool_messages=[],
+        usage=_extract_response_usage(response, provider),
+        tools_called=[],
+    )
 
 
 async def try_tool_path(
     messages: list[dict],
     db: AsyncSession,
     user_id: UUID,
-) -> tuple[str | None, list[dict], dict]:
-    """Attempt tool-augmented response.
+    forced_tool: str | None = None,
+) -> ToolPathResult:
+    """Attempt tool-augmented response. See module docstring for details.
 
-    Returns (final_text, tool_messages, usage) if tools were used,
-    or (None, [], {}) if no tools were needed.
+    Raises ``NoToolsAvailable`` when the MCP server has no tools registered;
+    ``ColdStartError`` on 503; ``ContextOverflowError`` on context overflow.
     """
     server = create_mcp_server(db, user_id)
     async with Client(server) as client:
         mcp_tools = await client.list_tools()
         if not mcp_tools:
-            return None, [], {}
+            raise NoToolsAvailable("MCP server has no tools registered")
 
         provider = settings.effective_tool_provider
         llm_tools = _convert_tools(mcp_tools, provider)
-
-        response = await _call_llm_with_tools(messages, llm_tools, provider)
+        response = await _call_llm_with_tools(
+            messages, llm_tools, provider, forced_tool=forced_tool,
+        )
         tool_calls = _extract_tool_calls(response, provider)
-
         if not tool_calls:
-            return None, [], {}
+            return _no_tool_result(response, provider)
 
-        text, tool_msgs, usage = await _run_tool_loop(
+        text, tool_msgs, usage, names = await _run_tool_loop(
             client, messages, llm_tools, provider, response, tool_calls,
         )
-        return text, tool_msgs, usage
+        return ToolPathResult(
+            final_text=text, tool_messages=tool_msgs,
+            usage=usage, tools_called=names,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -180,11 +226,12 @@ async def _call_llm_with_tools(
     messages: list[dict],
     tools: list[dict],
     provider: LLMProvider,
+    forced_tool: str | None = None,
 ) -> dict:
     """Make a non-streaming LLM call with tools attached."""
     if provider == LLMProvider.ANTHROPIC:
-        return await _call_anthropic(messages, tools)
-    return await _call_openai_compat(messages, tools)
+        return await _call_anthropic(messages, tools, forced_tool=forced_tool)
+    return await _call_openai_compat(messages, tools, forced_tool=forced_tool)
 
 
 _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
@@ -194,7 +241,11 @@ class ColdStartError(Exception):
     """Raised when an inference endpoint is scaled to zero (503)."""
 
 
-async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
+async def _call_openai_compat(
+    messages: list[dict],
+    tools: list[dict],
+    forced_tool: str | None = None,
+) -> dict:
     """Non-streaming call to OpenAI-compatible endpoint with tools.
 
     Raises ColdStartError on 503 so the caller (stream_chat) can show
@@ -206,6 +257,11 @@ async def _call_openai_compat(messages: list[dict], tools: list[dict]) -> dict:
         "tools": tools,
         "stream": False,
     }
+    if forced_tool:
+        body["tool_choice"] = {
+            "type": "function",
+            "function": {"name": forced_tool},
+        }
     headers = {"Authorization": f"Bearer {settings.llm_tool_api_key}"}
     url = f"{settings.llm_tool_base_url}/chat/completions"
 
@@ -236,7 +292,11 @@ def _check_error_response(resp: httpx.Response) -> None:
     resp.raise_for_status()
 
 
-async def _call_anthropic(messages: list[dict], tools: list[dict]) -> dict:
+async def _call_anthropic(
+    messages: list[dict],
+    tools: list[dict],
+    forced_tool: str | None = None,
+) -> dict:
     """Non-streaming call to Anthropic Messages API with tools."""
     system, chat = _split_system(messages)
     body: dict = {
@@ -246,6 +306,8 @@ async def _call_anthropic(messages: list[dict], tools: list[dict]) -> dict:
         "messages": chat,
         "tools": tools,
     }
+    if forced_tool:
+        body["tool_choice"] = {"type": "tool", "name": forced_tool}
     headers = {
         "x-api-key": settings.llm_tool_api_key,
         "anthropic-version": ANTHROPIC_VERSION,

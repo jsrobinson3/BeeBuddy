@@ -27,9 +27,13 @@ from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
 from app.services._llm_utils import _split_system
 from app.services.guardrails import guardrail_pipeline
+from app.services.guardrails.tools import (
+    check_tool_use,
+    classify_tool_requirement,
+)
 from app.services.token_usage import record_chat_usage
 from app.services.tool_executor import ColdStartError as ToolColdStartError
-from app.services.tool_executor import ContextOverflowError
+from app.services.tool_executor import ContextOverflowError, NoToolsAvailable
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -240,16 +244,51 @@ async def _run_tool_phase(
             yield chunk
 
 
+async def _run_tool_with_guard(
+    db: AsyncSession, user_id: UUID, messages: list[dict], user_msg: str,
+) -> tool_executor.ToolPathResult:
+    """Run the tool path, retrying with a forced tool when the guard demands it.
+
+    For knowledge questions the model often skips ``search_knowledge_base`` and
+    answers from training. The tool-use guard detects that and forces the
+    retrieval on a single retry.
+    """
+    result = await tool_executor.try_tool_path(messages, db, user_id)
+
+    if not settings.guardrails_tools_enabled or not settings.guardrails_tools_force_search:
+        return result
+    if result.tools_called:
+        return result
+
+    requirement = classify_tool_requirement(user_msg)
+    if not requirement.required_tool:
+        return result
+
+    logger.info(
+        "Tool-use guard: forcing %s for intent=%s",
+        requirement.required_tool, requirement.intent,
+    )
+    return await tool_executor.try_tool_path(
+        messages, db, user_id, forced_tool=requirement.required_tool,
+    )
+
+
 async def _handle_tool_path(
     db: AsyncSession, user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
 ) -> AsyncGenerator[str, None]:
-    """Phase 1: tool-augmented path with output guard."""
-    final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
-        messages, db, user.id,
-    )
-    if final_text is None:
-        return
+    """Phase 1: tool-augmented path with output guard.
+
+    Always emits a response — even when the model called no tool. The
+    streaming path is reserved for cold-start / structural failures only.
+    """
+    result = await _run_tool_with_guard(db, user.id, messages, user_msg)
+    final_text = result.final_text
+
+    # --- Tool-use guard (audit) ---
+    tool_use = check_tool_use(user_msg, result.tools_called)
+    if not tool_use.passed:
+        logger.info("Tool-use guard flag: %s", tool_use.flag)
 
     # --- Output guard (can log/flag before emission) ---
     output_result = await guardrail_pipeline.check_output(final_text, user_msg)
@@ -259,10 +298,10 @@ async def _handle_tool_path(
     async for chunk in _yield_tool_response(final_text, db):
         yield chunk
     conv = await _save_conversation(
-        db, user.id, request, final_text, tool_msgs,
+        db, user.id, request, final_text, result.tool_messages,
     )
     await record_chat_usage(
-        db, user.id, conv.id, tool_usage,
+        db, user.id, conv.id, result.usage,
         settings.effective_tool_provider,
         settings.effective_tool_model, "tool_chat",
     )
@@ -308,31 +347,16 @@ async def _handle_streaming_path(
     yield "data: [DONE]\n\n"
 
 
-async def stream_chat(
-    user: User,
-    request: ChatRequest,
+async def _try_tool_path_with_recovery(
+    user: User, request: ChatRequest,
+    messages: list[dict], user_msg: str,
 ) -> AsyncGenerator[str, None]:
-    """Stream a chat response with guardrails pipeline.
+    """Yield from the tool path; fall back to streaming only on structural failure.
 
-    Sessions are opened per-phase via ``AsyncSessionLocal()`` rather than
-    inherited from the request scope. This keeps the DB out of the way
-    while waiting on the LLM provider.
+    The streaming fallback fires on cold-start (503), missing MCP tools, or
+    an unexpected exception — *not* on a tool-less LLM response. That case is
+    handled inside ``_handle_tool_path`` so output guards always run.
     """
-    user_msg = request.messages[-1].content if request.messages else ""
-
-    # --- Input guard (saves an LLM call for blocked messages) ---
-    input_result = guardrail_pipeline.check_input(user_msg)
-    if not input_result.allowed:
-        async for chunk in _yield_canned_response(input_result.canned_response):
-            yield chunk
-        yield "data: [DONE]\n\n"
-        return
-
-    context = await ag_data_service.build_context_block()
-    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
-    messages = _build_chat_messages(request, system)
-
-    # Phase 1: Try tool-augmented path (session scoped to this phase)
     try:
         async for chunk in _run_tool_phase(user, request, messages, user_msg):
             yield chunk
@@ -345,15 +369,38 @@ async def stream_chat(
         return
     except ToolColdStartError:
         logger.info("Tool path 503, falling back to streaming")
+    except NoToolsAvailable:
+        logger.warning("MCP server has no tools, falling back to streaming")
     except Exception:
-        # Falling back to streaming is intentional behavior, not an error —
-        # log at warning so Sentry doesn't open a new issue per occurrence.
         logger.warning(
             "Tool path failed, falling back to streaming", exc_info=True,
         )
 
-    # Phase 2: Streaming path (no session held during the stream)
     async for chunk in _handle_streaming_path(
+        user, request, messages, user_msg,
+    ):
+        yield chunk
+
+
+async def stream_chat(
+    user: User,
+    request: ChatRequest,
+) -> AsyncGenerator[str, None]:
+    """Stream a chat response with guardrails pipeline."""
+    user_msg = request.messages[-1].content if request.messages else ""
+
+    input_result = guardrail_pipeline.check_input(user_msg)
+    if not input_result.allowed:
+        async for chunk in _yield_canned_response(input_result.canned_response):
+            yield chunk
+        yield "data: [DONE]\n\n"
+        return
+
+    context = await ag_data_service.build_context_block()
+    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
+    messages = _build_chat_messages(request, system)
+
+    async for chunk in _try_tool_path_with_recovery(
         user, request, messages, user_msg,
     ):
         yield chunk
