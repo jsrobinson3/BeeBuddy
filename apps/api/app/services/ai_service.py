@@ -114,6 +114,20 @@ _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
 
 _PENDING_RE = re.compile(r'\[PENDING:([0-9a-f-]{36})\]')
 
+# Defense-in-depth: strip Qwen3-style reasoning blocks server-side. Production
+# also disables thinking via ``chat_template_kwargs``, but a misconfigured
+# tokenizer template or a swapped backend can still leak ``<think>...</think>``
+# (we measured 70% leak before the Ollama Modelfile fix). Closed and unclosed
+# variants both handled.
+_THINK_BLOCK_RE = re.compile(r'<think>.*?</think>\s*', re.DOTALL)
+_THINK_OPEN_TAIL_RE = re.compile(r'<think>.*$', re.DOTALL)
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Remove ``<think>...</think>`` reasoning blocks (closed or unclosed tail)."""
+    cleaned = _THINK_BLOCK_RE.sub('', text)
+    return _THINK_OPEN_TAIL_RE.sub('', cleaned)
+
 
 def _extract_pending_ids(text: str) -> list[str]:
     """Extract pending action UUIDs from [PENDING:uuid] markers."""
@@ -151,9 +165,87 @@ async def _yield_tool_response(
             if action:
                 yield f"data: {json.dumps(_pending_action_event(action))}\n\n"
 
-    clean_text = _strip_pending_markers(final_text)
+    clean_text = _strip_pending_markers(_strip_think_blocks(final_text))
     for i in range(0, len(clean_text), 80):
         yield f"data: {json.dumps({'content': clean_text[i:i + 80]})}\n\n"
+
+
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def _drain_think_close(buf: str) -> tuple[str, bool]:
+    """Look for ``</think>`` in ``buf``. Returns (new_buf, still_in_think)."""
+    close_idx = buf.find(_THINK_CLOSE)
+    if close_idx == -1:
+        return buf[-len(_THINK_CLOSE):], True
+    return buf[close_idx + len(_THINK_CLOSE):].lstrip(), False
+
+
+def _safe_emit_prefix(buf: str) -> tuple[str, str]:
+    """Split ``buf`` at the largest prefix that can't start a ``<think>`` tag.
+
+    Returns (emitable_prefix, residual). Fast path: if no ``<`` appears in
+    ``buf`` at all, the whole thing is safe to emit (preserving single-chunk
+    streaming for the common no-think case). Otherwise we hold back from the
+    last ``<`` onward in case a partial tag is split across the next chunk.
+    """
+    last_lt = buf.rfind("<")
+    if last_lt == -1:
+        return buf, ""
+    emit_until = max(0, min(last_lt, len(buf) - (len(_THINK_OPEN) - 1)))
+    return buf[:emit_until], buf[emit_until:]
+
+
+def _emit_until_open_or_partial(buf: str) -> tuple[list[str], str, bool, bool]:
+    """Single iteration of the not-in-think scan.
+
+    Returns ``(emits, new_buf, entered_think, done)``:
+      - ``emits``: chunks to yield from this iteration
+      - ``new_buf``: residual buffer for the next iteration
+      - ``entered_think``: True if a ``<think>`` open was consumed
+      - ``done``: True when the caller should stop iterating (no more progress
+        possible without another upstream chunk, or we paused mid-think)
+    """
+    emits: list[str] = []
+    open_idx = buf.find(_THINK_OPEN)
+    if open_idx == -1:
+        emit, buf = _safe_emit_prefix(buf)
+        if emit:
+            emits.append(emit)
+        return emits, buf, False, True
+    if open_idx:
+        emits.append(buf[:open_idx])
+    buf = buf[open_idx + len(_THINK_OPEN):]
+    buf, in_think = _drain_think_close(buf)
+    return emits, buf, in_think, in_think
+
+
+async def _filter_think_stream(
+    source: AsyncGenerator[str, None],
+) -> AsyncGenerator[str, None]:
+    """Suppress ``<think>...</think>`` reasoning from a chat token stream.
+
+    Tags can split across chunks (``<th`` / ``ink>``), so we keep a tiny
+    rolling buffer and only emit chars that can't be the start of an open
+    tag. While inside a think block we swallow until ``</think>`` closes.
+    """
+    buf = ""
+    in_think = False
+    async for chunk in source:
+        buf += chunk
+        if in_think:
+            buf, in_think = _drain_think_close(buf)
+            if in_think:
+                continue
+        while True:
+            emits, buf, in_think, done = _emit_until_open_or_partial(buf)
+            for e in emits:
+                yield e
+            if done:
+                break
+    if not in_think and buf:
+        yield buf
 
 
 async def _yield_streaming_response(
@@ -163,7 +255,7 @@ async def _yield_streaming_response(
     sent_waking = False
     for attempt in range(len(_COLD_START_DELAYS) + 1):
         try:
-            async for chunk in _stream_llm(messages, usage_out):
+            async for chunk in _filter_think_stream(_stream_llm(messages, usage_out)):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             break
         except ContextOverflowError:
@@ -455,8 +547,11 @@ async def _stream_openai_compat(
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
+        "max_tokens": settings.llm_max_output_tokens,
         "stream_options": {"include_usage": True},
     }
+    if settings.llm_chat_template_kwargs:
+        body["chat_template_kwargs"] = settings.llm_chat_template_kwargs
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
 

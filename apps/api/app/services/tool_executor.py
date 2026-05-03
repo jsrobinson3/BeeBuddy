@@ -256,12 +256,15 @@ async def _call_openai_compat(
         "messages": messages,
         "tools": tools,
         "stream": False,
+        "max_tokens": settings.llm_max_output_tokens,
     }
     if forced_tool:
         body["tool_choice"] = {
             "type": "function",
             "function": {"name": forced_tool},
         }
+    if settings.llm_chat_template_kwargs:
+        body["chat_template_kwargs"] = settings.llm_chat_template_kwargs
     headers = {"Authorization": f"Bearer {settings.llm_tool_api_key}"}
     url = f"{settings.llm_tool_base_url}/chat/completions"
 
