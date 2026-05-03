@@ -27,9 +27,13 @@ from app.schemas.ai import ChatRequest
 from app.services import ag_data_service, pending_action_service, tool_executor
 from app.services._llm_utils import _split_system
 from app.services.guardrails import guardrail_pipeline
+from app.services.guardrails.tools import (
+    check_tool_use,
+    classify_tool_requirement,
+)
 from app.services.token_usage import record_chat_usage
 from app.services.tool_executor import ColdStartError as ToolColdStartError
-from app.services.tool_executor import ContextOverflowError
+from app.services.tool_executor import ContextOverflowError, NoToolsAvailable
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -110,6 +114,20 @@ _COLD_START_DELAYS = [5, 5, 10, 10, 15, 15, 20, 20, 20]
 
 _PENDING_RE = re.compile(r'\[PENDING:([0-9a-f-]{36})\]')
 
+# Defense-in-depth: strip Qwen3-style reasoning blocks server-side. Production
+# also disables thinking via ``chat_template_kwargs``, but a misconfigured
+# tokenizer template or a swapped backend can still leak ``<think>...</think>``
+# (we measured 70% leak before the Ollama Modelfile fix). Closed and unclosed
+# variants both handled.
+_THINK_BLOCK_RE = re.compile(r'<think>.*?</think>\s*', re.DOTALL)
+_THINK_OPEN_TAIL_RE = re.compile(r'<think>.*$', re.DOTALL)
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Remove ``<think>...</think>`` reasoning blocks (closed or unclosed tail)."""
+    cleaned = _THINK_BLOCK_RE.sub('', text)
+    return _THINK_OPEN_TAIL_RE.sub('', cleaned)
+
 
 def _extract_pending_ids(text: str) -> list[str]:
     """Extract pending action UUIDs from [PENDING:uuid] markers."""
@@ -147,9 +165,87 @@ async def _yield_tool_response(
             if action:
                 yield f"data: {json.dumps(_pending_action_event(action))}\n\n"
 
-    clean_text = _strip_pending_markers(final_text)
+    clean_text = _strip_pending_markers(_strip_think_blocks(final_text))
     for i in range(0, len(clean_text), 80):
         yield f"data: {json.dumps({'content': clean_text[i:i + 80]})}\n\n"
+
+
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def _drain_think_close(buf: str) -> tuple[str, bool]:
+    """Look for ``</think>`` in ``buf``. Returns (new_buf, still_in_think)."""
+    close_idx = buf.find(_THINK_CLOSE)
+    if close_idx == -1:
+        return buf[-len(_THINK_CLOSE):], True
+    return buf[close_idx + len(_THINK_CLOSE):].lstrip(), False
+
+
+def _safe_emit_prefix(buf: str) -> tuple[str, str]:
+    """Split ``buf`` at the largest prefix that can't start a ``<think>`` tag.
+
+    Returns (emitable_prefix, residual). Fast path: if no ``<`` appears in
+    ``buf`` at all, the whole thing is safe to emit (preserving single-chunk
+    streaming for the common no-think case). Otherwise we hold back from the
+    last ``<`` onward in case a partial tag is split across the next chunk.
+    """
+    last_lt = buf.rfind("<")
+    if last_lt == -1:
+        return buf, ""
+    emit_until = max(0, min(last_lt, len(buf) - (len(_THINK_OPEN) - 1)))
+    return buf[:emit_until], buf[emit_until:]
+
+
+def _emit_until_open_or_partial(buf: str) -> tuple[list[str], str, bool, bool]:
+    """Single iteration of the not-in-think scan.
+
+    Returns ``(emits, new_buf, entered_think, done)``:
+      - ``emits``: chunks to yield from this iteration
+      - ``new_buf``: residual buffer for the next iteration
+      - ``entered_think``: True if a ``<think>`` open was consumed
+      - ``done``: True when the caller should stop iterating (no more progress
+        possible without another upstream chunk, or we paused mid-think)
+    """
+    emits: list[str] = []
+    open_idx = buf.find(_THINK_OPEN)
+    if open_idx == -1:
+        emit, buf = _safe_emit_prefix(buf)
+        if emit:
+            emits.append(emit)
+        return emits, buf, False, True
+    if open_idx:
+        emits.append(buf[:open_idx])
+    buf = buf[open_idx + len(_THINK_OPEN):]
+    buf, in_think = _drain_think_close(buf)
+    return emits, buf, in_think, in_think
+
+
+async def _filter_think_stream(
+    source: AsyncGenerator[str, None],
+) -> AsyncGenerator[str, None]:
+    """Suppress ``<think>...</think>`` reasoning from a chat token stream.
+
+    Tags can split across chunks (``<th`` / ``ink>``), so we keep a tiny
+    rolling buffer and only emit chars that can't be the start of an open
+    tag. While inside a think block we swallow until ``</think>`` closes.
+    """
+    buf = ""
+    in_think = False
+    async for chunk in source:
+        buf += chunk
+        if in_think:
+            buf, in_think = _drain_think_close(buf)
+            if in_think:
+                continue
+        while True:
+            emits, buf, in_think, done = _emit_until_open_or_partial(buf)
+            for e in emits:
+                yield e
+            if done:
+                break
+    if not in_think and buf:
+        yield buf
 
 
 async def _yield_streaming_response(
@@ -159,7 +255,7 @@ async def _yield_streaming_response(
     sent_waking = False
     for attempt in range(len(_COLD_START_DELAYS) + 1):
         try:
-            async for chunk in _stream_llm(messages, usage_out):
+            async for chunk in _filter_think_stream(_stream_llm(messages, usage_out)):
                 yield f"data: {json.dumps({'content': chunk})}\n\n"
             break
         except ContextOverflowError:
@@ -240,16 +336,51 @@ async def _run_tool_phase(
             yield chunk
 
 
+async def _run_tool_with_guard(
+    db: AsyncSession, user_id: UUID, messages: list[dict], user_msg: str,
+) -> tool_executor.ToolPathResult:
+    """Run the tool path, retrying with a forced tool when the guard demands it.
+
+    For knowledge questions the model often skips ``search_knowledge_base`` and
+    answers from training. The tool-use guard detects that and forces the
+    retrieval on a single retry.
+    """
+    result = await tool_executor.try_tool_path(messages, db, user_id)
+
+    if not settings.guardrails_tools_enabled or not settings.guardrails_tools_force_search:
+        return result
+    if result.tools_called:
+        return result
+
+    requirement = classify_tool_requirement(user_msg)
+    if not requirement.required_tool:
+        return result
+
+    logger.info(
+        "Tool-use guard: forcing %s for intent=%s",
+        requirement.required_tool, requirement.intent,
+    )
+    return await tool_executor.try_tool_path(
+        messages, db, user_id, forced_tool=requirement.required_tool,
+    )
+
+
 async def _handle_tool_path(
     db: AsyncSession, user: User, request: ChatRequest,
     messages: list[dict], user_msg: str,
 ) -> AsyncGenerator[str, None]:
-    """Phase 1: tool-augmented path with output guard."""
-    final_text, tool_msgs, tool_usage = await tool_executor.try_tool_path(
-        messages, db, user.id,
-    )
-    if final_text is None:
-        return
+    """Phase 1: tool-augmented path with output guard.
+
+    Always emits a response — even when the model called no tool. The
+    streaming path is reserved for cold-start / structural failures only.
+    """
+    result = await _run_tool_with_guard(db, user.id, messages, user_msg)
+    final_text = result.final_text
+
+    # --- Tool-use guard (audit) ---
+    tool_use = check_tool_use(user_msg, result.tools_called)
+    if not tool_use.passed:
+        logger.info("Tool-use guard flag: %s", tool_use.flag)
 
     # --- Output guard (can log/flag before emission) ---
     output_result = await guardrail_pipeline.check_output(final_text, user_msg)
@@ -259,10 +390,10 @@ async def _handle_tool_path(
     async for chunk in _yield_tool_response(final_text, db):
         yield chunk
     conv = await _save_conversation(
-        db, user.id, request, final_text, tool_msgs,
+        db, user.id, request, final_text, result.tool_messages,
     )
     await record_chat_usage(
-        db, user.id, conv.id, tool_usage,
+        db, user.id, conv.id, result.usage,
         settings.effective_tool_provider,
         settings.effective_tool_model, "tool_chat",
     )
@@ -308,31 +439,16 @@ async def _handle_streaming_path(
     yield "data: [DONE]\n\n"
 
 
-async def stream_chat(
-    user: User,
-    request: ChatRequest,
+async def _try_tool_path_with_recovery(
+    user: User, request: ChatRequest,
+    messages: list[dict], user_msg: str,
 ) -> AsyncGenerator[str, None]:
-    """Stream a chat response with guardrails pipeline.
+    """Yield from the tool path; fall back to streaming only on structural failure.
 
-    Sessions are opened per-phase via ``AsyncSessionLocal()`` rather than
-    inherited from the request scope. This keeps the DB out of the way
-    while waiting on the LLM provider.
+    The streaming fallback fires on cold-start (503), missing MCP tools, or
+    an unexpected exception — *not* on a tool-less LLM response. That case is
+    handled inside ``_handle_tool_path`` so output guards always run.
     """
-    user_msg = request.messages[-1].content if request.messages else ""
-
-    # --- Input guard (saves an LLM call for blocked messages) ---
-    input_result = guardrail_pipeline.check_input(user_msg)
-    if not input_result.allowed:
-        async for chunk in _yield_canned_response(input_result.canned_response):
-            yield chunk
-        yield "data: [DONE]\n\n"
-        return
-
-    context = await ag_data_service.build_context_block()
-    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
-    messages = _build_chat_messages(request, system)
-
-    # Phase 1: Try tool-augmented path (session scoped to this phase)
     try:
         async for chunk in _run_tool_phase(user, request, messages, user_msg):
             yield chunk
@@ -345,15 +461,38 @@ async def stream_chat(
         return
     except ToolColdStartError:
         logger.info("Tool path 503, falling back to streaming")
+    except NoToolsAvailable:
+        logger.warning("MCP server has no tools, falling back to streaming")
     except Exception:
-        # Falling back to streaming is intentional behavior, not an error —
-        # log at warning so Sentry doesn't open a new issue per occurrence.
         logger.warning(
             "Tool path failed, falling back to streaming", exc_info=True,
         )
 
-    # Phase 2: Streaming path (no session held during the stream)
     async for chunk in _handle_streaming_path(
+        user, request, messages, user_msg,
+    ):
+        yield chunk
+
+
+async def stream_chat(
+    user: User,
+    request: ChatRequest,
+) -> AsyncGenerator[str, None]:
+    """Stream a chat response with guardrails pipeline."""
+    user_msg = request.messages[-1].content if request.messages else ""
+
+    input_result = guardrail_pipeline.check_input(user_msg)
+    if not input_result.allowed:
+        async for chunk in _yield_canned_response(input_result.canned_response):
+            yield chunk
+        yield "data: [DONE]\n\n"
+        return
+
+    context = await ag_data_service.build_context_block()
+    system = SYSTEM_PROMPT_TEMPLATE.format(context=context) + TOOL_SYSTEM_ADDENDUM
+    messages = _build_chat_messages(request, system)
+
+    async for chunk in _try_tool_path_with_recovery(
         user, request, messages, user_msg,
     ):
         yield chunk
@@ -408,8 +547,11 @@ async def _stream_openai_compat(
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
+        "max_tokens": settings.llm_max_output_tokens,
         "stream_options": {"include_usage": True},
     }
+    if settings.llm_chat_template_kwargs:
+        body["chat_template_kwargs"] = settings.llm_chat_template_kwargs
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     url = f"{settings.llm_base_url}/chat/completions"
 

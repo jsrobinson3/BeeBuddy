@@ -15,11 +15,14 @@ from app.services.ai_service import (
     _COLD_START_DELAYS,
     ColdStartError,
     _check_streaming_status,
+    _filter_think_stream,
     _parse_anthropic_sse,
     _parse_openai_sse,
     _stream_openai_compat,
+    _strip_think_blocks,
     stream_chat,
 )
+from app.services.tool_executor import NoToolsAvailable
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -182,10 +185,15 @@ class TestStreamOpenAiCompat:
 @patch(
     "app.services.ai_service.tool_executor.try_tool_path",
     new_callable=AsyncMock,
-    return_value=(None, [], {}),
+    side_effect=NoToolsAvailable("test fixture: forcing streaming path"),
 )
 class TestStreamChatColdStart:
-    """Tests for the top-level stream_chat retry logic."""
+    """Tests for the top-level stream_chat retry logic.
+
+    These tests cover the streaming-recovery path. We force the tool path
+    to raise NoToolsAvailable so stream_chat falls through to
+    _handle_streaming_path, which is what these tests exercise.
+    """
 
     async def _collect_events(self, gen) -> list[dict]:
         """Collect and parse SSE events from the generator."""
@@ -565,3 +573,84 @@ class TestParseAnthropicSSEUsage:
         _parse_anthropic_sse(line, usage_out)
 
         assert usage_out["total_tokens"] == 30
+
+
+# ---------------------------------------------------------------------------
+# Qwen3 ``<think>`` reasoning suppression — defense-in-depth for cases where
+# ``chat_template_kwargs={"enable_thinking": false}`` isn't respected by the
+# server (wrong tokenizer template, swapped backend, etc.).
+# ---------------------------------------------------------------------------
+
+
+class TestStripThinkBlocks:
+    """Synchronous strip used in non-streaming tool path output."""
+
+    def test_strips_closed_think_block(self):
+        out = _strip_think_blocks("<think>reason</think>The answer is X.")
+        assert out == "The answer is X."
+
+    def test_strips_unclosed_tail(self):
+        # Truncated mid-thought (token budget exhausted before </think>)
+        out = _strip_think_blocks("<think>reason continues forever")
+        assert out == ""
+
+    def test_passthrough_when_no_think(self):
+        assert _strip_think_blocks("Plain answer.") == "Plain answer."
+
+    def test_strips_multiple_blocks(self):
+        out = _strip_think_blocks(
+            "<think>a</think>First. <think>b</think>Second."
+        )
+        assert "<think>" not in out
+        assert "First." in out and "Second." in out
+
+
+async def _collect(gen):
+    return "".join([c async for c in gen])
+
+
+async def _seq(chunks):
+    for c in chunks:
+        yield c
+
+
+class TestFilterThinkStream:
+    """Stream filter must suppress ``<think>...</think>`` even when the tag
+    is split arbitrarily across chunk boundaries.
+    """
+
+    @pytest.mark.asyncio
+    async def test_passthrough_when_no_think(self):
+        out = await _collect(_filter_think_stream(_seq(["Hello ", "world!"])))
+        assert out == "Hello world!"
+
+    @pytest.mark.asyncio
+    async def test_strips_complete_block_in_one_chunk(self):
+        out = await _collect(_filter_think_stream(
+            _seq(["<think>reason</think>The answer."]),
+        ))
+        assert out == "The answer."
+
+    @pytest.mark.asyncio
+    async def test_strips_block_split_across_chunks(self):
+        # Open tag straddles chunk boundary, close tag in third chunk.
+        out = await _collect(_filter_think_stream(
+            _seq(["pre <th", "ink>reason</thi", "nk>post"]),
+        ))
+        assert out == "pre post"
+
+    @pytest.mark.asyncio
+    async def test_swallows_unclosed_think_at_end(self):
+        # Truncated mid-thought — never emit the open tag or any reasoning.
+        out = await _collect(_filter_think_stream(
+            _seq(["<think>still thinking..."]),
+        ))
+        assert "<think>" not in out
+        assert "thinking" not in out
+
+    @pytest.mark.asyncio
+    async def test_emits_text_before_open_tag(self):
+        out = await _collect(_filter_think_stream(
+            _seq(["lead text<think>reason</think>tail"]),
+        ))
+        assert out == "lead texttail"
