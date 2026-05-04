@@ -7,9 +7,32 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.config import get_settings
 
+# Celery loggers that emit transient broker/backend reconnect noise. These are
+# auto-retried by Celery itself, so they aren't actionable as Sentry issues.
+_CELERY_TRANSIENT_LOGGERS = {
+    "celery.worker.consumer.consumer",
+    "celery.worker.consumer",
+    "celery.redirected",
+}
+_CELERY_TRANSIENT_PHRASES = (
+    "Trying again in",
+    "Cannot connect to",
+    "consumer: Connection to broker lost",
+)
+
+
+def _is_transient_celery_reconnect(event: dict) -> bool:
+    logger = event.get("logger") or ""
+    if logger not in _CELERY_TRANSIENT_LOGGERS:
+        return False
+    message = event.get("logentry", {}).get("message") or event.get("message") or ""
+    return any(phrase in message for phrase in _CELERY_TRANSIENT_PHRASES)
+
 
 def _before_send(event, hint):
-    """Strip cookies from Sentry events to avoid leaking session data."""
+    """Strip cookies and drop Celery reconnect noise from Sentry events."""
+    if _is_transient_celery_reconnect(event):
+        return None
     if "request" in event:
         req = event["request"]
         req.pop("cookies", None)
