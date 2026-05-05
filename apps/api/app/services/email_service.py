@@ -13,6 +13,12 @@ logger = logging.getLogger(__name__)
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "email"
 SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
+# 4xx codes from SendGrid that will not recover without operator action
+# (bad API key, unverified sender, malformed payload, recipient blocked, …).
+# Retrying these just generates duplicate Sentry events with no chance of success.
+# 429 is intentionally excluded — rate limits are transient.
+_PERMANENT_SENDGRID_STATUSES = frozenset({400, 401, 403, 404, 413})
+
 _jinja_env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
     autoescape=True,
@@ -30,40 +36,40 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
-async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
-    settings = get_settings()
+def _handle_sendgrid_response(resp: httpx.Response, to: str, subject: str) -> None:
+    """Inspect a SendGrid response and act based on the status code.
 
-    if settings.email_suppress:
-        logger.info(
-            "Email suppressed (email_suppress=True)\n"
-            "  To: %s\n  Subject: %s\n  Body:\n%s",
-            to, subject, html_body,
-        )
-        return
-
-    if not settings.sendgrid_api_key:
-        logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
-        return
-
-    payload = _build_payload(to, subject, html_body)
-
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                SENDGRID_API_URL,
-                json=payload,
-                headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
-                timeout=10.0,
-            )
-            resp.raise_for_status()
+    Returns None for success or for permanent 4xx errors (which are logged
+    as warnings and swallowed so Celery does not retry a doomed call and
+    so Sentry does not record the same configuration error on every send).
+    Re-raises ``httpx.HTTPStatusError`` for transient failures (429/5xx) so
+    the calling Celery task retries.
+    """
+    if resp.is_success:
         logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+        return
+
+    if resp.status_code in _PERMANENT_SENDGRID_STATUSES:
+        logger.warning(
+            "SendGrid rejected email to %s (%s): status=%d body=%s",
+            to,
+            subject,
+            resp.status_code,
+            resp.text[:500],
+        )
+        return
+
+    # Transient: rate-limited or server-side. Let Celery retry.
+    resp.raise_for_status()
 
 
-def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+async def _send_email(to: str, subject: str, html_body: str) -> None:
+    """Send an email via SendGrid API or log it when suppressed.
+
+    Permanent failures (bad API key, unverified sender, …) are logged as
+    warnings and swallowed. Transient failures propagate so the Celery
+    task wrapper can retry.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -79,18 +85,49 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
         return
 
     payload = _build_payload(to, subject, html_body)
+    del html_body  # avoid capturing the rendered body as a local on error
 
-    try:
-        resp = httpx.post(
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
             SENDGRID_API_URL,
             json=payload,
             headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
             timeout=10.0,
         )
-        resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    _handle_sendgrid_response(resp, to, subject)
+
+
+def send_email_sync(to: str, subject: str, html_body: str) -> None:
+    """Synchronous email send for use in Celery workers.
+
+    Permanent failures (bad API key, unverified sender, …) are logged as
+    warnings and swallowed. Transient failures propagate so the Celery
+    task wrapper can retry.
+    """
+    settings = get_settings()
+
+    if settings.email_suppress:
+        logger.info(
+            "Email suppressed (email_suppress=True)\n"
+            "  To: %s\n  Subject: %s\n  Body:\n%s",
+            to, subject, html_body,
+        )
+        return
+
+    if not settings.sendgrid_api_key:
+        logger.warning("SENDGRID_API_KEY not configured; skipping email to %s", to)
+        return
+
+    payload = _build_payload(to, subject, html_body)
+    del html_body  # avoid capturing the rendered body as a local on error
+
+    resp = httpx.post(
+        SENDGRID_API_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+        timeout=10.0,
+    )
+    _handle_sendgrid_response(resp, to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
