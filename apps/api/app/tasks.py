@@ -107,17 +107,19 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_email_task(self, to: str, subject: str, template_name: str, context: dict):
-    """Render an email template and send it via SMTP.
+    """Render an email template and send it via SendGrid.
 
-    Runs synchronously inside a Celery worker.
+    Runs synchronously inside a Celery worker. Permanent failures (4xx
+    from SendGrid) are logged and swallowed by ``send_email_sync``;
+    only transient failures (5xx, network errors) reach this handler
+    and trigger a retry.
     """
-    try:
-        from app.services.email_service import render_and_build_html, send_email_sync
+    from app.services.email_service import render_and_build_html, send_email_sync
 
-        html_body = render_and_build_html(template_name, context)
+    html_body = render_and_build_html(template_name, context)
+    try:
         send_email_sync(to, subject, html_body)
     except Exception as exc:
-        logger.exception("send_email_task failed for %s", to)
         raise self.retry(exc=exc)
 
 
