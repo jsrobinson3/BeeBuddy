@@ -30,8 +30,27 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _log_permanent_failure(to: str, exc: httpx.HTTPStatusError) -> None:
+    """Log a permanent SendGrid failure without a traceback.
+
+    A 4xx from SendGrid (e.g. 401 unauthorised, 403 forbidden) is a
+    configuration problem, not a transient error: retrying will not help and
+    the stack trace adds no signal. ``logger.error`` without ``exc_info``
+    emits a single grouped event in monitoring rather than one traceback per
+    attempt.
+    """
+    logger.error(
+        "SendGrid rejected email to %s (status %d): %s",
+        to, exc.response.status_code, exc.response.text[:500],
+    )
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
+    """Send an email via SendGrid API or log it when suppressed.
+
+    Called from request handlers where we never want a failed email to bubble
+    up and abort the request — failures are logged and swallowed.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -57,13 +76,26 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 timeout=10.0,
             )
             resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except httpx.HTTPStatusError as exc:
+        if 400 <= exc.response.status_code < 500:
+            _log_permanent_failure(to, exc)
+            return
+        logger.exception("Transient SendGrid error sending email to %s", to)
+        return
+    except httpx.RequestError as exc:
+        logger.error("Network error sending email to %s: %s", to, exc)
+        return
+
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Permanent failures (4xx) are logged and swallowed — retrying cannot fix a
+    bad API key or rejected sender. Transient failures (5xx, network errors)
+    propagate so the calling Celery task can retry them.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +120,12 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except httpx.HTTPStatusError as exc:
+        if 400 <= exc.response.status_code < 500:
+            _log_permanent_failure(to, exc)
+            return
+        raise
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
