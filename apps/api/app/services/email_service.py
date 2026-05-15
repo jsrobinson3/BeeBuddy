@@ -63,7 +63,12 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Raises on failure so the calling Celery task can retry. Permanent client
+    errors (4xx other than 408/429) are logged and swallowed since retrying
+    won't help — operators rely on Sentry's log capture to surface them.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +93,20 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if 400 <= status < 500 and status not in (408, 429):
+            logger.error(
+                "Permanent email send failure (HTTP %d) to %s: %s",
+                status, to, subject,
+            )
+            return
+        logger.exception("Failed to send email to %s: %s", to, subject)
+        raise
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
+        raise
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
