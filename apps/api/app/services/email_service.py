@@ -30,6 +30,33 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _log_sendgrid_error(
+    err: httpx.HTTPStatusError, to: str, subject: str,
+) -> None:
+    """Log a SendGrid HTTP error.
+
+    4xx responses are config/credential failures (bad API key, unverified
+    sender, etc.) that won't recover from retries. They're logged at WARNING
+    with the response body so the actual SendGrid reason is debuggable,
+    instead of firing a Sentry exception event for every recipient.
+
+    5xx or unknown statuses keep the previous behaviour: ``logger.exception``
+    so Sentry still surfaces transient outages.
+    """
+    status = err.response.status_code if err.response is not None else 0
+    body = err.response.text[:500] if err.response is not None else ""
+    if 400 <= status < 500:
+        logger.warning(
+            "SendGrid rejected email to %s (%s): %s — response: %s",
+            to, status, subject, body,
+        )
+        return
+    logger.exception(
+        "Failed to send email to %s (%s): %s — response: %s",
+        to, status, subject, body,
+    )
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
     """Send an email via SendGrid API or log it when suppressed."""
     settings = get_settings()
@@ -58,6 +85,8 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
             )
             resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
+    except httpx.HTTPStatusError as e:
+        _log_sendgrid_error(e, to, subject)
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
 
@@ -89,6 +118,8 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
         )
         resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
+    except httpx.HTTPStatusError as e:
+        _log_sendgrid_error(e, to, subject)
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
 
