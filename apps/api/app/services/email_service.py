@@ -30,6 +30,27 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _handle_sendgrid_response(resp: "httpx.Response", to: str, subject: str) -> None:
+    """Raise on transient failures; log and swallow on unrecoverable 4xx."""
+    if resp.is_success:
+        logger.info("Email sent to %s: %s", to, subject)
+        return
+
+    # 4xx responses (401 bad key, 403 sender unverified, 413 too big, etc.)
+    # won't be fixed by retrying, so log a single warning and let the task
+    # succeed — this prevents an API-key misconfiguration from flooding
+    # Sentry with one exception per outbound email.
+    if 400 <= resp.status_code < 500:
+        logger.warning(
+            "SendGrid rejected email to %s (%s): %s",
+            to, resp.status_code, resp.text[:300],
+        )
+        return
+
+    # 5xx — raise so the Celery wrapper can retry.
+    resp.raise_for_status()
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
     """Send an email via SendGrid API or log it when suppressed."""
     settings = get_settings()
@@ -48,6 +69,9 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
 
     payload = _build_payload(to, subject, html_body)
 
+    # _send_email is called inline from user-facing API handlers (e.g.
+    # share invitations); never fail the user request just because email
+    # delivery hiccups. Log and swallow everything.
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -56,14 +80,20 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
                 timeout=10.0,
             )
-            resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
+        _handle_sendgrid_response(resp, to, subject)
+    except httpx.HTTPStatusError:
+        logger.exception("Failed to send email to %s: %s", to, subject)
+    except httpx.RequestError:
         logger.exception("Failed to send email to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Raises on transient failures (5xx, network, timeout) so the Celery
+    task wrapper can retry. Swallows unrecoverable 4xx responses after
+    logging a warning.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -80,17 +110,13 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
 
     payload = _build_payload(to, subject, html_body)
 
-    try:
-        resp = httpx.post(
-            SENDGRID_API_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    resp = httpx.post(
+        SENDGRID_API_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+        timeout=10.0,
+    )
+    _handle_sendgrid_response(resp, to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
