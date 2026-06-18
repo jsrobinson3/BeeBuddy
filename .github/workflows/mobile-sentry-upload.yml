@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     if: inputs.platform == 'ios'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so sentry-cli set-commits --auto works
 
