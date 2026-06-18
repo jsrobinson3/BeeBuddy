@@ -30,6 +30,36 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _is_permanent_http_error(exc: BaseException) -> bool:
+    """Return True for 4xx SendGrid responses that will not self-resolve.
+
+    Retrying these (bad API key, bad payload, etc.) only generates noise.
+    429 is excluded because rate-limit errors are transient.
+    """
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return False
+    status = exc.response.status_code
+    return 400 <= status < 500 and status != 429
+
+
+def _log_send_failure(to: str, subject: str, exc: BaseException) -> None:
+    """Log a SendGrid failure at a severity matched to how transient it is.
+
+    Permanent 4xx responses (e.g. 401 invalid API key) are logged as warnings
+    so they appear in worker logs without generating a Sentry event for every
+    affected user — those are config problems, not per-event bugs.
+    """
+    if _is_permanent_http_error(exc):
+        status = exc.response.status_code  # type: ignore[attr-defined]
+        body = exc.response.text[:300]  # type: ignore[attr-defined]
+        logger.warning(
+            "Email to %s rejected by SendGrid (HTTP %s): %s — check SENDGRID_API_KEY",
+            to, status, body,
+        )
+        return
+    logger.exception("Failed to send email to %s: %s", to, subject)
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
     """Send an email via SendGrid API or log it when suppressed."""
     settings = get_settings()
@@ -58,8 +88,8 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
             )
             resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(to, subject, exc)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
@@ -89,8 +119,8 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
         )
         resp.raise_for_status()
         logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        _log_send_failure(to, subject, exc)
 
 
 def _render_template(template_name: str, context: dict) -> str:
