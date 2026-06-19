@@ -19,6 +19,26 @@ _jinja_env = Environment(
 )
 
 
+class EmailDeliveryError(Exception):
+    """Raised when an email cannot be delivered.
+
+    ``retryable`` distinguishes transient failures (network blips, 429, 5xx)
+    from permanent ones (bad API key, malformed request) so callers can decide
+    whether to schedule a retry. Permanent failures are logged at warning level
+    instead of exception level to avoid flooding Sentry until the underlying
+    configuration is fixed.
+    """
+
+    def __init__(self, message: str, *, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def _http_status_is_retryable(status_code: int) -> bool:
+    """429 and 5xx are transient; other 4xx are caller/config errors."""
+    return status_code == 429 or status_code >= 500
+
+
 def _build_payload(to: str, subject: str, html_body: str) -> dict:
     """Build SendGrid v3 Mail Send API payload."""
     settings = get_settings()
@@ -30,8 +50,27 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
     }
 
 
+def _handle_send_exception(exc: Exception, to: str, subject: str) -> EmailDeliveryError:
+    """Classify a send failure and emit the appropriate log."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        retryable = _http_status_is_retryable(status)
+        log = logger.exception if retryable else logger.warning
+        log(
+            "Failed to send email to %s (status %s): %s",
+            to, status, subject,
+        )
+        return EmailDeliveryError(str(exc), retryable=retryable)
+    # Network errors, timeouts, DNS failures, etc. are transient.
+    logger.exception("Failed to send email to %s: %s", to, subject)
+    return EmailDeliveryError(str(exc), retryable=True)
+
+
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
+    """Send an email via SendGrid API or log it when suppressed.
+
+    Raises ``EmailDeliveryError`` on delivery failure.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -57,13 +96,17 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 timeout=10.0,
             )
             resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        raise _handle_send_exception(exc, to, subject) from exc
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Raises ``EmailDeliveryError`` on delivery failure so the Celery task can
+    decide whether to retry based on ``EmailDeliveryError.retryable``.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +131,9 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except Exception as exc:
+        raise _handle_send_exception(exc, to, subject) from exc
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
