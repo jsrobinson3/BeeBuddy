@@ -307,14 +307,22 @@ async def _notify_invitee(
     owner = await db.get(User, owner_id)
     owner_name = owner.name or owner.email if owner else "Someone"
     resource_type = "apiary" if apiary_id else "hive"
-    await _send_share_invitation_email(
-        to=email,
-        inviter_name=owner_name,
-        resource_type=resource_type,
-        resource_name=asset_name,
-        role=role.value,
-        share_id=str(share_id),
-    )
+    try:
+        await _send_share_invitation_email(
+            to=email,
+            inviter_name=owner_name,
+            resource_type=resource_type,
+            resource_name=asset_name,
+            role=role.value,
+            share_id=str(share_id),
+        )
+    except email_service.EmailDeliveryError:
+        # Share row was already persisted; surface failure in logs but don't
+        # roll back the share itself — the invitee can still accept via UI.
+        logger.warning(
+            "Share %s created but invitation email to %s failed",
+            share_id, email,
+        )
 
 
 async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
