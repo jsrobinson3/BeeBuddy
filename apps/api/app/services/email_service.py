@@ -63,7 +63,12 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Exceptions propagate to the caller so the Celery task can retry. Swallowing
+    them here would make a failed delivery look like a successful one and
+    prevent the task's retry policy from running.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -80,17 +85,14 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
 
     payload = _build_payload(to, subject, html_body)
 
-    try:
-        resp = httpx.post(
-            SENDGRID_API_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    resp = httpx.post(
+        SENDGRID_API_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
