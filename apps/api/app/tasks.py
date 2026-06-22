@@ -107,15 +107,36 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_email_task(self, to: str, subject: str, template_name: str, context: dict):
-    """Render an email template and send it via SMTP.
+    """Render an email template and send it via SendGrid.
 
-    Runs synchronously inside a Celery worker.
+    Runs synchronously inside a Celery worker. Retries on transient SendGrid
+    failures (5xx, 408, 429) and network errors. Permanent client errors
+    (e.g. 401 bad API key, 400 invalid payload) are logged and not retried —
+    retrying would just multiply Sentry noise without changing the outcome.
     """
-    try:
-        from app.services.email_service import render_and_build_html, send_email_sync
+    import httpx
 
+    from app.services.email_service import render_and_build_html, send_email_sync
+
+    try:
         html_body = render_and_build_html(template_name, context)
         send_email_sync(to, subject, html_body)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        # 408 Timeout, 429 Rate Limit, and 5xx are transient → retry.
+        if status in (408, 429) or status >= 500:
+            logger.warning(
+                "send_email_task transient SendGrid %s for %s; retrying",
+                status, to,
+            )
+            raise self.retry(exc=exc)
+        # Permanent client error — log once and give up. The Celery task is
+        # marked failed and the exception still surfaces in Sentry.
+        logger.error(
+            "send_email_task permanent SendGrid %s for %s; not retrying: %s",
+            status, to, exc.response.text[:200],
+        )
+        raise
     except Exception as exc:
         logger.exception("send_email_task failed for %s", to)
         raise self.retry(exc=exc)
