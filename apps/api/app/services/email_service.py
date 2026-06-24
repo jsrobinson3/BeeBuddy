@@ -48,18 +48,15 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
 
     payload = _build_payload(to, subject, html_body)
 
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                SENDGRID_API_URL,
-                json=payload,
-                headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            SENDGRID_API_URL,
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
@@ -80,17 +77,14 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
 
     payload = _build_payload(to, subject, html_body)
 
-    try:
-        resp = httpx.post(
-            SENDGRID_API_URL,
-            json=payload,
-            headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    resp = httpx.post(
+        SENDGRID_API_URL,
+        json=payload,
+        headers={"Authorization": f"Bearer {settings.sendgrid_api_key}"},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:
