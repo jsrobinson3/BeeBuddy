@@ -107,15 +107,29 @@ async def _generate_inspection_summary_async(inspection_id: str) -> None:
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def send_email_task(self, to: str, subject: str, template_name: str, context: dict):
-    """Render an email template and send it via SMTP.
+    """Render an email template and send it via SendGrid.
 
     Runs synchronously inside a Celery worker.
     """
-    try:
-        from app.services.email_service import render_and_build_html, send_email_sync
+    import httpx
 
+    from app.services.email_service import render_and_build_html, send_email_sync
+
+    try:
         html_body = render_and_build_html(template_name, context)
         send_email_sync(to, subject, html_body)
+    except httpx.HTTPStatusError as exc:
+        # 4xx responses (e.g. 401 from a misconfigured API key, 400 from an
+        # invalid recipient) are permanent — retrying just amplifies noise
+        # without changing the outcome. Log and let the task succeed.
+        if 400 <= exc.response.status_code < 500:
+            logger.exception(
+                "send_email_task: SendGrid returned %d for %s; not retrying",
+                exc.response.status_code, to,
+            )
+            return
+        logger.exception("send_email_task: SendGrid server error for %s", to)
+        raise self.retry(exc=exc)
     except Exception as exc:
         logger.exception("send_email_task failed for %s", to)
         raise self.retry(exc=exc)
