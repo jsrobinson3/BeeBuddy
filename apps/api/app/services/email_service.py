@@ -57,13 +57,18 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 timeout=10.0,
             )
             resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
+        raise
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Raises on failure so the calling Celery task can retry; the task wrapper
+    in ``app.tasks.send_email_task`` is configured with ``max_retries=3``.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +93,10 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
+        raise
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:

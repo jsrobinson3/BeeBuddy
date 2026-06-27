@@ -307,14 +307,20 @@ async def _notify_invitee(
     owner = await db.get(User, owner_id)
     owner_name = owner.name or owner.email if owner else "Someone"
     resource_type = "apiary" if apiary_id else "hive"
-    await _send_share_invitation_email(
-        to=email,
-        inviter_name=owner_name,
-        resource_type=resource_type,
-        resource_name=asset_name,
-        role=role.value,
-        share_id=str(share_id),
-    )
+    try:
+        await _send_share_invitation_email(
+            to=email,
+            inviter_name=owner_name,
+            resource_type=resource_type,
+            resource_name=asset_name,
+            role=role.value,
+            share_id=str(share_id),
+        )
+    except Exception:
+        # Share creation already committed; surfacing the email failure here
+        # would 500 the request even though the share itself succeeded. The
+        # underlying error is already logged + captured by Sentry.
+        pass
 
 
 async def _get_user_by_email(db: AsyncSession, email: str) -> User | None:
