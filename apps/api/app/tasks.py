@@ -17,6 +17,13 @@ init_sentry()
 celery_app = Celery("beebuddy", broker=settings.redis_url)
 celery_app.conf.broker_connection_retry_on_startup = True
 
+# We deploy a single celery worker, so the mingle "hello" sync and gossip
+# heartbeat serve no purpose — and mingle's Redis broadcast at startup
+# races with kombu's fd registration, triggering `KeyError` in
+# `kombu.transport.redis.on_readable` (Sentry BEEBUDDY-BACKEND-8).
+# The worker start command in .do/app.yaml and infra/docker/docker-compose.yml
+# passes `--without-mingle --without-gossip` to skip both steps.
+
 _broker_ssl = celery_broker_ssl()
 if _broker_ssl is not None:
     celery_app.conf.broker_use_ssl = _broker_ssl
