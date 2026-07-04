@@ -63,7 +63,12 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
-    """Synchronous email send for use in Celery workers."""
+    """Synchronous email send for use in Celery workers.
+
+    Raises on transient failures (network errors, 5xx, 408/425/429) so the
+    caller's retry logic can fire. Swallows other 4xx responses because
+    retrying a bad API key or malformed payload will never succeed.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -88,9 +93,22 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
             timeout=10.0,
         )
         resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to, subject)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status >= 500 or status in (408, 425, 429):
+            logger.warning(
+                "Retryable SendGrid error %d for %s: %s", status, to, subject,
+            )
+            raise
+        logger.error(
+            "Non-retryable SendGrid error %d for %s: %s (%s)",
+            status, to, subject, exc.response.text,
+        )
+        return
+    except httpx.RequestError:
+        logger.warning("SendGrid transport error for %s: %s", to, subject)
+        raise
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def _render_template(template_name: str, context: dict) -> str:

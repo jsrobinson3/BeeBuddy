@@ -16,6 +16,10 @@ init_sentry()
 
 celery_app = Celery("beebuddy", broker=settings.redis_url)
 celery_app.conf.broker_connection_retry_on_startup = True
+# Disable the mingle startup handshake — it triggers a well-known kombu race
+# on Redis brokers (KeyError in on_readable while collecting replies) with no
+# functional benefit for our single-worker deployment.
+celery_app.conf.worker_enable_mingle = False
 
 _broker_ssl = celery_broker_ssl()
 if _broker_ssl is not None:
