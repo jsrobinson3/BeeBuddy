@@ -30,7 +30,7 @@ describe("useLocation – getLocation", () => {
       coords: { latitude: -33.8688, longitude: 151.2093 },
     });
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -48,7 +48,7 @@ describe("useLocation – getLocation", () => {
       status: "denied",
     });
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -69,7 +69,7 @@ describe("useLocation – getLocation", () => {
     });
     Location.getCurrentPositionAsync.mockRejectedValue(new Error("timeout"));
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -89,11 +89,11 @@ describe("useLocation – getLocation", () => {
       new Promise((r) => { resolvePermission = r; }),
     );
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
     expect(result.current.loading).toBe(false);
 
     let promise: Promise<any>;
-    act(() => {
+    await act(() => {
       promise = result.current.getLocation();
     });
     // loading should be true while awaiting
@@ -120,7 +120,7 @@ describe("useLocation – geocodeAddress", () => {
       { latitude: 45.5152, longitude: -122.6784 },
     ]);
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -132,7 +132,7 @@ describe("useLocation – geocodeAddress", () => {
   });
 
   it("returns null for empty/whitespace address without calling API", async () => {
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -146,7 +146,7 @@ describe("useLocation – geocodeAddress", () => {
   it("returns null and shows alert when no results found", async () => {
     Location.geocodeAsync.mockResolvedValue([]);
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -163,7 +163,7 @@ describe("useLocation – geocodeAddress", () => {
   it("returns null and shows alert when geocoding throws", async () => {
     Location.geocodeAsync.mockRejectedValue(new Error("network error"));
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     let coords: any;
     await act(async () => {
@@ -183,11 +183,11 @@ describe("useLocation – geocodeAddress", () => {
       new Promise((r) => { resolveGeocode = r; }),
     );
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
     expect(result.current.geocoding).toBe(false);
 
     let promise: Promise<any>;
-    act(() => {
+    await act(() => {
       promise = result.current.geocodeAddress("Portland, OR");
     });
     expect(result.current.geocoding).toBe(true);
@@ -205,7 +205,7 @@ describe("useLocation – geocodeAddress", () => {
       { latitude: 0, longitude: 0 },
     ]);
 
-    const { result } = renderHook(() => useLocation());
+    const { result } = await renderHook(() => useLocation());
 
     await act(async () => {
       await result.current.geocodeAddress("  Portland, OR  ");

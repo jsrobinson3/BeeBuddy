@@ -144,8 +144,8 @@ function renderScreen() {
 // ---------- tests ----------
 
 describe("ResetPasswordScreen", () => {
-  it("shows form when token is present", () => {
-    renderScreen();
+  it("shows form when token is present", async () => {
+    await renderScreen();
 
     // "Reset Password" appears as both a card title and the submit button label
     const resetTexts = screen.getAllByText("Reset Password");
@@ -155,10 +155,10 @@ describe("ResetPasswordScreen", () => {
     expect(screen.getByPlaceholderText("Confirm password")).toBeTruthy();
   });
 
-  it("shows error when no token provided", () => {
+  it("shows error when no token provided", async () => {
     mockToken = undefined;
 
-    renderScreen();
+    await renderScreen();
 
     expect(screen.getByText("Invalid Link")).toBeTruthy();
     expect(
@@ -167,15 +167,15 @@ describe("ResetPasswordScreen", () => {
   });
 
   it("validates password length (min 8 chars)", async () => {
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("New password"), "short");
-    fireEvent.changeText(screen.getByPlaceholderText("Confirm password"), "short");
+    await fireEvent.changeText(screen.getByPlaceholderText("New password"), "short");
+    await fireEvent.changeText(screen.getByPlaceholderText("Confirm password"), "short");
 
     // The button text is "Reset Password" in the form
     const buttons = screen.getAllByText("Reset Password");
     // The ActionButton is the pressable one
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(
@@ -187,19 +187,19 @@ describe("ResetPasswordScreen", () => {
   });
 
   it("validates password match", async () => {
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("New password"),
       "password123",
     );
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "different456",
     );
 
     const buttons = screen.getAllByText("Reset Password");
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Passwords do not match.")).toBeTruthy();
@@ -211,19 +211,19 @@ describe("ResetPasswordScreen", () => {
   it("submits successfully and shows success card", async () => {
     mockFetch.mockResolvedValue({ ok: true });
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("New password"),
       "newpassword123",
     );
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "newpassword123",
     );
 
     const buttons = screen.getAllByText("Reset Password");
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Password Reset!")).toBeTruthy();
@@ -254,19 +254,19 @@ describe("ResetPasswordScreen", () => {
       json: () => Promise.resolve({ detail: "Token has expired" }),
     });
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("New password"),
       "newpassword123",
     );
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "newpassword123",
     );
 
     const buttons = screen.getAllByText("Reset Password");
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Token has expired")).toBeTruthy();
@@ -280,19 +280,19 @@ describe("ResetPasswordScreen", () => {
       json: () => Promise.reject(new Error("not json")),
     });
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("New password"),
       "newpassword123",
     );
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "newpassword123",
     );
 
     const buttons = screen.getAllByText("Reset Password");
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Reset failed (500)")).toBeTruthy();
@@ -302,35 +302,35 @@ describe("ResetPasswordScreen", () => {
   it('"Go to Login" button navigates to login after success', async () => {
     mockFetch.mockResolvedValue({ ok: true });
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("New password"),
       "newpassword123",
     );
-    fireEvent.changeText(
+    await fireEvent.changeText(
       screen.getByPlaceholderText("Confirm password"),
       "newpassword123",
     );
 
     const buttons = screen.getAllByText("Reset Password");
-    fireEvent.press(buttons[buttons.length - 1]);
+    await fireEvent.press(buttons[buttons.length - 1]);
 
     await waitFor(() => {
       expect(screen.getByText("Go to Login")).toBeTruthy();
     });
 
-    fireEvent.press(screen.getByText("Go to Login"));
+    await fireEvent.press(screen.getByText("Go to Login"));
 
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
   });
 
-  it('"Go to Login" button on error card navigates to login', () => {
+  it('"Go to Login" button on error card navigates to login', async () => {
     mockToken = undefined;
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.press(screen.getByText("Go to Login"));
+    await fireEvent.press(screen.getByText("Go to Login"));
 
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
   });
