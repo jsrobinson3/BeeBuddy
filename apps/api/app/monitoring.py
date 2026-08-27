@@ -29,9 +29,22 @@ def _is_kombu_on_readable_keyerror(event) -> bool:
     return False
 
 
+def _is_celery_broker_reconnect(event) -> bool:
+    """Celery's consumer logs each broker reconnect attempt at ERROR even
+    though it retries automatically (up to 100 times by default). Those
+    log lines flood Sentry whenever redis is briefly unavailable.
+    """
+    if event.get("logger", "") != "celery.worker.consumer.consumer":
+        return False
+    message = (event.get("logentry") or {}).get("message") or event.get("message") or ""
+    return "Cannot connect to" in message and "Trying again in" in message
+
+
 def _before_send(event, hint):
     """Strip cookies and drop known-benign broker races before sending."""
     if _is_kombu_on_readable_keyerror(event):
+        return None
+    if _is_celery_broker_reconnect(event):
         return None
     if "request" in event:
         req = event["request"]
