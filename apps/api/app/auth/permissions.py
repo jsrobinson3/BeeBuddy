@@ -6,6 +6,7 @@ create/update/delete operations.
 """
 
 import enum
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -15,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.apiary import Apiary
 from app.models.hive import Hive
 from app.models.share import Share, ShareStatus
+
+logger = logging.getLogger(__name__)
 
 
 class Permission(enum.StrEnum):
@@ -128,4 +131,45 @@ async def _get_accepted_share(
     if hive_id is not None:
         stmt = stmt.where(Share.hive_id == hive_id)
     result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    share = result.scalar_one_or_none()
+    if share is None:
+        await _warn_if_accepted_share_was_missed(
+            db, user_id, apiary_id=apiary_id, hive_id=hive_id,
+        )
+    return share
+
+
+async def _warn_if_accepted_share_was_missed(
+    db: AsyncSession,
+    user_id: UUID,
+    *,
+    apiary_id: UUID | None,
+    hive_id: UUID | None,
+) -> None:
+    """Log an error if a share row for this user+resource is actually
+    ``ACCEPTED`` but the status-filtered query above didn't return it.
+
+    This is the exact failure mode of the ``share_status`` enum-binding bug
+    (Sentry BEEBUDDY-BACKEND-13, fixed by comparing the loaded row's status
+    in Python instead of relying on the query filter): access was silently
+    denied to users with a genuinely accepted share, with no exception raised
+    and nothing surfaced in Sentry. This check makes any regression of that
+    bug class visible again instead of failing silently.
+    """
+    stmt = select(Share).where(
+        Share.shared_with_user_id == user_id,
+        Share.deleted_at.is_(None),
+    )
+    if apiary_id is not None:
+        stmt = stmt.where(Share.apiary_id == apiary_id)
+    if hive_id is not None:
+        stmt = stmt.where(Share.hive_id == hive_id)
+    result = await db.execute(stmt)
+    for row in result.scalars().all():
+        if row.status == ShareStatus.ACCEPTED:
+            logger.error(
+                "Access denied despite an accepted share row — possible "
+                "share_status query regression: share_id=%s user_id=%s "
+                "apiary_id=%s hive_id=%s",
+                row.id, user_id, apiary_id, hive_id,
+            )
