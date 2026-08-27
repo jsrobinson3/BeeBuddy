@@ -65,8 +65,8 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("useChatStream", () => {
-  it("starts in idle state", () => {
-    const { result } = renderHook(() => useChatStream());
+  it("starts in idle state", async () => {
+    const { result } = await renderHook(() => useChatStream());
 
     expect(result.current.streamingState).toBe("idle");
     expect(result.current.streamingContent).toBe("");
@@ -77,7 +77,7 @@ describe("useChatStream", () => {
     api.chatStream.mockResolvedValue(mockResponse(true));
     parseSSEStream.mockResolvedValue(undefined);
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage(
@@ -103,7 +103,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -123,7 +123,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -139,7 +139,7 @@ describe("useChatStream", () => {
   it("sets error state when API returns non-ok response", async () => {
     api.chatStream.mockResolvedValue(mockResponse(false, 500));
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -158,7 +158,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -178,7 +178,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -186,7 +186,7 @@ describe("useChatStream", () => {
 
     expect(result.current.streamingContent).toBe("content");
 
-    act(() => {
+    await act(() => {
       result.current.reset();
     });
 
@@ -205,7 +205,7 @@ describe("useChatStream", () => {
     } as unknown as Response;
     api.chatStream.mockResolvedValue(resp);
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);
@@ -234,7 +234,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hello" }]);
@@ -258,7 +258,7 @@ describe("useChatStream", () => {
       },
     );
 
-    const { result } = renderHook(() => useChatStream());
+    const { result } = await renderHook(() => useChatStream());
 
     await act(async () => {
       await result.current.sendMessage([{ role: "user", content: "hi" }]);

@@ -115,8 +115,8 @@ function renderScreen() {
 // ---------- basic rendering ----------
 
 describe("CreateApiaryScreen", () => {
-  it("renders form fields", () => {
-    renderScreen();
+  it("renders form fields", async () => {
+    await renderScreen();
     expect(screen.getByText("Name")).toBeTruthy();
     expect(screen.getByText("Address or Place")).toBeTruthy();
     expect(screen.getByText("Latitude")).toBeTruthy();
@@ -125,15 +125,15 @@ describe("CreateApiaryScreen", () => {
     expect(screen.getByText("Notes")).toBeTruthy();
   });
 
-  it("renders precision picker options", () => {
-    renderScreen();
+  it("renders precision picker options", async () => {
+    await renderScreen();
     expect(screen.getByText("Exact (~11 m)")).toBeTruthy();
     expect(screen.getByText("Approximate (~1 km)")).toBeTruthy();
     expect(screen.getByText("General area (~11 km)")).toBeTruthy();
   });
 
-  it("defaults precision to approximate", () => {
-    renderScreen();
+  it("defaults precision to approximate", async () => {
+    await renderScreen();
     // The hint text for approximate should be shown by default
     expect(
       screen.getByText(/Rounded to ~1 km/),
@@ -143,8 +143,8 @@ describe("CreateApiaryScreen", () => {
   // ---------- validation ----------
 
   it("shows error when name is empty on submit", async () => {
-    renderScreen();
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await renderScreen();
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(screen.getByText("Name is required")).toBeTruthy();
@@ -156,9 +156,9 @@ describe("CreateApiaryScreen", () => {
 
   it("fills lat/lng when Use My Location succeeds", async () => {
     mockGetLocation.mockResolvedValue({ latitude: -33.8688, longitude: 151.2093 });
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.press(screen.getByText("Use My Location"));
+    await fireEvent.press(screen.getByText("Use My Location"));
 
     await waitFor(() => {
       expect(mockGetLocation).toHaveBeenCalled();
@@ -173,9 +173,9 @@ describe("CreateApiaryScreen", () => {
 
   it("does not fill lat/lng when Use My Location returns null", async () => {
     mockGetLocation.mockResolvedValue(null);
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.press(screen.getByText("Use My Location"));
+    await fireEvent.press(screen.getByText("Use My Location"));
 
     await waitFor(() => {
       expect(mockGetLocation).toHaveBeenCalled();
@@ -189,14 +189,14 @@ describe("CreateApiaryScreen", () => {
 
   it("fills lat/lng when address Look Up succeeds", async () => {
     mockGeocodeAddress.mockResolvedValue({ latitude: 45.5152, longitude: -122.6784 });
-    renderScreen();
+    await renderScreen();
 
     // Type an address
     const addressInput = screen.getByPlaceholderText("e.g. 123 Main St, Portland OR");
-    fireEvent.changeText(addressInput, "Portland, OR");
+    await fireEvent.changeText(addressInput, "Portland, OR");
 
     // Press Look Up
-    fireEvent.press(screen.getByText("Look Up"));
+    await fireEvent.press(screen.getByText("Look Up"));
 
     await waitFor(() => {
       expect(mockGeocodeAddress).toHaveBeenCalledWith("Portland, OR");
@@ -212,17 +212,17 @@ describe("CreateApiaryScreen", () => {
 
   it("rounds coordinates to approximate precision on submit", async () => {
     mockMutateAsync.mockResolvedValue({});
-    renderScreen();
+    await renderScreen();
 
     // Fill required name
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Test Apiary");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Test Apiary");
 
     // Fill coordinates with high precision
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
 
     // Default precision is "approximate" (2 decimals)
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -237,16 +237,16 @@ describe("CreateApiaryScreen", () => {
 
   it("rounds coordinates to exact precision when selected", async () => {
     mockMutateAsync.mockResolvedValue({});
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Precise Apiary");
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Precise Apiary");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
 
     // Select exact precision
-    fireEvent.press(screen.getByText("Exact (~11 m)"));
+    await fireEvent.press(screen.getByText("Exact (~11 m)"));
 
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -260,16 +260,16 @@ describe("CreateApiaryScreen", () => {
 
   it("rounds coordinates to general precision when selected", async () => {
     mockMutateAsync.mockResolvedValue({});
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "General Apiary");
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "General Apiary");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. -33.8688"), "45.12345678");
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. 151.2093"), "-122.67891234");
 
     // Select general precision
-    fireEvent.press(screen.getByText("General area (~11 km)"));
+    await fireEvent.press(screen.getByText("General area (~11 km)"));
 
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -283,18 +283,18 @@ describe("CreateApiaryScreen", () => {
 
   // ---------- precision hint text ----------
 
-  it("shows correct hint text for each precision level", () => {
-    renderScreen();
+  it("shows correct hint text for each precision level", async () => {
+    await renderScreen();
 
     // Default is approximate
     expect(screen.getByText(/Rounded to ~1 km/)).toBeTruthy();
 
     // Switch to exact
-    fireEvent.press(screen.getByText("Exact (~11 m)"));
+    await fireEvent.press(screen.getByText("Exact (~11 m)"));
     expect(screen.getByText(/Full precision stored/)).toBeTruthy();
 
     // Switch to general
-    fireEvent.press(screen.getByText("General area (~11 km)"));
+    await fireEvent.press(screen.getByText("General area (~11 km)"));
     expect(screen.getByText(/Rounded to ~11 km/)).toBeTruthy();
   });
 
@@ -302,10 +302,10 @@ describe("CreateApiaryScreen", () => {
 
   it("submits without coordinates when fields are empty", async () => {
     mockMutateAsync.mockResolvedValue({});
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "No Coords Apiary");
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "No Coords Apiary");
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalledWith(
@@ -322,10 +322,10 @@ describe("CreateApiaryScreen", () => {
 
   it("navigates back on successful creation", async () => {
     mockMutateAsync.mockResolvedValue({});
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Backyard Bees");
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Backyard Bees");
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(mockBack).toHaveBeenCalled();
@@ -334,10 +334,10 @@ describe("CreateApiaryScreen", () => {
 
   it("shows alert on creation error", async () => {
     mockMutateAsync.mockRejectedValue(new Error("Server error"));
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Fail Apiary");
-    fireEvent.press(screen.getByText("Create Apiary"));
+    await fireEvent.changeText(screen.getByPlaceholderText("e.g. Home Apiary"), "Fail Apiary");
+    await fireEvent.press(screen.getByText("Create Apiary"));
 
     await waitFor(() => {
       expect(Alert.alert).toHaveBeenCalledWith("Error", "Server error");
