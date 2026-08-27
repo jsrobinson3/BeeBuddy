@@ -144,19 +144,19 @@ function renderScreen() {
 // ---------- tests ----------
 
 describe("CancelDeletionScreen", () => {
-  it("shows loading when token is present", () => {
+  it("shows loading when token is present", async () => {
     // Keep fetch pending so the screen stays in loading state
     mockFetch.mockReturnValue(new Promise(() => {}));
 
-    renderScreen();
+    await renderScreen();
 
     expect(screen.getByText("Cancelling account deletion...")).toBeTruthy();
   });
 
-  it("shows error when no token provided", () => {
+  it("shows error when no token provided", async () => {
     mockToken = undefined;
 
-    renderScreen();
+    await renderScreen();
 
     expect(screen.getByText("Cancellation Failed")).toBeTruthy();
     expect(
@@ -167,7 +167,7 @@ describe("CancelDeletionScreen", () => {
   it("shows success after API call succeeds", async () => {
     mockFetch.mockResolvedValue({ ok: true });
 
-    renderScreen();
+    await renderScreen();
 
     await waitFor(() => {
       expect(screen.getByText("Deletion Cancelled")).toBeTruthy();
@@ -197,7 +197,7 @@ describe("CancelDeletionScreen", () => {
       json: () => Promise.resolve({ detail: "Token expired" }),
     });
 
-    renderScreen();
+    await renderScreen();
 
     await waitFor(() => {
       expect(screen.getByText("Cancellation Failed")).toBeTruthy();
@@ -213,7 +213,7 @@ describe("CancelDeletionScreen", () => {
       json: () => Promise.reject(new Error("not json")),
     });
 
-    renderScreen();
+    await renderScreen();
 
     await waitFor(() => {
       expect(screen.getByText("Cancellation Failed")).toBeTruthy();
@@ -225,23 +225,23 @@ describe("CancelDeletionScreen", () => {
   it('"Go to Login" button navigates to login after success', async () => {
     mockFetch.mockResolvedValue({ ok: true });
 
-    renderScreen();
+    await renderScreen();
 
     await waitFor(() => {
       expect(screen.getByText("Go to Login")).toBeTruthy();
     });
 
-    fireEvent.press(screen.getByText("Go to Login"));
+    await fireEvent.press(screen.getByText("Go to Login"));
 
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
   });
 
-  it('"Go to Login" button on error card navigates to login', () => {
+  it('"Go to Login" button on error card navigates to login', async () => {
     mockToken = undefined;
 
-    renderScreen();
+    await renderScreen();
 
-    fireEvent.press(screen.getByText("Go to Login"));
+    await fireEvent.press(screen.getByText("Go to Login"));
 
     expect(mockReplace).toHaveBeenCalledWith("/(auth)/login");
   });
