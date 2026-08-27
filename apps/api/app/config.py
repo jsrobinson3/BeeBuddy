@@ -108,6 +108,18 @@ class Settings(BaseSettings):
     # LLM Configuration
     llm_provider: LLMProvider = LLMProvider.OLLAMA
     llm_model: str = "llama3.2:3b"
+    # Output budget per chat turn. Anthropic Messages API path always sends
+    # 4096; OpenAI-compatible (HF Inference Endpoint, vLLM, llama.cpp) needs
+    # this explicitly because most servers default to ~128. v3 (Qwen3.5) can
+    # spend ~500-1000 tokens reasoning before producing the answer when
+    # ``<think>`` activates, so 2048 covers thinking + final reply with margin.
+    llm_max_output_tokens: int = 2048
+    # Forwarded to OpenAI-compatible endpoints as ``chat_template_kwargs`` so
+    # the server can apply tokenizer-template options at prompt-render time.
+    # Note: HF Inference Endpoint with llama.cpp runtime *ignores* this — it
+    # only reads chat_template baked into the GGUF metadata. Useful with TGI
+    # or vLLM. Example: LLM_CHAT_TEMPLATE_KWARGS='{"enable_thinking": false}'
+    llm_chat_template_kwargs: dict = {}
 
     # Tool-calling LLM — defaults to primary LLM when None
     llm_tool_provider: LLMProvider | None = None
@@ -148,6 +160,9 @@ class Settings(BaseSettings):
     guardrails_max_words_yes_no: int = 30
     guardrails_max_words_how_to: int = 150
     guardrails_max_words_explain: int = 250
+    # Tool-use guard: force search_knowledge_base for knowledge questions
+    guardrails_tools_enabled: bool = True
+    guardrails_tools_force_search: bool = True  # Retry with tool_choice on miss
 
     # RAG Knowledge Base
     rag_enabled: bool = True
