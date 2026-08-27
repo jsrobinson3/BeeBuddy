@@ -100,7 +100,12 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
                 "Retryable SendGrid error %d for %s: %s", status, to, subject,
             )
             raise
-        logger.error(
+        # Warning (not error) — a non-retryable SendGrid response means a
+        # config/quota problem the operator needs to fix (bad API key, out of
+        # credits, malformed payload). Retrying will never succeed, so the
+        # task is swallowing the failure on purpose; it's not an application
+        # bug and shouldn't page as one in Sentry.
+        logger.warning(
             "Non-retryable SendGrid error %d for %s: %s (%s)",
             status, to, subject, exc.response.text,
         )
