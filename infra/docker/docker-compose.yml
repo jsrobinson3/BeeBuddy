@@ -187,7 +187,7 @@ services:
       - ../../apps/api:/app
       - api_venv:/app/.venv
     command: >
-      sh -c "uv sync --frozen --no-dev && uv run celery -A app.tasks worker --loglevel=info -B"
+      sh -c "uv sync --frozen --no-dev && uv run celery -A app.tasks worker --loglevel=info -B --without-mingle --without-gossip"
     healthcheck:
       test: ["CMD-SHELL", "uv run celery -A app.tasks inspect ping --timeout 10"]
       interval: 30s

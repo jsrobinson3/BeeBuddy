@@ -14,6 +14,7 @@ import pytest
 from app.config import LLMProvider
 from app.services.tool_executor import (
     ColdStartError,
+    NoToolsAvailable,
     _check_error_response,
     _convert_tools,
     _extract_anthropic_tool_calls,
@@ -232,10 +233,10 @@ class TestTryToolPath:
     @patch("app.services.tool_executor.settings", _fake_tool_settings())
     @patch("app.services.tool_executor._call_llm_with_tools", new_callable=AsyncMock)
     @patch("app.services.tool_executor.create_mcp_server")
-    async def test_returns_none_when_no_tools_called(
+    async def test_returns_plain_text_when_no_tools_called(
         self, mock_create, mock_call_llm
     ):
-        """When LLM doesn't call tools, returns (None, [])."""
+        """When LLM doesn't call tools, returns the model's plain response."""
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -248,14 +249,15 @@ class TestTryToolPath:
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result, msgs, _usage = await try_tool_path(
+            result = await try_tool_path(
                 [{"role": "user", "content": "hi"}],
                 AsyncMock(),
                 uuid.uuid4(),
             )
 
-        assert result is None
-        assert msgs == []
+        assert result.final_text == "No tools needed"
+        assert result.tool_messages == []
+        assert result.tools_called == []
 
     @patch("app.services.tool_executor.settings", _fake_tool_settings())
     @patch("app.services.tool_executor._call_llm_with_tools", new_callable=AsyncMock)
@@ -285,43 +287,79 @@ class TestTryToolPath:
             MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
 
-            result, msgs, _usage = await try_tool_path(
+            result = await try_tool_path(
                 [{"role": "user", "content": "how many hives?"}],
                 AsyncMock(),
                 uuid.uuid4(),
             )
 
-        assert result == "You have 1 hive called Hive A."
-        assert len(msgs) == 2  # tool_call + tool_result
-        assert msgs[0]["role"] == "tool_call"
-        assert msgs[1]["role"] == "tool_result"
+        assert result.final_text == "You have 1 hive called Hive A."
+        assert len(result.tool_messages) == 2  # tool_call + tool_result
+        assert result.tool_messages[0]["role"] == "tool_call"
+        assert result.tool_messages[1]["role"] == "tool_result"
+        assert result.tools_called == ["list_hives"]
 
     @patch("app.services.tool_executor.settings", _fake_tool_settings())
     @patch("app.services.tool_executor._call_llm_with_tools", new_callable=AsyncMock)
     @patch("app.services.tool_executor.create_mcp_server")
-    async def test_returns_none_when_no_mcp_tools(
+    async def test_raises_when_no_mcp_tools_available(
         self, mock_create, mock_call_llm
     ):
-        """When MCP server has no tools, returns (None, [])."""
+        """When MCP server has no tools, raises NoToolsAvailable.
+
+        Lets the caller fall back to streaming via the same handler as ColdStart.
+        """
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
         mock_client = AsyncMock()
         mock_client.list_tools = AsyncMock(return_value=[])
 
-        with patch("app.services.tool_executor.Client") as MockClient:
-            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
-
-            result, msgs, _usage = await try_tool_path(
+        async def _run_path():
+            await try_tool_path(
                 [{"role": "user", "content": "hi"}],
                 AsyncMock(),
                 uuid.uuid4(),
             )
 
-        assert result is None
-        assert msgs == []
+        with patch("app.services.tool_executor.Client") as MockClient:
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+            with pytest.raises(NoToolsAvailable):
+                await _run_path()
+
         mock_call_llm.assert_not_called()
+
+    @patch("app.services.tool_executor.settings", _fake_tool_settings())
+    @patch("app.services.tool_executor._call_llm_with_tools", new_callable=AsyncMock)
+    @patch("app.services.tool_executor.create_mcp_server")
+    async def test_forced_tool_threads_tool_choice_through_llm_call(
+        self, mock_create, mock_call_llm
+    ):
+        """forced_tool=X must propagate to _call_llm_with_tools as the tool_choice."""
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        mock_client = AsyncMock()
+        mock_client.list_tools = AsyncMock(
+            return_value=[_mock_mcp_tool("search_knowledge_base")],
+        )
+        mock_call_llm.return_value = _openai_response(content="No tools called")
+
+        with patch("app.services.tool_executor.Client") as MockClient:
+            MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await try_tool_path(
+                [{"role": "user", "content": "why are drones around my hive?"}],
+                AsyncMock(),
+                uuid.uuid4(),
+                forced_tool="search_knowledge_base",
+            )
+
+        # _call_llm_with_tools should have been invoked with forced_tool kwarg
+        _, kwargs = mock_call_llm.call_args
+        assert kwargs.get("forced_tool") == "search_knowledge_base"
 
 
 # ---------------------------------------------------------------------------
