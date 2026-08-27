@@ -65,5 +65,8 @@
     "react-test-renderer": "19.2.5",
     "typescript": "~5.9.2"
   },
+  "overrides": {
+    "jest-mock": "30.4.1"
+  },
   "private": true
 }
