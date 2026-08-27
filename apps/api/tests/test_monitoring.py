@@ -140,3 +140,31 @@ def test_before_send_strips_cookies():
 def test_before_send_handles_event_without_exception():
     event = {"message": "hello", "level": "info"}
     assert _before_send(event, {}) is event
+
+
+class TestBeforeSendSqlalchemyPoolCancelledFilter:
+    def _event(self, logger: str, exc_type: str) -> dict:
+        return {
+            "logger": logger,
+            "exception": {"values": [{"type": exc_type, "value": "cancelled"}]},
+        }
+
+    def test_drops_cancelled_error_from_async_pool(self):
+        event = self._event(
+            "sqlalchemy.pool.impl.AsyncAdaptedQueuePool", "CancelledError"
+        )
+        assert _before_send(event, {}) is None
+
+    def test_drops_cancelled_error_from_any_pool_child_logger(self):
+        event = self._event("sqlalchemy.pool.impl.NullPool", "CancelledError")
+        assert _before_send(event, {}) is None
+
+    def test_keeps_non_cancelled_pool_errors(self):
+        event = self._event(
+            "sqlalchemy.pool.impl.AsyncAdaptedQueuePool", "OperationalError"
+        )
+        assert _before_send(event, {}) is event
+
+    def test_keeps_cancelled_error_from_other_loggers(self):
+        event = self._event("app.routers.ai", "CancelledError")
+        assert _before_send(event, {}) is event
