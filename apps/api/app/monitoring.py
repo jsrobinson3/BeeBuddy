@@ -40,11 +40,31 @@ def _is_celery_broker_reconnect(event) -> bool:
     return "Cannot connect to" in message and "Trying again in" in message
 
 
+def _is_sqlalchemy_pool_cancelled_error(event) -> bool:
+    """Drop the benign SQLAlchemy async-pool CancelledError disconnect race.
+
+    When a client aborts an in-flight request, Starlette's BaseHTTPMiddleware
+    propagates anyio's cancel scope through the pool's connection cleanup.
+    SQLAlchemy's ``terminate`` awaits a graceful close that is then cancelled,
+    and the pool logger emits ERROR "Exception terminating connection ...".
+    The pool recovers on its own — the response has already been sent — so
+    the noise adds nothing actionable.
+    """
+    if not event.get("logger", "").startswith("sqlalchemy.pool"):
+        return False
+    for exc in (event.get("exception") or {}).get("values") or ():
+        if exc.get("type") == "CancelledError":
+            return True
+    return False
+
+
 def _before_send(event, hint):
     """Strip cookies and drop known-benign broker races before sending."""
     if _is_kombu_on_readable_keyerror(event):
         return None
     if _is_celery_broker_reconnect(event):
+        return None
+    if _is_sqlalchemy_pool_cancelled_error(event):
         return None
     if "request" in event:
         req = event["request"]

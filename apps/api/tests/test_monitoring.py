@@ -140,3 +140,68 @@ def test_before_send_strips_cookies():
 def test_before_send_handles_event_without_exception():
     event = {"message": "hello", "level": "info"}
     assert _before_send(event, {}) is event
+
+
+def _sqlalchemy_pool_cancelled_event() -> dict:
+    return {
+        "logger": "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
+        "level": "error",
+        "exception": {
+            "values": [
+                {
+                    "type": "CancelledError",
+                    "value": "Cancelled via cancel scope",
+                    "stacktrace": {
+                        "frames": [
+                            {
+                                "filename": "sqlalchemy/pool/base.py",
+                                "function": "_close_connection",
+                            },
+                            {
+                                "filename": "sqlalchemy/connectors/asyncio.py",
+                                "function": "terminate",
+                            },
+                        ]
+                    },
+                }
+            ]
+        },
+    }
+
+
+def test_before_send_drops_sqlalchemy_pool_cancelled_error():
+    assert _before_send(_sqlalchemy_pool_cancelled_event(), {}) is None
+
+
+def test_before_send_keeps_sqlalchemy_pool_non_cancelled_error():
+    event = {
+        "logger": "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
+        "level": "error",
+        "exception": {
+            "values": [
+                {
+                    "type": "OperationalError",
+                    "value": "connection refused",
+                    "stacktrace": {"frames": []},
+                }
+            ]
+        },
+    }
+    assert _before_send(event, {}) is event
+
+
+def test_before_send_keeps_cancelled_error_outside_sqlalchemy_pool():
+    event = {
+        "logger": "app.services.ai_service",
+        "level": "error",
+        "exception": {
+            "values": [
+                {
+                    "type": "CancelledError",
+                    "value": "cancelled",
+                    "stacktrace": {"frames": []},
+                }
+            ]
+        },
+    }
+    assert _before_send(event, {}) is event
