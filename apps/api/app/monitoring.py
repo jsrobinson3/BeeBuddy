@@ -40,11 +40,31 @@ def _is_celery_broker_reconnect(event) -> bool:
     return "Cannot connect to" in message and "Trying again in" in message
 
 
+def _is_sqlalchemy_pool_cancelled(event) -> bool:
+    """Drop `CancelledError` logged by the SQLAlchemy async pool.
+
+    When a client disconnects mid-request, Starlette's ``BaseHTTPMiddleware``
+    cancels the request task, which cascades into asyncpg's connection
+    teardown and surfaces as a ``CancelledError`` on the
+    ``sqlalchemy.pool.impl.AsyncAdaptedQueuePool`` logger. The HTTP response
+    has already been produced, so the error is benign noise, not an
+    actionable failure.
+    """
+    if not (event.get("logger") or "").startswith("sqlalchemy.pool"):
+        return False
+    for exc in (event.get("exception") or {}).get("values") or ():
+        if exc.get("type") == "CancelledError":
+            return True
+    return False
+
+
 def _before_send(event, hint):
     """Strip cookies and drop known-benign broker races before sending."""
     if _is_kombu_on_readable_keyerror(event):
         return None
     if _is_celery_broker_reconnect(event):
+        return None
+    if _is_sqlalchemy_pool_cancelled(event):
         return None
     if "request" in event:
         req = event["request"]

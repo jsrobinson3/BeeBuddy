@@ -72,6 +72,50 @@ class TestBeforeSendCeleryReconnectFilter:
         assert _before_send(event, {}) is event
 
 
+class TestBeforeSendSqlalchemyPoolCancelled:
+    def test_drops_cancelled_error_from_pool_logger(self):
+        event = {
+            "logger": "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
+            "exception": {
+                "values": [
+                    {
+                        "type": "CancelledError",
+                        "value": (
+                            "Cancelled via cancel scope by "
+                            "<Task pending name='starlette.middleware.base."
+                            "BaseHTTPMiddleware.__call__.<locals>.call_next"
+                            ".<locals>.coro'>"
+                        ),
+                    }
+                ]
+            },
+        }
+        assert _before_send(event, {}) is None
+
+    def test_drops_cancelled_error_from_other_pool_impl(self):
+        event = {
+            "logger": "sqlalchemy.pool.impl.NullPool",
+            "exception": {"values": [{"type": "CancelledError", "value": "x"}]},
+        }
+        assert _before_send(event, {}) is None
+
+    def test_keeps_non_cancelled_pool_errors(self):
+        event = {
+            "logger": "sqlalchemy.pool.impl.AsyncAdaptedQueuePool",
+            "exception": {
+                "values": [{"type": "OperationalError", "value": "db down"}]
+            },
+        }
+        assert _before_send(event, {}) is event
+
+    def test_keeps_cancelled_error_from_unrelated_logger(self):
+        event = {
+            "logger": "app.services.ai_service",
+            "exception": {"values": [{"type": "CancelledError", "value": "x"}]},
+        }
+        assert _before_send(event, {}) is event
+
+
 def _kombu_keyerror_event() -> dict:
     return {
         "exception": {
