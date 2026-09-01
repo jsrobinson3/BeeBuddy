@@ -100,15 +100,45 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
                 "Retryable SendGrid error %d for %s: %s", status, to, subject,
             )
             raise
+        # Quota exhaustion is an operational condition (top up credits, wait
+        # for the plan to reset) — not a code bug. Log at WARNING so Sentry
+        # doesn't page the developer on every subsequent send attempt
+        # (Sentry BEEBUDDY-BACKEND-1H).
+        body = exc.response.text
+        if _is_quota_exhausted(body):
+            logger.warning(
+                "SendGrid quota exhausted (%d) — email to %s not sent: %s",
+                status, to, subject,
+            )
+            return
         logger.error(
             "Non-retryable SendGrid error %d for %s: %s (%s)",
-            status, to, subject, exc.response.text,
+            status, to, subject, body,
         )
         return
     except httpx.RequestError:
         logger.warning("SendGrid transport error for %s: %s", to, subject)
         raise
     logger.info("Email sent to %s: %s", to, subject)
+
+
+_QUOTA_HINTS = (
+    "maximum credits exceeded",
+    "credits exceeded",
+    "quota exceeded",
+    "over your daily sending limit",
+)
+
+
+def _is_quota_exhausted(body: str) -> bool:
+    """True when a SendGrid error body indicates the account is out of credit.
+
+    SendGrid returns quota exhaustion as a 401 with a body like
+    ``{"errors":[{"message":"Maximum credits exceeded",...}]}``, which is
+    indistinguishable from a bad API key by status code alone.
+    """
+    lowered = body.lower()
+    return any(hint in lowered for hint in _QUOTA_HINTS)
 
 
 def _render_template(template_name: str, context: dict) -> str:
