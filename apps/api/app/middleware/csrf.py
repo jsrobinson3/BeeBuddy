@@ -2,11 +2,18 @@
 
 Only enforced when an access_token cookie is present on a mutating request.
 Bearer-only requests skip CSRF (tokens aren't auto-sent by browsers).
+
+Implemented as a pure ASGI middleware rather than a
+``starlette.middleware.base.BaseHTTPMiddleware`` subclass: the base class
+wraps the downstream app in an anyio task group, so a client disconnect
+mid-stream (e.g. the ``/ai/chat`` SSE endpoint) cancels that group and
+cascades a ``CancelledError`` into asyncpg's connection teardown
+(Sentry BEEBUDDY-BACKEND-1J).
 """
 
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 CSRF_HEADER = "x-requested-with"
@@ -50,8 +57,21 @@ def _requires_csrf(request: Request) -> bool:
     return request.headers.get(CSRF_HEADER) != CSRF_VALUE
 
 
-class CSRFMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if _requires_csrf(request):
-            return JSONResponse(status_code=403, content={"detail": "CSRF validation failed"})
-        return await call_next(request)
+class CSRFMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        # A Starlette Request built from scope alone parses headers/cookies
+        # lazily and never touches ``receive``, so we can inspect the request
+        # without consuming the body the downstream app needs.
+        if _requires_csrf(Request(scope)):
+            response = JSONResponse(
+                status_code=403, content={"detail": "CSRF validation failed"},
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
