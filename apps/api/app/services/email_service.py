@@ -31,7 +31,14 @@ def _build_payload(to: str, subject: str, html_body: str) -> dict:
 
 
 async def _send_email(to: str, subject: str, html_body: str) -> None:
-    """Send an email via SendGrid API or log it when suppressed."""
+    """Send an email via SendGrid API or log it when suppressed.
+
+    Called from request handlers that cannot retry, so failures are swallowed
+    after logging. Non-retryable 4xx responses (typically a bad or missing
+    API key) log at ``error`` without a stack trace so they do not spam Sentry
+    as HTTPStatusError exceptions — retrying will never succeed, an operator
+    needs to fix the config. Retryable and transport errors log at ``warning``.
+    """
     settings = get_settings()
 
     if settings.email_suppress:
@@ -57,9 +64,25 @@ async def _send_email(to: str, subject: str, html_body: str) -> None:
                 timeout=10.0,
             )
             resp.raise_for_status()
-        logger.info("Email sent to %s: %s", to, subject)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status >= 500 or status in (408, 425, 429):
+            logger.warning(
+                "Retryable SendGrid error %d for %s: %s", status, to, subject,
+            )
+            return
+        logger.error(
+            "Non-retryable SendGrid error %d for %s: %s (%s)",
+            status, to, subject, exc.response.text,
+        )
+        return
+    except httpx.RequestError:
+        logger.warning("SendGrid transport error for %s: %s", to, subject)
+        return
     except Exception:
         logger.exception("Failed to send email to %s: %s", to, subject)
+        return
+    logger.info("Email sent to %s: %s", to, subject)
 
 
 def send_email_sync(to: str, subject: str, html_body: str) -> None:
