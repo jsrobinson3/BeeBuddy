@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates" / "email"
 SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
 
+# SendGrid returns HTTP 401 with this message when the account's send
+# allowance has been used up. It's a billing concern — adding credits
+# resolves it — not a bug the engineer can fix in code.
+_SENDGRID_QUOTA_MESSAGE = "Maximum credits exceeded"
+
+
+def _is_sendgrid_quota_exhausted(status: int, response_text: str) -> bool:
+    """Detect SendGrid responses that indicate credit/quota exhaustion."""
+    return status == 401 and _SENDGRID_QUOTA_MESSAGE in response_text
+
 _jinja_env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
     autoescape=True,
@@ -100,9 +110,20 @@ def send_email_sync(to: str, subject: str, html_body: str) -> None:
                 "Retryable SendGrid error %d for %s: %s", status, to, subject,
             )
             raise
+        response_text = exc.response.text
+        if _is_sendgrid_quota_exhausted(status, response_text):
+            # Billing issue, not a code bug — log at WARNING so it stays out
+            # of Sentry's error feed. Retrying won't help; credits must be
+            # topped up.
+            logger.warning(
+                "SendGrid quota exhausted (%d) for %s: %s — top up credits "
+                "to resume email delivery",
+                status, to, subject,
+            )
+            return
         logger.error(
             "Non-retryable SendGrid error %d for %s: %s (%s)",
-            status, to, subject, exc.response.text,
+            status, to, subject, response_text,
         )
         return
     except httpx.RequestError:
